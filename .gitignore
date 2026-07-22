@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma: cliente generado y base de datos local
+/generated
+*.db
+*.db-journal
+
+# archivos subidos en tiempo de ejecución (firmas, fotos, actas)
+/public/uploads
+
+# tooling local
+/.impeccable

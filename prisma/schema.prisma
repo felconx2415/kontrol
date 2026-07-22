@@ -1,0 +1,223 @@
+// Kontrol — gestión de solicitudes y entrega de equipamiento y EPP.
+// Nota: este sistema NO controla inventario. El stock vive en un almacén
+// externo; aquí solo se registra el ciclo de vida de cada solicitud.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Rol {
+  SOLICITANTE
+  APROBADOR
+  GESTOR
+  ADMIN
+}
+
+enum Categoria {
+  EQUIPAMIENTO
+  EPP
+}
+
+enum TipoSolicitud {
+  NUEVO
+  REEMPLAZO
+}
+
+enum EstadoSolicitud {
+  BORRADOR
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+  EN_GESTION
+  RECIBIDA
+  ENTREGADA
+  CANCELADA
+}
+
+enum MotivoReemplazo {
+  DESGASTE
+  DANO
+  PERDIDA
+  VENCIMIENTO
+  OTRO
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  nombre       String
+  rut          String?
+  rol          Rol      @default(SOLICITANTE)
+  brigadaId    String?
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now())
+
+  brigada              Brigada?  @relation("MiembrosBrigada", fields: [brigadaId], references: [id])
+  brigadasSupervisadas Brigada[] @relation("SupervisorBrigada")
+
+  solicitudesCreadas     Solicitud[] @relation("Solicitante")
+  solicitudesAprobadas   Solicitud[] @relation("Aprobador")
+  solicitudesGestionadas Solicitud[] @relation("Gestor")
+  solicitudesEditadas    Solicitud[] @relation("EditorSolicitud")
+
+  entregasRecibidas Entrega[] @relation("Receptor")
+  entregasHechas    Entrega[] @relation("EntregadoPor")
+
+  auditorias Auditoria[]
+
+  @@index([rol])
+}
+
+model Brigada {
+  id           String  @id @default(cuid())
+  nombre       String  @unique
+  supervisorId String?
+
+  supervisor  Usuario?    @relation("SupervisorBrigada", fields: [supervisorId], references: [id])
+  miembros    Usuario[]   @relation("MiembrosBrigada")
+  solicitudes Solicitud[]
+}
+
+model Articulo {
+  id            String    @id @default(cuid())
+  codigo        String    @unique
+  nombre        String
+  categoria     Categoria
+  unidad        String    @default("unidad")
+  requiereTalla Boolean   @default(false)
+  // Días de vida útil del EPP; si es null el ítem no vence.
+  vidaUtilDias  Int?
+  activo        Boolean   @default(true)
+
+  items SolicitudItem[]
+
+  @@index([categoria])
+}
+
+model Solicitud {
+  id            String          @id @default(cuid())
+  folio         Int             @unique
+  solicitanteId String
+  brigadaId     String?
+  tipo          TipoSolicitud
+  estado        EstadoSolicitud @default(BORRADOR)
+  justificacion String?
+  creadaEn      DateTime        @default(now())
+
+  enviadaEn     DateTime?
+  aprobadorId   String?
+  aprobadaEn    DateTime?
+  motivoRechazo String?
+
+  // Ajuste hecho por el aprobador antes de aprobar. Se guarda aparte de la
+  // auditoría para poder mostrarle al solicitante que su pedido cambió.
+  editadaEn   DateTime?
+  editadaPorId String?
+
+  gestorId         String?
+  // Referencia manual del pedido hecho al almacén externo.
+  pedidoExternoRef String?
+  enGestionEn      DateTime?
+  recibidaEn       DateTime?
+
+  canceladaEn DateTime?
+
+  solicitante Usuario  @relation("Solicitante", fields: [solicitanteId], references: [id])
+  aprobador   Usuario? @relation("Aprobador", fields: [aprobadorId], references: [id])
+  gestor      Usuario? @relation("Gestor", fields: [gestorId], references: [id])
+  editadaPor  Usuario? @relation("EditorSolicitud", fields: [editadaPorId], references: [id])
+  brigada     Brigada? @relation(fields: [brigadaId], references: [id])
+
+  items   SolicitudItem[]
+  entrega Entrega?
+
+  @@index([estado])
+  @@index([solicitanteId])
+}
+
+model SolicitudItem {
+  id          String  @id @default(cuid())
+  solicitudId String
+  articuloId  String
+  cantidad    Int     @default(1)
+  talla       String?
+
+  motivoReemplazo  MotivoReemplazo?
+  detalleReemplazo String?
+  fotoEvidenciaUrl String?
+  // Trazabilidad: el EntregaItem que este ítem viene a reemplazar.
+  entregaAnteriorItemId String? @unique
+
+  solicitud       Solicitud    @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  articulo        Articulo     @relation(fields: [articuloId], references: [id])
+  entregaAnterior EntregaItem? @relation("CadenaReemplazo", fields: [entregaAnteriorItemId], references: [id])
+
+  entregaItem EntregaItem? @relation("ItemEntregado")
+
+  @@index([solicitudId])
+}
+
+model Entrega {
+  id             String   @id @default(cuid())
+  solicitudId    String   @unique
+  receptorId     String
+  entregadoPorId String
+  entregadaEn    DateTime @default(now())
+  firmaPngUrl    String
+  observaciones  String?
+  actaPdfUrl     String?
+
+  solicitud    Solicitud @relation(fields: [solicitudId], references: [id])
+  receptor     Usuario   @relation("Receptor", fields: [receptorId], references: [id])
+  entregadoPor Usuario   @relation("EntregadoPor", fields: [entregadoPorId], references: [id])
+
+  items EntregaItem[]
+
+  @@index([receptorId])
+}
+
+model EntregaItem {
+  id                String    @id @default(cuid())
+  entregaId         String
+  solicitudItemId   String    @unique
+  cantidadEntregada Int
+  // Fecha de vencimiento calculada desde Articulo.vidaUtilDias al entregar.
+  venceEn           DateTime?
+  // Se marca cuando un reemplazo posterior deja este ítem fuera de uso.
+  reemplazadoEn     DateTime?
+
+  entrega       Entrega       @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  solicitudItem SolicitudItem @relation("ItemEntregado", fields: [solicitudItemId], references: [id])
+
+  reemplazadoPor SolicitudItem? @relation("CadenaReemplazo")
+
+  @@index([entregaId])
+  @@index([venceEn])
+}
+
+model Auditoria {
+  id          String   @id @default(cuid())
+  usuarioId   String
+  entidad     String
+  entidadId   String
+  accion      String
+  detalleJson String?
+  creadoEn    DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([entidad, entidadId])
+  @@index([creadoEn])
+}
+
+// Contador de folio correlativo para las solicitudes.
+model Contador {
+  nombre String @id
+  valor  Int    @default(0)
+}

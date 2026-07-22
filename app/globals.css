@@ -1,26 +1,305 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ---------------------------------------------------------------------------
+   Tokens de Kontrol
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+   Herramienta operativa de uso diario: tema claro único, alto contraste,
+   legible tanto en pantalla de oficina como bajo luz fuerte en terreno.
+
+   El primario es azul petróleo y NO verde a propósito: el verde está
+   reservado a la semántica de estado (entregado, EPP vigente). Un primario
+   verde volvería indistinguible "acción disponible" de "proceso completado".
+--------------------------------------------------------------------------- */
+
+@theme {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Marca — azul petróleo. El 600 es el tono de acción; 7.5:1 sobre blanco. */
+  --color-marca-50: oklch(0.972 0.013 240);
+  --color-marca-100: oklch(0.936 0.029 240);
+  --color-marca-200: oklch(0.882 0.052 240);
+  --color-marca-300: oklch(0.796 0.075 240);
+  --color-marca-400: oklch(0.676 0.096 240);
+  --color-marca-500: oklch(0.556 0.105 240);
+  --color-marca-600: oklch(0.450 0.105 240);
+  --color-marca-700: oklch(0.382 0.092 240);
+  --color-marca-800: oklch(0.318 0.074 240);
+  --color-marca-900: oklch(0.262 0.056 240);
+  --color-marca-950: oklch(0.208 0.042 240);
+
+  /* Superficies. La app vive sobre un lienzo apagado con paneles blancos. */
+  --color-lienzo: oklch(0.968 0.003 240);
+  --color-panel: oklch(1 0 0);
+  --color-panel-suave: oklch(0.978 0.003 240);
+  --color-borde: oklch(0.906 0.006 240);
+  --color-borde-fuerte: oklch(0.836 0.010 240);
+
+  /* Tinta. `tenue` está calculado para superar 4.5:1 sobre panel y lienzo:
+     antes se usaba slate-400 (~3.0:1), que reprobaba el mínimo de cuerpo. */
+  --color-tinta: oklch(0.248 0.014 240);
+  --color-tinta-suave: oklch(0.412 0.012 240);
+  --color-tinta-tenue: oklch(0.532 0.011 240);
+
+  /* Estado. Cinco matices, no siete: el avance por el flujo se lee en color
+     de marca y solo los desenlaces tienen color propio. */
+  --color-espera: oklch(0.470 0.108 75);
+  --color-espera-fondo: oklch(0.964 0.032 85);
+  --color-espera-borde: oklch(0.882 0.070 82);
+
+  --color-exito: oklch(0.448 0.098 158);
+  --color-exito-fondo: oklch(0.962 0.030 160);
+  --color-exito-borde: oklch(0.874 0.068 158);
+
+  --color-fallo: oklch(0.472 0.152 18);
+  --color-fallo-fondo: oklch(0.964 0.026 18);
+  --color-fallo-borde: oklch(0.886 0.060 18);
+
+  /* Capas. Escala semántica: nunca valores sueltos como 999. */
+  --z-base: 0;
+  --z-pegajoso: 10;
+  --z-desplegable: 20;
+  --z-velo: 30;
+  --z-modal: 40;
+  --z-aviso: 50;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
+}
+
+/* Tailwind 4 dejó los botones con `cursor: default` en su preflight, así que
+   sin esto ningún botón muestra el puntero al pasar por encima. */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-lienzo);
+  color: var(--color-tinta);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Anillo de foco único para toda la app. Se usa `focus-visible` en vez de
+   `focus` para que no aparezca al hacer clic con el mouse. */
+@utility foco-anillo {
+  &:focus-visible {
+    outline: 2px solid var(--color-marca-600);
+    outline-offset: 2px;
+  }
+}
+
+/* Sobre el encabezado oscuro el anillo azul no contrasta: se usa blanco. */
+@utility foco-anillo-claro {
+  &:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
+  }
+}
+
+/* --- Escala tipográfica ---------------------------------------------------
+   Antes casi todo era text-sm/text-xs y nada guiaba la vista. Tres niveles
+   con contraste real de peso y tamaño, más un nivel para datos numéricos. */
+
+@utility titulo-pagina {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+@utility titulo-seccion {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+@utility dato-grande {
+  font-size: 1.75rem;
+  line-height: 1.1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Movimiento reducido significa menos movimiento, no cero transiciones: los
+   fundidos de color y opacidad ayudan a comprender qué cambió y no provocan
+   mareo. Solo se anula el desplazamiento y la escala. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: color, background-color, border-color,
+      text-decoration-color, fill, stroke, opacity !important;
+    /* `scale` y `translate` son propiedades independientes de `transform`:
+       anular solo `transform` dejaría vivo el acuse de presión de los botones. */
+    transform: none !important;
+    scale: none !important;
+    translate: none !important;
+  }
+}
+
+@keyframes entrar-aviso {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aviso-flotante {
+  animation: entrar-aviso 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+
+/* La salida sale por donde entró, para que el aviso se sienta como un objeto
+   y no como dos estados distintos. Más rápida que la entrada: al entrar el
+   usuario está leyendo, al salir el sistema solo se retira. */
+.aviso-flotante--saliendo {
+  opacity: 0;
+  transform: translateY(0.5rem);
+}
+
+/* Paneles expandibles de las tablas de administración. Se abren decenas de
+   veces por sesión, así que la animación es mínima: opacidad y 4px. Cualquier
+   cosa más lenta o con escala empezaría a estorbar. */
+@keyframes entrar-panel {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel-expandible {
+  animation: entrar-panel 150ms ease-out;
+}
+
+/* ---------------------------------------------------------------------------
+   Menú móvil (cajón lateral)
+
+   <dialog> nativo estilado como panel a la izquierda, a la altura completa. La
+   entrada y salida se animan con @starting-style + `allow-discrete`, así el
+   cierre también anima sin desmontar a mano. El fondo (::backdrop) atenúa el
+   contenido. Bajo `md` es la navegación principal.
+--------------------------------------------------------------------------- */
+.menu-movil {
+  position: fixed;
+  inset: 0 auto 0 0;
+  height: 100dvh;
+  width: 18rem;
+  max-width: 85vw;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: var(--color-marca-950);
+  color: #fff;
+  transform: translateX(-100%);
+  transition:
+    transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
+    overlay 300ms allow-discrete,
+    display 300ms allow-discrete;
+}
+
+.menu-movil[open] {
+  transform: translateX(0);
+}
+
+@starting-style {
+  .menu-movil[open] {
+    transform: translateX(-100%);
+  }
+}
+
+.menu-movil::backdrop {
+  background-color: rgb(0 0 0 / 0.5);
+  opacity: 0;
+  transition:
+    opacity 300ms ease,
+    overlay 300ms allow-discrete,
+    display 300ms allow-discrete;
+}
+
+.menu-movil[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .menu-movil[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* El canvas de firma no debe hacer scroll de la página al arrastrar. */
+.canvas-firma {
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Tablas apilables
+
+   Bajo 640px una tabla de datos deja de ser tabla: cada fila se convierte en
+   una tarjeta con pares etiqueta·valor. Sin esto, en un teléfono las columnas
+   de la derecha (estado, acciones) quedan fuera de pantalla tras un scroll
+   horizontal que nadie descubre. El nombre de cada campo sale de `data-label`.
+--------------------------------------------------------------------------- */
+@media (max-width: 639.98px) {
+  .tabla-apilable {
+    /* Anula el min-width en línea que forzaría el scroll horizontal. */
+    min-width: 0 !important;
+  }
+  .tabla-apilable thead {
+    /* El encabezado lo reemplaza la etiqueta de cada celda. */
+    display: none;
+  }
+  .tabla-apilable tbody {
+    display: block;
+  }
+  .tabla-apilable tbody tr {
+    display: block;
+    padding: 0.375rem 0;
+  }
+  .tabla-apilable tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3125rem 1rem;
+    text-align: right;
+  }
+  .tabla-apilable tbody td::before {
+    content: attr(data-label);
+    flex: none;
+    font-weight: 500;
+    color: var(--color-tinta-tenue);
+    text-align: left;
+    white-space: nowrap;
+  }
+  /* Celda a todo el ancho, sin etiqueta: paneles expandibles y bloques de
+     acciones que se explican solos. */
+  .tabla-apilable tbody td.celda-completa {
+    display: block;
+    padding: 0.5rem 1rem;
+    text-align: left;
+  }
+  .tabla-apilable tbody td.celda-completa::before {
+    content: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
 }
