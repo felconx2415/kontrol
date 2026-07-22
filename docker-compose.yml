@@ -1,0 +1,45 @@
+# Kontrol — despliegue con Docker detrás de Caddy.
+#
+# Por defecto NO publica ningún puerto al host: Caddy (en la misma red Docker)
+# alcanza al contenedor como http://kontrol:3000, así no choca con tus otras
+# apps. Si tu Caddy corre en el HOST (no en Docker), mira la sección comentada
+# más abajo ("Variante: Caddy en el host").
+
+services:
+  kontrol:
+    build: .
+    image: kontrol:0.5.0-beta
+    container_name: kontrol
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "file:/data/kontrol.db"
+      SESSION_SECRET: "${SESSION_SECRET:?Define SESSION_SECRET en .env (openssl rand -base64 32)}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-kontrol123}"
+      ADMIN_NOMBRE: "${ADMIN_NOMBRE:-Administrador}"
+    volumes:
+      - kontrol_data:/data                       # base SQLite persistente
+      - kontrol_uploads:/app/public/uploads      # firmas, fotos, actas
+    networks:
+      - web
+    # Sin `ports:` → el contenedor no ocupa ningún puerto del host.
+
+    # ── Variante: Caddy en el HOST ────────────────────────────────────────
+    # Comenta el bloque `networks` de arriba y descomenta esto para publicar
+    # el puerto solo en loopback y que Caddy (host) proxee a 127.0.0.1:PUERTO:
+    #
+    # ports:
+    #   - "127.0.0.1:${KONTROL_HOST_PORT:-8087}:3000"
+    # (y elimina la sección `networks:` de abajo)
+
+networks:
+  # Red externa de Caddy. Ajusta el `name` al de tu Caddy (ver DEPLOY.md para
+  # detectarlo). Si no existe, créala:  docker network create web
+  web:
+    external: true
+    name: web
+
+volumes:
+  kontrol_data:
+  kontrol_uploads:

@@ -1,0 +1,27 @@
+# No copiar al contexto de build:
+node_modules
+.next
+out
+build
+.git
+.gitignore
+
+# Datos locales / secretos (nunca deben entrar a la imagen)
+*.db
+*.db-journal
+.env
+.env.*
+public/uploads
+
+# Cliente Prisma generado: se regenera dentro con `prisma generate`
+generated
+
+# Misc
+.DS_Store
+.impeccable
+npm-debug.log*
+e2e
+Dockerfile
+docker-compose.yml
+.dockerignore
+DEPLOY.md
