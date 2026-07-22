@@ -5,17 +5,16 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { registrarAuditoria, requerirUsuario } from "@/lib/auth";
 import { siguienteFolio } from "@/lib/folio";
-import { esGestion, puedeTransicionar } from "@/lib/solicitud-estado";
+import { esGestion, motivosDe, puedeTransicionar } from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
-import type { EstadoSolicitud, MotivoReemplazo, TipoSolicitud } from "@/generated/prisma/enums";
+import type { EstadoSolicitud, Motivo, TipoSolicitud } from "@/generated/prisma/enums";
 
 export type EstadoFormulario = { error?: string; ok?: boolean };
 
 type ItemEntrante = {
   articuloId: string;
   cantidad: number;
-  talla?: string | null;
-  motivoReemplazo?: MotivoReemplazo | null;
+  motivo?: Motivo | null;
   detalleReemplazo?: string | null;
   fotoEvidenciaUrl?: string | null;
   entregaAnteriorItemId?: string | null;
@@ -51,17 +50,16 @@ export async function crearSolicitud(
   });
   const porId = new Map(articulos.map((a) => [a.id, a]));
 
+  // El motivo debe pertenecer al grupo del tipo de solicitud (nuevo/reemplazo).
+  const motivosValidos = motivosDe(tipo);
   for (const item of items) {
     const articulo = porId.get(item.articuloId);
     if (!articulo) return { error: "Uno de los artículos ya no está disponible." };
     if (!Number.isInteger(item.cantidad) || item.cantidad < 1) {
       return { error: `Cantidad inválida para ${articulo.nombre}.` };
     }
-    if (articulo.requiereTalla && !item.talla) {
-      return { error: `Indica la talla para ${articulo.nombre}.` };
-    }
-    if (tipo === "REEMPLAZO" && !item.motivoReemplazo) {
-      return { error: `Indica el motivo de reemplazo para ${articulo.nombre}.` };
+    if (!item.motivo || !motivosValidos.includes(item.motivo)) {
+      return { error: `Indica un motivo válido para ${articulo.nombre}.` };
     }
   }
 
@@ -95,11 +93,11 @@ export async function crearSolicitud(
           create: items.map((i) => ({
             articuloId: i.articuloId,
             cantidad: i.cantidad,
-            talla: i.talla || null,
-            motivoReemplazo: tipo === "REEMPLAZO" ? i.motivoReemplazo : null,
-            detalleReemplazo: i.detalleReemplazo || null,
-            fotoEvidenciaUrl: i.fotoEvidenciaUrl || null,
-            entregaAnteriorItemId: i.entregaAnteriorItemId || null,
+            motivo: i.motivo,
+            // Detalle, foto y cadena de reemplazo solo aplican a reemplazos.
+            detalleReemplazo: tipo === "REEMPLAZO" ? i.detalleReemplazo || null : null,
+            fotoEvidenciaUrl: tipo === "REEMPLAZO" ? i.fotoEvidenciaUrl || null : null,
+            entregaAnteriorItemId: tipo === "REEMPLAZO" ? i.entregaAnteriorItemId || null : null,
           })),
         },
       },
@@ -121,7 +119,6 @@ export async function crearSolicitud(
 export type CambioItem = {
   itemId: string;
   cantidad: number;
-  talla: string | null;
   quitar: boolean;
 };
 
@@ -177,9 +174,6 @@ export async function editarSolicitud(
     if (!Number.isInteger(c.cantidad) || c.cantidad < 1) {
       return { error: `Cantidad inválida para ${item.articulo.nombre}.` };
     }
-    if (item.articulo.requiereTalla && !c.talla?.trim()) {
-      return { error: `Indica la talla para ${item.articulo.nombre}.` };
-    }
   }
 
   // Diferencia legible, para dejar constancia de qué cambió exactamente.
@@ -192,12 +186,6 @@ export async function editarSolicitud(
     }
     if (c.cantidad !== item.cantidad) {
       detalle.push(`${item.articulo.nombre}: cantidad ${item.cantidad} → ${c.cantidad}`);
-    }
-    const tallaNueva = c.talla?.trim() || null;
-    if (tallaNueva !== item.talla) {
-      detalle.push(
-        `${item.articulo.nombre}: talla ${item.talla ?? "—"} → ${tallaNueva ?? "—"}`,
-      );
     }
   }
 
@@ -213,7 +201,7 @@ export async function editarSolicitud(
       }
       await tx.solicitudItem.update({
         where: { id: c.itemId },
-        data: { cantidad: c.cantidad, talla: c.talla?.trim() || null },
+        data: { cantidad: c.cantidad },
       });
     }
 

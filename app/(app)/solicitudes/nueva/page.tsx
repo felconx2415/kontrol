@@ -51,13 +51,11 @@ export default async function NuevaSolicitud() {
           codigo: a.codigo,
           nombre: a.nombre,
           categoria: a.categoria,
-          requiereTalla: a.requiereTalla,
         }))}
         asignados={asignados.map((i) => ({
           entregaItemId: i.id,
           articuloId: i.solicitudItem.articulo.id,
           articuloNombre: i.solicitudItem.articulo.nombre,
-          talla: i.solicitudItem.talla,
           entregadoEn: i.entrega.entregadaEn.toISOString(),
         }))}
       />

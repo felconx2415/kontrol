@@ -6,11 +6,14 @@
  * días y el resto a lo largo de los próximos meses. También deja solicitudes
  * detenidas en cada etapa del flujo para poblar el embudo.
  *
- * Es aditivo y se puede volver a ejecutar. Para partir de cero:
+ * Es autosuficiente: crea sus propias brigadas, usuarios y artículos de
+ * ejemplo (el seed normal solo deja la cuenta admin). Es aditivo y se puede
+ * volver a ejecutar. Para partir de cero:
  *   npx prisma migrate reset --schema=prisma/schema.prisma && npm run db:demo
  */
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import bcrypt from "bcryptjs";
 
 const db = new PrismaClient({
   adapter: new PrismaBetterSqlite3({
@@ -19,6 +22,70 @@ const db = new PrismaClient({
 });
 
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000);
+
+// Artículos de ejemplo que usan las solicitudes de demostración. Sus códigos
+// (EPP-00x / EQ-00x) no chocan con el codigario real, que es numérico.
+const ARTICULOS_DEMO = [
+  { codigo: "EPP-001", nombre: "Casco de seguridad", categoria: "EPP", vidaUtilDias: 1825 },
+  { codigo: "EPP-002", nombre: "Guantes de cuero", categoria: "EPP", vidaUtilDias: 180 },
+  { codigo: "EPP-003", nombre: "Botas de seguridad", categoria: "EPP", vidaUtilDias: 365 },
+  { codigo: "EPP-004", nombre: "Antiparras", categoria: "EPP", vidaUtilDias: 730 },
+  { codigo: "EPP-005", nombre: "Protector auditivo", categoria: "EPP", vidaUtilDias: 365 },
+  { codigo: "EPP-006", nombre: "Arnés de seguridad", categoria: "EPP", vidaUtilDias: 1825 },
+  { codigo: "EPP-007", nombre: "Buzo ignífugo", categoria: "EPP", vidaUtilDias: 730 },
+  { codigo: "EPP-008", nombre: "Mascarilla media cara", categoria: "EPP", vidaUtilDias: 365 },
+  { codigo: "EPP-009", nombre: "Filtro para mascarilla", categoria: "EPP", vidaUtilDias: 90 },
+  { codigo: "EPP-010", nombre: "Chaleco reflectante", categoria: "EPP", vidaUtilDias: 365 },
+  { codigo: "EQ-001", nombre: "Radio portátil VHF", categoria: "EQUIPAMIENTO", vidaUtilDias: null },
+  { codigo: "EQ-003", nombre: "Motosierra", categoria: "EQUIPAMIENTO", vidaUtilDias: null },
+  { codigo: "EQ-005", nombre: "Mochila forestal 20L", categoria: "EQUIPAMIENTO", vidaUtilDias: null },
+  { codigo: "EQ-007", nombre: "Botiquín de primeros auxilios", categoria: "EQUIPAMIENTO", vidaUtilDias: 365 },
+] as const;
+
+/**
+ * Crea las brigadas, usuarios y artículos que las solicitudes de demo
+ * necesitan. Idempotente (upsert), para poder reejecutar db:demo.
+ */
+async function prepararBase() {
+  const pass = await bcrypt.hash("kontrol123", 10);
+
+  const brigadaNorte = await db.brigada.upsert({
+    where: { nombre: "Brigada Norte" },
+    create: { nombre: "Brigada Norte" },
+    update: {},
+  });
+  const brigadaSur = await db.brigada.upsert({
+    where: { nombre: "Brigada Sur" },
+    create: { nombre: "Brigada Sur" },
+    update: {},
+  });
+
+  const usuarios = [
+    { username: "gestor", nombre: "Camila Rojas", rol: "GESTOR" as const, brigadaId: null },
+    { username: "aprobador", nombre: "Luis Fuentes", rol: "APROBADOR" as const, brigadaId: brigadaNorte.id },
+    { username: "jperez", nombre: "Juan Pérez", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
+    { username: "msoto", nombre: "María Soto", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
+    { username: "pmunoz", nombre: "Pedro Muñoz", rol: "SOLICITANTE" as const, brigadaId: brigadaSur.id },
+  ];
+  for (const u of usuarios) {
+    await db.usuario.upsert({
+      where: { username: u.username },
+      create: { ...u, passwordHash: pass },
+      update: { nombre: u.nombre, rol: u.rol, brigadaId: u.brigadaId },
+    });
+  }
+
+  const aprobador = await db.usuario.findUniqueOrThrow({ where: { username: "aprobador" } });
+  await db.brigada.update({ where: { id: brigadaNorte.id }, data: { supervisorId: aprobador.id } });
+
+  for (const a of ARTICULOS_DEMO) {
+    await db.articulo.upsert({
+      where: { codigo: a.codigo },
+      create: a,
+      update: { nombre: a.nombre, vidaUtilDias: a.vidaUtilDias },
+    });
+  }
+}
 
 async function siguienteFolio() {
   const c = await db.contador.upsert({
@@ -37,7 +104,6 @@ async function siguienteFolio() {
 async function entregaHistorica(params: {
   username: string;
   codigoArticulo: string;
-  talla?: string;
   diasAtras: number;
 }) {
   const [solicitante, gestor, articulo] = await Promise.all([
@@ -68,7 +134,6 @@ async function entregaHistorica(params: {
         create: {
           articuloId: articulo.id,
           cantidad: 1,
-          talla: articulo.requiereTalla ? (params.talla ?? "M") : null,
         },
       },
     },
@@ -137,7 +202,6 @@ async function solicitudEnEtapa(params: {
         create: {
           articuloId: articulo.id,
           cantidad: 1,
-          talla: articulo.requiereTalla ? "L" : null,
         },
       },
     },
@@ -147,20 +211,22 @@ async function solicitudEnEtapa(params: {
 async function main() {
   console.log("Generando datos de demostración…");
 
+  await prepararBase();
+
   // Vencimientos repartidos. La vida útil de cada artículo (en el seed)
   // determina a cuántos días vence; se ajusta el "hace" para repartirlos.
-  const historicas: { username: string; codigoArticulo: string; diasAtras: number; talla?: string }[] = [
+  const historicas: { username: string; codigoArticulo: string; diasAtras: number }[] = [
     // Guantes (180 d de vida útil) → vencidos y por vencer
-    { username: "jperez", codigoArticulo: "EPP-002", diasAtras: 200, talla: "M" },
-    { username: "msoto", codigoArticulo: "EPP-002", diasAtras: 195, talla: "S" },
-    { username: "pmunoz", codigoArticulo: "EPP-002", diasAtras: 170, talla: "L" },
+    { username: "jperez", codigoArticulo: "EPP-002", diasAtras: 200 },
+    { username: "msoto", codigoArticulo: "EPP-002", diasAtras: 195 },
+    { username: "pmunoz", codigoArticulo: "EPP-002", diasAtras: 170 },
     { username: "msoto", codigoArticulo: "EPP-009", diasAtras: 95 }, // filtro 90 d → vencido
     { username: "pmunoz", codigoArticulo: "EPP-009", diasAtras: 75 }, // vence en 15 d
     // Botas y chalecos (365 d) → repartidos en los próximos meses
-    { username: "msoto", codigoArticulo: "EPP-003", diasAtras: 350, talla: "38" },
-    { username: "pmunoz", codigoArticulo: "EPP-003", diasAtras: 320, talla: "44" },
-    { username: "jperez", codigoArticulo: "EPP-010", diasAtras: 300, talla: "M" },
-    { username: "msoto", codigoArticulo: "EPP-010", diasAtras: 260, talla: "S" },
+    { username: "msoto", codigoArticulo: "EPP-003", diasAtras: 350 },
+    { username: "pmunoz", codigoArticulo: "EPP-003", diasAtras: 320 },
+    { username: "jperez", codigoArticulo: "EPP-010", diasAtras: 300 },
+    { username: "msoto", codigoArticulo: "EPP-010", diasAtras: 260 },
     { username: "pmunoz", codigoArticulo: "EPP-005", diasAtras: 230 },
     { username: "jperez", codigoArticulo: "EPP-005", diasAtras: 200 },
     { username: "msoto", codigoArticulo: "EQ-007", diasAtras: 190 },

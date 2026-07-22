@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { hashPassword, registrarAuditoria, requerirRol } from "@/lib/auth";
 import { ROLES, ROLES_ADMIN, ROLES_GESTION } from "@/lib/solicitud-estado";
-import type { Categoria, Rol } from "@/generated/prisma/enums";
+import type { Categoria, Rol, TipoBrigada } from "@/generated/prisma/enums";
 
 export type EstadoAdmin = { error?: string; ok?: string };
 
@@ -254,6 +254,11 @@ async function validarNombreBrigada(
   return null;
 }
 
+/** Normaliza el tipo de brigada; cualquier valor inesperado cae en EMPRESA. */
+function leerTipoBrigada(bruto: FormDataEntryValue | null): TipoBrigada {
+  return String(bruto) === "CONTRATISTA" ? "CONTRATISTA" : "EMPRESA";
+}
+
 export async function crearBrigada(
   _estado: EstadoAdmin,
   formData: FormData,
@@ -262,11 +267,12 @@ export async function crearBrigada(
 
   const nombre = String(formData.get("nombre") ?? "").trim();
   const supervisorId = String(formData.get("supervisorId") ?? "") || null;
+  const tipo = leerTipoBrigada(formData.get("tipo"));
 
   const error = await validarNombreBrigada(nombre);
   if (error) return { error };
 
-  const brigada = await db.brigada.create({ data: { nombre, supervisorId } });
+  const brigada = await db.brigada.create({ data: { nombre, tipo, supervisorId } });
 
   await registrarAuditoria({
     usuarioId: admin.id,
@@ -293,19 +299,21 @@ export async function editarBrigada(
 
   const nombre = String(formData.get("nombre") ?? "").trim();
   const supervisorId = String(formData.get("supervisorId") ?? "") || null;
+  const tipo = leerTipoBrigada(formData.get("tipo"));
 
   const error = await validarNombreBrigada(nombre, id);
   if (error) return { error };
 
   const cambios: Record<string, [unknown, unknown]> = {};
   if (brigada.nombre !== nombre) cambios.nombre = [brigada.nombre, nombre];
+  if (brigada.tipo !== tipo) cambios.tipo = [brigada.tipo, tipo];
   if (brigada.supervisorId !== supervisorId) {
     cambios.supervisorId = [brigada.supervisorId, supervisorId];
   }
 
   if (Object.keys(cambios).length === 0) return { ok: "Sin cambios que guardar." };
 
-  await db.brigada.update({ where: { id }, data: { nombre, supervisorId } });
+  await db.brigada.update({ where: { id }, data: { nombre, tipo, supervisorId } });
 
   await registrarAuditoria({
     usuarioId: admin.id,
@@ -372,7 +380,7 @@ export async function crearArticulo(
   const nombre = String(formData.get("nombre") ?? "").trim();
   const categoria = String(formData.get("categoria") ?? "") as Categoria;
   const unidad = String(formData.get("unidad") ?? "unidad").trim() || "unidad";
-  const requiereTalla = formData.get("requiereTalla") === "on";
+  const ceco = String(formData.get("ceco") ?? "").trim() || null;
   const vidaUtilBruta = String(formData.get("vidaUtilDias") ?? "").trim();
 
   if (!codigo) return { error: "Indica el código del artículo." };
@@ -394,7 +402,7 @@ export async function crearArticulo(
   if (existente) return { error: "Ese código ya existe en el catálogo." };
 
   const articulo = await db.articulo.create({
-    data: { codigo, nombre, categoria, unidad, requiereTalla, vidaUtilDias },
+    data: { codigo, nombre, categoria, unidad, ceco, vidaUtilDias },
   });
 
   await registrarAuditoria({
@@ -407,6 +415,73 @@ export async function crearArticulo(
 
   revalidatePath("/admin/articulos");
   return { ok: `Artículo ${codigo} agregado.` };
+}
+
+export async function editarArticulo(
+  _estado: EstadoAdmin,
+  formData: FormData,
+): Promise<EstadoAdmin> {
+  const gestor = await requerirRol(...ROLES_GESTION);
+  const id = String(formData.get("articuloId") ?? "");
+
+  const articulo = await db.articulo.findUnique({ where: { id } });
+  if (!articulo) return { error: "Ese artículo ya no existe." };
+
+  const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const categoria = String(formData.get("categoria") ?? "") as Categoria;
+  const unidad = String(formData.get("unidad") ?? "unidad").trim() || "unidad";
+  const ceco = String(formData.get("ceco") ?? "").trim() || null;
+  const vidaUtilBruta = String(formData.get("vidaUtilDias") ?? "").trim();
+
+  if (!codigo) return { error: "Indica el código del artículo." };
+  if (!nombre) return { error: "Indica el nombre del artículo." };
+  if (categoria !== "EPP" && categoria !== "EQUIPAMIENTO") {
+    return { error: "Selecciona una categoría válida." };
+  }
+
+  let vidaUtilDias: number | null = null;
+  if (vidaUtilBruta) {
+    const dias = Number(vidaUtilBruta);
+    if (!Number.isInteger(dias) || dias <= 0) {
+      return { error: "La vida útil debe ser un número entero de días." };
+    }
+    vidaUtilDias = dias;
+  }
+
+  // El código es la clave única del catálogo: si cambia, no debe chocar con otro.
+  if (codigo !== articulo.codigo) {
+    const existente = await db.articulo.findUnique({ where: { codigo } });
+    if (existente) return { error: "Ese código ya existe en el catálogo." };
+  }
+
+  const cambios: Record<string, [unknown, unknown]> = {};
+  if (articulo.codigo !== codigo) cambios.codigo = [articulo.codigo, codigo];
+  if (articulo.nombre !== nombre) cambios.nombre = [articulo.nombre, nombre];
+  if (articulo.categoria !== categoria) cambios.categoria = [articulo.categoria, categoria];
+  if (articulo.unidad !== unidad) cambios.unidad = [articulo.unidad, unidad];
+  if (articulo.ceco !== ceco) cambios.ceco = [articulo.ceco, ceco];
+  if (articulo.vidaUtilDias !== vidaUtilDias) {
+    cambios.vidaUtilDias = [articulo.vidaUtilDias, vidaUtilDias];
+  }
+
+  if (Object.keys(cambios).length === 0) return { ok: "Sin cambios que guardar." };
+
+  await db.articulo.update({
+    where: { id },
+    data: { codigo, nombre, categoria, unidad, ceco, vidaUtilDias },
+  });
+
+  await registrarAuditoria({
+    usuarioId: gestor.id,
+    entidad: "Articulo",
+    entidadId: id,
+    accion: "EDITADO",
+    detalle: cambios,
+  });
+
+  revalidatePath("/admin/articulos");
+  return { ok: `Artículo ${codigo} actualizado.` };
 }
 
 export async function alternarArticulo(formData: FormData) {

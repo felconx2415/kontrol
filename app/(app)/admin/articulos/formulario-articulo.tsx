@@ -37,6 +37,10 @@ export default function FormularioArticulo() {
         <Entrada id="unidad" name="unidad" defaultValue="unidad" />
       </Campo>
 
+      <Campo etiqueta="CECO (opcional)" htmlFor="ceco">
+        <Entrada id="ceco" name="ceco" placeholder="FD1400D082" />
+      </Campo>
+
       <Campo
         etiqueta="Vida útil en días (opcional)"
         htmlFor="vidaUtilDias"
@@ -50,15 +54,6 @@ export default function FormularioArticulo() {
           placeholder="365"
         />
       </Campo>
-
-      <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-tinta-suave sm:items-end sm:pb-2.5">
-        <input
-          type="checkbox"
-          name="requiereTalla"
-          className="foco-anillo size-5 cursor-pointer rounded border-borde-fuerte accent-marca-600"
-        />
-        Requiere talla
-      </label>
 
       {estado.error && (
         <Aviso tono="error" className="sm:col-span-2 lg:col-span-3">

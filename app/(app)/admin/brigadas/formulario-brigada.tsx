@@ -33,6 +33,17 @@ export default function FormularioBrigada({
         <Entrada id="nombre" name="nombre" required placeholder="Brigada Norte" />
       </Campo>
 
+      <Campo
+        etiqueta="Tipo"
+        htmlFor="tipo"
+        pista="Define en qué columna del formato de almacén aparece."
+      >
+        <Seleccion id="tipo" name="tipo" defaultValue="EMPRESA">
+          <option value="EMPRESA">Empresa</option>
+          <option value="CONTRATISTA">Contratista</option>
+        </Seleccion>
+      </Campo>
+
       <Campo etiqueta="Supervisor" htmlFor="supervisorId">
         <Seleccion id="supervisorId" name="supervisorId" defaultValue="">
           <option value="">Sin supervisor</option>

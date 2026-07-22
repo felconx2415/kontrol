@@ -14,16 +14,14 @@ export type ItemEditable = {
   articuloCodigo: string;
   categoria: string;
   unidad: string;
-  requiereTalla: boolean;
   cantidad: number;
-  talla: string | null;
-  motivoReemplazo: string | null;
+  motivo: string | null;
   detalleReemplazo: string | null;
   fotoEvidenciaUrl: string | null;
   entregaAnteriorFecha: string | null;
 };
 
-type Borrador = { cantidad: number; talla: string; quitar: boolean };
+type Borrador = { cantidad: number; quitar: boolean };
 
 /**
  * Lista de ítems que el aprobador puede ajustar antes de aprobar.
@@ -59,10 +57,7 @@ export default function EditorItems({
   function abrirEdicion() {
     setBorradores(
       Object.fromEntries(
-        items.map((i) => [
-          i.id,
-          { cantidad: i.cantidad, talla: i.talla ?? "", quitar: false },
-        ]),
+        items.map((i) => [i.id, { cantidad: i.cantidad, quitar: false }]),
       ),
     );
     setEditando(true);
@@ -74,17 +69,10 @@ export default function EditorItems({
 
   const quedan = items.filter((i) => !borradores[i.id]?.quitar).length;
 
-  const incompleto = items.some((i) => {
-    const b = borradores[i.id];
-    if (!b || b.quitar) return false;
-    return i.requiereTalla && !b.talla.trim();
-  });
-
   const payload = JSON.stringify(
     items.map((i) => ({
       itemId: i.id,
       cantidad: borradores[i.id]?.cantidad ?? i.cantidad,
-      talla: borradores[i.id]?.talla ?? i.talla ?? "",
       quitar: borradores[i.id]?.quitar ?? false,
     })),
   );
@@ -110,7 +98,6 @@ export default function EditorItems({
                   <p className="text-xs text-tinta-tenue">
                     {item.articuloCodigo} ·{" "}
                     {item.categoria === "EPP" ? "EPP" : "Equipamiento"}
-                    {item.talla ? ` · talla ${item.talla}` : ""}
                   </p>
                 </div>
                 <p className="text-sm tabular-nums text-tinta-suave">
@@ -119,10 +106,10 @@ export default function EditorItems({
                 </p>
               </div>
 
-              {item.motivoReemplazo && (
+              {item.motivo && (
                 <div className="mt-2 rounded-lg bg-panel-suave p-2.5">
                   <p className="text-xs font-medium text-tinta">
-                    Motivo: {ETIQUETA_MOTIVO[item.motivoReemplazo]}
+                    Motivo: {ETIQUETA_MOTIVO[item.motivo as keyof typeof ETIQUETA_MOTIVO]}
                   </p>
                   {item.detalleReemplazo && (
                     <p className="mt-0.5 text-xs text-tinta-suave">
@@ -180,7 +167,6 @@ export default function EditorItems({
                         {item.articuloCodigo} · pedido original: {item.cantidad}{" "}
                         {item.unidad}
                         {item.cantidad === 1 ? "" : "s"}
-                        {item.talla ? ` · talla ${item.talla}` : ""}
                       </p>
                     </div>
                     <Boton
@@ -208,20 +194,6 @@ export default function EditorItems({
                           }
                         />
                       </Campo>
-
-                      {item.requiereTalla && (
-                        <Campo etiqueta="Talla" htmlFor={`talla-${item.id}`} requerido>
-                          <Entrada
-                            id={`talla-${item.id}`}
-                            type="text"
-                            value={b?.talla ?? ""}
-                            onChange={(e) =>
-                              actualizar(item.id, { talla: e.target.value })
-                            }
-                            placeholder="Ej: 42, M, L"
-                          />
-                        </Campo>
-                      )}
                     </div>
                   )}
                 </li>
@@ -248,7 +220,7 @@ export default function EditorItems({
               </Boton>
               <Boton
                 type="submit"
-                disabled={quedan === 0 || incompleto}
+                disabled={quedan === 0}
                 textoPendiente="Guardando…"
               >
                 Guardar cambios

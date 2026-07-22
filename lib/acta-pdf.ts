@@ -18,7 +18,6 @@ export type DatosActa = {
     codigo: string;
     cantidad: number;
     unidad: string;
-    talla: string | null;
     venceEn: Date | null;
   }[];
   firmaPng: Uint8Array;
@@ -103,8 +102,8 @@ export async function generarActaPdf(datos: DatosActa): Promise<Uint8Array> {
   texto("Ítems entregados", { size: 11, font: negrita });
   y -= 18;
 
-  const columnas = [MARGEN, MARGEN + 230, MARGEN + 300, MARGEN + 360, MARGEN + 430];
-  const encabezados = ["Artículo", "Código", "Cant.", "Talla", "Vence"];
+  const columnas = [MARGEN, MARGEN + 230, MARGEN + 300, MARGEN + 400];
+  const encabezados = ["Artículo", "Código", "Cant.", "Vence"];
 
   encabezados.forEach((h, i) => {
     pagina.drawText(h, {
@@ -130,7 +129,6 @@ export async function generarActaPdf(datos: DatosActa): Promise<Uint8Array> {
       nombre,
       item.codigo,
       `${item.cantidad} ${item.unidad}`,
-      item.talla ?? "—",
       item.venceEn ? formatearFecha(item.venceEn) : "—",
     ];
 

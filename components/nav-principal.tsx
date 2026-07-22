@@ -8,6 +8,7 @@ export type IconoNav =
   | "escritorio"
   | "solicitudes"
   | "equipamiento"
+  | "bodega"
   | "reportes"
   | "catalogo"
   | "usuarios"
@@ -47,6 +48,14 @@ const TRAZOS: Record<IconoNav, ReactNode> = {
       <path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5" />
       <path d="M4 15v-3a6 6 0 0 1 6-6" />
       <path d="M14 6a6 6 0 0 1 6 6v3" />
+    </>
+  ),
+  bodega: (
+    <>
+      <path d="M18 21V10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v11" />
+      <path d="M22 20V8a2 2 0 0 0-1.15-1.81l-7-3.5a2 2 0 0 0-1.7 0l-7 3.5A2 2 0 0 0 2 8v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2Z" />
+      <path d="M6 13h12" />
+      <path d="M6 17h12" />
     </>
   ),
   reportes: (

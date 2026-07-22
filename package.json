@@ -1,6 +1,6 @@
 {
   "name": "kontrol",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:demo": "tsx prisma/demo.ts",
+    "db:import": "tsx prisma/importar-codigario.mts",
     "db:studio": "prisma studio",
     "e2e": "tsx e2e/flujo-completo.mts"
   },

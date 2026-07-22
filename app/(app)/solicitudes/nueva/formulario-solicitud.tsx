@@ -2,25 +2,31 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { crearSolicitud, type EstadoFormulario } from "@/actions/solicitudes";
-import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import {
+  ETIQUETA_MOTIVO,
+  MOTIVOS_NUEVO,
+  MOTIVOS_REEMPLAZO,
+} from "@/lib/solicitud-estado";
 import SubirFoto from "@/components/subir-foto";
 import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Etiqueta, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
+import BuscadorArticulo, {
+  normalizar,
+  type OpcionBuscador,
+} from "./buscador-articulo";
 
 type Articulo = {
   id: string;
   codigo: string;
   nombre: string;
   categoria: string;
-  requiereTalla: boolean;
 };
 
 type Asignado = {
   entregaItemId: string;
   articuloId: string;
   articuloNombre: string;
-  talla: string | null;
   entregadoEn: string;
 };
 
@@ -28,14 +34,23 @@ type ItemBorrador = {
   clave: string;
   articuloId: string;
   cantidad: number;
-  talla: string;
-  motivoReemplazo: string;
+  motivo: string;
   detalleReemplazo: string;
   fotoEvidenciaUrl: string | null;
   entregaAnteriorItemId: string | null;
 };
 
-const MOTIVOS = ["DESGASTE", "DANO", "PERDIDA", "VENCIMIENTO", "OTRO"] as const;
+/**
+ * Id local para los ítems del borrador (solo sirve como `key` de React).
+ * `crypto.randomUUID` no existe en contextos no seguros —como abrir la app por
+ * la IP de la LAN en http—, así que hay un respaldo que no depende de él.
+ */
+function nuevaClave(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `k-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 const TIPOS = [
   {
@@ -64,7 +79,6 @@ export default function FormularioSolicitud({
 
   const [tipo, setTipo] = useState<"NUEVO" | "REEMPLAZO">("NUEVO");
   const [items, setItems] = useState<ItemBorrador[]>([]);
-  const [seleccion, setSeleccion] = useState("");
 
   const porId = useMemo(
     () => new Map(articulos.map((a) => [a.id, a])),
@@ -80,42 +94,61 @@ export default function FormularioSolicitud({
     [asignados, items],
   );
 
-  function agregarNuevo() {
-    const articulo = porId.get(seleccion);
+  // Opciones del buscador según el tipo de solicitud.
+  const opcionesNuevo: OpcionBuscador[] = useMemo(
+    () =>
+      articulos.map((a) => ({
+        id: a.id,
+        principal: `${a.categoria === "EPP" ? "EPP" : "Equipo"} · ${a.nombre}`,
+        secundario: a.codigo,
+        buscable: normalizar(`${a.nombre} ${a.codigo}`),
+      })),
+    [articulos],
+  );
+
+  const opcionesReemplazo: OpcionBuscador[] = useMemo(
+    () =>
+      disponiblesParaReemplazo.map((a) => ({
+        id: a.entregaItemId,
+        principal: a.articuloNombre,
+        secundario: new Date(a.entregadoEn).toLocaleDateString("es-CL"),
+        buscable: normalizar(a.articuloNombre),
+      })),
+    [disponiblesParaReemplazo],
+  );
+
+  function agregarNuevo(articuloId: string) {
+    const articulo = porId.get(articuloId);
     if (!articulo) return;
     setItems((prev) => [
       ...prev,
       {
-        clave: crypto.randomUUID(),
+        clave: nuevaClave(),
         articuloId: articulo.id,
         cantidad: 1,
-        talla: "",
-        motivoReemplazo: "",
+        motivo: MOTIVOS_NUEVO[0],
         detalleReemplazo: "",
         fotoEvidenciaUrl: null,
         entregaAnteriorItemId: null,
       },
     ]);
-    setSeleccion("");
   }
 
-  function agregarReemplazo() {
-    const asignado = asignados.find((a) => a.entregaItemId === seleccion);
+  function agregarReemplazo(entregaItemId: string) {
+    const asignado = asignados.find((a) => a.entregaItemId === entregaItemId);
     if (!asignado) return;
     setItems((prev) => [
       ...prev,
       {
-        clave: crypto.randomUUID(),
+        clave: nuevaClave(),
         articuloId: asignado.articuloId,
         cantidad: 1,
-        talla: asignado.talla ?? "",
-        motivoReemplazo: "DESGASTE",
+        motivo: MOTIVOS_REEMPLAZO[0],
         detalleReemplazo: "",
         fotoEvidenciaUrl: null,
         entregaAnteriorItemId: asignado.entregaItemId,
       },
     ]);
-    setSeleccion("");
   }
 
   function actualizar(clave: string, cambios: Partial<ItemBorrador>) {
@@ -131,23 +164,16 @@ export default function FormularioSolicitud({
   function cambiarTipo(nuevo: "NUEVO" | "REEMPLAZO") {
     setTipo(nuevo);
     setItems([]); // los ítems de un tipo no sirven para el otro
-    setSeleccion("");
   }
 
   // Espeja la validación del servidor para no dejar enviar algo incompleto.
-  const incompleto = items.some((i) => {
-    const articulo = porId.get(i.articuloId);
-    if (articulo?.requiereTalla && !i.talla.trim()) return true;
-    if (tipo === "REEMPLAZO" && !i.motivoReemplazo) return true;
-    return false;
-  });
+  const incompleto = items.some((i) => !i.motivo);
 
   const payload = JSON.stringify(
     items.map((i) => ({
       articuloId: i.articuloId,
       cantidad: i.cantidad,
-      talla: i.talla.trim() || null,
-      motivoReemplazo: i.motivoReemplazo || null,
+      motivo: i.motivo || null,
       detalleReemplazo: i.detalleReemplazo.trim() || null,
       fotoEvidenciaUrl: i.fotoEvidenciaUrl,
       entregaAnteriorItemId: i.entregaAnteriorItemId,
@@ -196,46 +222,22 @@ export default function FormularioSolicitud({
       <section className="rounded-xl border border-borde bg-panel">
         <header className="border-b border-borde p-4">
           <h2 className="mb-3 text-sm font-medium text-tinta-suave">Ítems</h2>
-          <div className="flex flex-wrap gap-2">
-            <Seleccion
-              aria-label={
+          {(tipo === "NUEVO" || asignados.length > 0) && (
+            <BuscadorArticulo
+              opciones={tipo === "NUEVO" ? opcionesNuevo : opcionesReemplazo}
+              etiqueta={
                 tipo === "NUEVO"
                   ? "Artículo del catálogo"
                   : "Ítem que quieres reemplazar"
               }
-              value={seleccion}
-              onChange={(e) => setSeleccion(e.target.value)}
-              className="min-w-0 flex-1"
-            >
-              <option value="">
-                {tipo === "NUEVO"
-                  ? "Selecciona un artículo del catálogo…"
-                  : "Selecciona el ítem que quieres reemplazar…"}
-              </option>
-              {tipo === "NUEVO"
-                ? articulos.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.categoria === "EPP" ? "EPP" : "Equipo"} · {a.nombre} (
-                      {a.codigo})
-                    </option>
-                  ))
-                : disponiblesParaReemplazo.map((a) => (
-                    <option key={a.entregaItemId} value={a.entregaItemId}>
-                      {a.articuloNombre}
-                      {a.talla ? ` · talla ${a.talla}` : ""} · entregado{" "}
-                      {new Date(a.entregadoEn).toLocaleDateString("es-CL")}
-                    </option>
-                  ))}
-            </Seleccion>
-            <Boton
-              type="button"
-              variante="secundario"
-              onClick={tipo === "NUEVO" ? agregarNuevo : agregarReemplazo}
-              disabled={!seleccion}
-            >
-              Agregar
-            </Boton>
-          </div>
+              placeholder={
+                tipo === "NUEVO"
+                  ? "Busca por nombre o código y toca para agregar…"
+                  : "Busca el ítem que quieres reemplazar…"
+              }
+              onElegir={tipo === "NUEVO" ? agregarNuevo : agregarReemplazo}
+            />
+          )}
 
           {tipo === "REEMPLAZO" && asignados.length === 0 && (
             <p className="mt-3 rounded-lg bg-panel-suave px-3 py-2 text-sm text-tinta-suave">
@@ -288,49 +290,32 @@ export default function FormularioSolicitud({
                       />
                     </Campo>
 
-                    {articulo?.requiereTalla && (
-                      <Campo
-                        etiqueta="Talla"
-                        htmlFor={`talla-${item.clave}`}
-                        requerido
+                    <Campo
+                      etiqueta="Motivo"
+                      htmlFor={`motivo-${item.clave}`}
+                      requerido
+                    >
+                      <Seleccion
+                        id={`motivo-${item.clave}`}
+                        value={item.motivo}
+                        onChange={(e) =>
+                          actualizar(item.clave, { motivo: e.target.value })
+                        }
                       >
-                        <Entrada
-                          id={`talla-${item.clave}`}
-                          type="text"
-                          value={item.talla}
-                          onChange={(e) =>
-                            actualizar(item.clave, { talla: e.target.value })
-                          }
-                          placeholder="Ej: 42, M, L"
-                        />
-                      </Campo>
-                    )}
+                        {(tipo === "REEMPLAZO"
+                          ? MOTIVOS_REEMPLAZO
+                          : MOTIVOS_NUEVO
+                        ).map((m) => (
+                          <option key={m} value={m}>
+                            {ETIQUETA_MOTIVO[m]}
+                          </option>
+                        ))}
+                      </Seleccion>
+                    </Campo>
                   </div>
 
                   {tipo === "REEMPLAZO" && (
                     <div className="mt-3 space-y-3 border-t border-borde pt-3">
-                      <Campo
-                        etiqueta="Motivo del reemplazo"
-                        htmlFor={`motivo-${item.clave}`}
-                        requerido
-                      >
-                        <Seleccion
-                          id={`motivo-${item.clave}`}
-                          value={item.motivoReemplazo}
-                          onChange={(e) =>
-                            actualizar(item.clave, {
-                              motivoReemplazo: e.target.value,
-                            })
-                          }
-                        >
-                          {MOTIVOS.map((m) => (
-                            <option key={m} value={m}>
-                              {ETIQUETA_MOTIVO[m]}
-                            </option>
-                          ))}
-                        </Seleccion>
-                      </Campo>
-
                       <Campo
                         etiqueta="Detalle (opcional)"
                         htmlFor={`detalle-${item.clave}`}

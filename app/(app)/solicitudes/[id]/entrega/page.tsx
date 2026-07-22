@@ -66,7 +66,6 @@ export default async function PaginaEntrega({
           nombre: i.articulo.nombre,
           codigo: i.articulo.codigo,
           unidad: i.articulo.unidad,
-          talla: i.talla,
           cantidadPedida: i.cantidad,
         }))}
       />

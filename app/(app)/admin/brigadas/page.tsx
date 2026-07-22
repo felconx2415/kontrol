@@ -47,12 +47,13 @@ export default async function AdminBrigadas() {
       <Tabla
         encabezados={[
           "Brigada",
+          "Tipo",
           "Supervisor",
           "Miembros",
           "Solicitudes",
           { texto: "Acciones", alineado: "der" },
         ]}
-        anchoMinimo="44rem"
+        anchoMinimo="48rem"
       >
         {brigadas.map((b) => (
           <FilaBrigada
@@ -60,6 +61,7 @@ export default async function AdminBrigadas() {
             brigada={{
               id: b.id,
               nombre: b.nombre,
+              tipo: b.tipo,
               supervisorId: b.supervisorId,
               supervisorNombre: b.supervisor?.nombre ?? null,
               miembros: b._count.miembros,

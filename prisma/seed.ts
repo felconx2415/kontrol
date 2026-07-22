@@ -2,82 +2,40 @@ import { PrismaClient } from "../generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import bcrypt from "bcryptjs";
 
+/**
+ * Seed de arranque: deja el sistema listo para operar en limpio, sin datos de
+ * ejemplo. Solo crea una cuenta ADMIN para poder entrar y desde ahí dar de
+ * alta usuarios, brigadas y bodega reales.
+ *
+ * El catálogo de artículos NO se siembra aquí: se carga desde el codigario con
+ *   npm run db:import
+ *
+ * Credenciales configurables por entorno (con valores por defecto):
+ *   ADMIN_USERNAME (admin)  ADMIN_PASSWORD (kontrol123)  ADMIN_NOMBRE (Administrador)
+ */
 const db = new PrismaClient({
   adapter: new PrismaBetterSqlite3({
     url: process.env.DATABASE_URL ?? "file:./dev.db",
   }),
 });
 
-const ARTICULOS = [
-  { codigo: "EPP-001", nombre: "Casco de seguridad", categoria: "EPP", requiereTalla: false, vidaUtilDias: 1825 },
-  { codigo: "EPP-002", nombre: "Guantes de cuero", categoria: "EPP", requiereTalla: true, vidaUtilDias: 180 },
-  { codigo: "EPP-003", nombre: "Botas de seguridad", categoria: "EPP", requiereTalla: true, vidaUtilDias: 365 },
-  { codigo: "EPP-004", nombre: "Antiparras", categoria: "EPP", requiereTalla: false, vidaUtilDias: 730 },
-  { codigo: "EPP-005", nombre: "Protector auditivo", categoria: "EPP", requiereTalla: false, vidaUtilDias: 365 },
-  { codigo: "EPP-006", nombre: "Arnés de seguridad", categoria: "EPP", requiereTalla: true, vidaUtilDias: 1825 },
-  { codigo: "EPP-007", nombre: "Buzo ignífugo", categoria: "EPP", requiereTalla: true, vidaUtilDias: 730 },
-  { codigo: "EPP-008", nombre: "Mascarilla media cara", categoria: "EPP", requiereTalla: true, vidaUtilDias: 365 },
-  { codigo: "EPP-009", nombre: "Filtro para mascarilla", categoria: "EPP", requiereTalla: false, vidaUtilDias: 90 },
-  { codigo: "EPP-010", nombre: "Chaleco reflectante", categoria: "EPP", requiereTalla: true, vidaUtilDias: 365 },
-  { codigo: "EQ-001", nombre: "Radio portátil VHF", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-002", nombre: "Linterna frontal", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-003", nombre: "Motosierra", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-004", nombre: "Batefuego", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-005", nombre: "Mochila forestal 20L", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-006", nombre: "GPS de mano", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: null },
-  { codigo: "EQ-007", nombre: "Botiquín de primeros auxilios", categoria: "EQUIPAMIENTO", requiereTalla: false, vidaUtilDias: 365 },
-] as const;
-
 async function main() {
-  console.log("Sembrando datos de ejemplo…");
+  const username = (process.env.ADMIN_USERNAME ?? "admin").trim().toLowerCase();
+  const nombre = process.env.ADMIN_NOMBRE ?? "Administrador";
+  const password = process.env.ADMIN_PASSWORD ?? "kontrol123";
 
-  const pass = await bcrypt.hash("kontrol123", 10);
-
-  const brigadaNorte = await db.brigada.upsert({
-    where: { nombre: "Brigada Norte" },
-    create: { nombre: "Brigada Norte" },
-    update: {},
-  });
-  const brigadaSur = await db.brigada.upsert({
-    where: { nombre: "Brigada Sur" },
-    create: { nombre: "Brigada Sur" },
-    update: {},
+  await db.usuario.upsert({
+    where: { username },
+    create: { username, nombre, rol: "ADMIN", passwordHash: await bcrypt.hash(password, 10) },
+    // No pisa la contraseña si la cuenta ya existe: reseed no revierte cambios.
+    update: { nombre, rol: "ADMIN" },
   });
 
-  const usuarios = [
-    { username: "admin", nombre: "Administrador", rol: "ADMIN" as const, brigadaId: null },
-    { username: "gestor", nombre: "Camila Rojas", rol: "GESTOR" as const, brigadaId: null },
-    { username: "aprobador", nombre: "Luis Fuentes", rol: "APROBADOR" as const, brigadaId: brigadaNorte.id },
-    { username: "jperez", nombre: "Juan Pérez", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
-    { username: "msoto", nombre: "María Soto", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
-    { username: "pmunoz", nombre: "Pedro Muñoz", rol: "SOLICITANTE" as const, brigadaId: brigadaSur.id },
-  ];
-
-  for (const u of usuarios) {
-    await db.usuario.upsert({
-      where: { username: u.username },
-      create: { ...u, passwordHash: pass },
-      update: { nombre: u.nombre, rol: u.rol, brigadaId: u.brigadaId },
-    });
+  console.log(`Listo: cuenta ADMIN «${username}» disponible.`);
+  if (password === "kontrol123") {
+    console.log("Contraseña por defecto: kontrol123 — cámbiala tras el primer ingreso.");
   }
-
-  // El aprobador supervisa la Brigada Norte.
-  const aprobador = await db.usuario.findUniqueOrThrow({ where: { username: "aprobador" } });
-  await db.brigada.update({
-    where: { id: brigadaNorte.id },
-    data: { supervisorId: aprobador.id },
-  });
-
-  for (const a of ARTICULOS) {
-    await db.articulo.upsert({
-      where: { codigo: a.codigo },
-      create: a,
-      update: { nombre: a.nombre, vidaUtilDias: a.vidaUtilDias, requiereTalla: a.requiereTalla },
-    });
-  }
-
-  console.log(`Listo: ${usuarios.length} usuarios, 2 brigadas, ${ARTICULOS.length} artículos.`);
-  console.log("Contraseña para todas las cuentas: kontrol123");
+  console.log("Carga el catálogo con: npm run db:import");
 }
 
 main()

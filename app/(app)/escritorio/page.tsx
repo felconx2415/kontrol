@@ -164,9 +164,6 @@ export default async function Escritorio({
                     <tr key={c.id} className="hover:bg-panel-suave">
                       <td data-label="Artículo" className="px-4 py-2.5">
                         <span className="font-medium">{c.articulo}</span>
-                        {c.talla && (
-                          <span className="text-tinta-tenue"> · talla {c.talla}</span>
-                        )}
                       </td>
                       <td data-label="Asignado a" className="px-4 py-2.5">
                         <Link

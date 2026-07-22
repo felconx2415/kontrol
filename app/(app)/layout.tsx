@@ -27,6 +27,7 @@ export default async function LayoutApp({
 
   if (esGestion(usuario.rol)) {
     enlaces.push(
+      { href: "/bodega", texto: "Bodega", icono: "bodega" },
       { href: "/reportes", texto: "Reportes", icono: "reportes" },
       { href: "/admin/articulos", texto: "Catálogo", icono: "catalogo" },
     );

@@ -9,11 +9,13 @@ import {
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import { ETIQUETA_TIPO_BRIGADA } from "@/lib/solicitud-estado";
 import { etiquetaSupervisor, type SupervisorOpcion } from "./formulario-brigada";
 
 export type BrigadaFila = {
   id: string;
   nombre: string;
+  tipo: "EMPRESA" | "CONTRATISTA";
   supervisorId: string | null;
   supervisorNombre: string | null;
   miembros: number;
@@ -45,6 +47,9 @@ export default function FilaBrigada({
       <tr className="transition-colors duration-150 hover:bg-panel-suave">
         <td data-label="Brigada" className="px-4 py-2.5 font-medium">
           {brigada.nombre}
+        </td>
+        <td data-label="Tipo" className="px-4 py-2.5 text-tinta-suave">
+          {ETIQUETA_TIPO_BRIGADA[brigada.tipo]}
         </td>
         <td data-label="Supervisor" className="px-4 py-2.5 text-tinta-suave">
           {brigada.supervisorNombre ?? "—"}
@@ -82,7 +87,7 @@ export default function FilaBrigada({
 
       {panel && (
         <tr className="bg-panel-suave">
-          <td colSpan={5} className="celda-completa panel-expandible px-4 py-4">
+          <td colSpan={6} className="celda-completa panel-expandible px-4 py-4">
             {panel === "editar" && (
               <PanelEditar
                 brigada={brigada}
@@ -153,6 +158,13 @@ function PanelEditar({
           required
           defaultValue={brigada.nombre}
         />
+      </Campo>
+
+      <Campo etiqueta="Tipo" htmlFor={`tipo-${brigada.id}`}>
+        <Seleccion id={`tipo-${brigada.id}`} name="tipo" defaultValue={brigada.tipo}>
+          <option value="EMPRESA">Empresa</option>
+          <option value="CONTRATISTA">Contratista</option>
+        </Seleccion>
       </Campo>
 
       <Campo etiqueta="Supervisor" htmlFor={`supervisor-${brigada.id}`}>

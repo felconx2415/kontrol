@@ -1,10 +1,9 @@
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
-import { alternarArticulo } from "@/actions/admin";
-import Insignia from "@/components/ui/insignia";
-import { Celda, Fila, Tabla } from "@/components/ui/tabla";
+import { Tabla } from "@/components/ui/tabla";
 import FormularioArticulo from "./formulario-articulo";
+import FilaArticulo from "./fila-articulo";
 
 export const metadata = { title: "Catálogo · Kontrol" };
 
@@ -32,50 +31,26 @@ export default async function AdminArticulos() {
           "Código",
           "Nombre",
           "Categoría",
-          "Talla",
+          "CECO",
           "Vida útil",
           "Estado",
           { texto: "", alineado: "der" },
         ]}
       >
         {articulos.map((a) => (
-          <Fila key={a.id} atenuada={!a.activo}>
-            <Celda etiqueta="Código" mono tenue>
-              {a.codigo}
-            </Celda>
-            <Celda etiqueta="Nombre">{a.nombre}</Celda>
-            <Celda etiqueta="Categoría" tenue>
-              {a.categoria === "EPP" ? "EPP" : "Equipamiento"}
-            </Celda>
-            <Celda etiqueta="Talla" tenue>
-              {a.requiereTalla ? "Sí" : "No"}
-            </Celda>
-            <Celda etiqueta="Vida útil" mono tenue>
-              {a.vidaUtilDias ? `${a.vidaUtilDias} días` : "—"}
-            </Celda>
-            <Celda etiqueta="Estado">
-              <Insignia
-                clases={
-                  a.activo
-                    ? "bg-exito-fondo text-exito ring-exito-borde"
-                    : "bg-lienzo text-tinta-tenue ring-borde"
-                }
-              >
-                {a.activo ? "Activo" : "Inactivo"}
-              </Insignia>
-            </Celda>
-            <Celda derecha completa>
-              <form action={alternarArticulo}>
-                <input type="hidden" name="articuloId" value={a.id} />
-                <button
-                  type="submit"
-                  className="foco-anillo inline-flex min-h-11 cursor-pointer items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
-                >
-                  {a.activo ? "Desactivar" : "Activar"}
-                </button>
-              </form>
-            </Celda>
-          </Fila>
+          <FilaArticulo
+            key={a.id}
+            articulo={{
+              id: a.id,
+              codigo: a.codigo,
+              nombre: a.nombre,
+              categoria: a.categoria,
+              unidad: a.unidad,
+              ceco: a.ceco,
+              vidaUtilDias: a.vidaUtilDias,
+              activo: a.activo,
+            }}
+          />
         ))}
       </Tabla>
     </div>

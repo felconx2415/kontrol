@@ -1,6 +1,10 @@
 // Kontrol — gestión de solicitudes y entrega de equipamiento y EPP.
-// Nota: este sistema NO controla inventario. El stock vive en un almacén
-// externo; aquí solo se registra el ciclo de vida de cada solicitud.
+// El flujo de solicitudes NO controla inventario: ese stock vive en un almacén
+// externo y aquí solo se registra el ciclo de vida de cada solicitud.
+//
+// Aparte de ese flujo existe la Bodega local (ItemBodega / MovimientoBodega /
+// Prestamo): un inventario físico que SÍ se gestiona dentro de Kontrol, del que
+// se saca material en forma definitiva o se presta con devolución.
 
 generator client {
   provider = "prisma-client"
@@ -39,12 +43,39 @@ enum EstadoSolicitud {
   CANCELADA
 }
 
-enum MotivoReemplazo {
-  DESGASTE
-  DANO
-  PERDIDA
-  VENCIMIENTO
-  OTRO
+// Motivo de cada ítem solicitado. Alimenta la columna «Estado» del formato que
+// se envía al almacén. Se agrupa por tipo de solicitud (ver MOTIVOS_NUEVO y
+// MOTIVOS_REEMPLAZO en lib/solicitud-estado.ts).
+enum Motivo {
+  // Reemplazo (algo que ya se tenía)
+  DESGASTE // Desgaste por uso
+  EXTRAVIO // Extraviado (a)
+  HURTO_MOVIL // Hurto desde el móvil
+  PERDIDA_SINIESTRO // Pérdida por siniestro
+  ROBO_MOVIL // Robo de móvil
+  VENCIMIENTO_CERT // Vencida certificación
+  // Material nuevo
+  NUEVA_INCORPORACION // Nueva incorporación
+  PRIMERA_VEZ // Solicitado por primera vez
+  STOCK_FRONTEL // Stock Frontel
+}
+
+enum TipoBrigada {
+  EMPRESA
+  CONTRATISTA
+}
+
+enum TipoMovimiento {
+  ENTRADA // ingreso o reposición de stock
+  SALIDA // retiro definitivo (consumo)
+  PRESTAMO // salida temporal con devolución esperada
+  DEVOLUCION // reingreso de un préstamo
+  AJUSTE // corrección manual del stock a un valor absoluto
+}
+
+enum EstadoPrestamo {
+  ACTIVO
+  DEVUELTO
 }
 
 model Usuario {
@@ -71,12 +102,19 @@ model Usuario {
 
   auditorias Auditoria[]
 
+  // Bodega local
+  movimientosBodega    MovimientoBodega[]
+  prestamosRegistrados Prestamo[]
+
   @@index([rol])
 }
 
 model Brigada {
-  id           String  @id @default(cuid())
-  nombre       String  @unique
+  id           String      @id @default(cuid())
+  nombre       String      @unique
+  // Empresa o contratista: define en qué columna del formato de almacén va el
+  // nombre de la brigada (la otra queda en «-»).
+  tipo         TipoBrigada @default(EMPRESA)
   supervisorId String?
 
   supervisor  Usuario?    @relation("SupervisorBrigada", fields: [supervisorId], references: [id])
@@ -90,7 +128,8 @@ model Articulo {
   nombre        String
   categoria     Categoria
   unidad        String    @default("unidad")
-  requiereTalla Boolean   @default(false)
+  // Centro de costo (CECO) del codigario; opcional para ítems creados a mano.
+  ceco          String?
   // Días de vida útil del EPP; si es null el ítem no vence.
   vidaUtilDias  Int?
   activo        Boolean   @default(true)
@@ -146,9 +185,9 @@ model SolicitudItem {
   solicitudId String
   articuloId  String
   cantidad    Int     @default(1)
-  talla       String?
 
-  motivoReemplazo  MotivoReemplazo?
+  // Motivo del ítem (todas las solicitudes lo llevan; ver enum Motivo).
+  motivo           Motivo?
   detalleReemplazo String?
   fotoEvidenciaUrl String?
   // Trazabilidad: el EntregaItem que este ítem viene a reemplazar.
@@ -220,4 +259,81 @@ model Auditoria {
 model Contador {
   nombre String @id
   valor  Int    @default(0)
+}
+
+// ── Bodega local ──────────────────────────────────────────────────────────
+// Inventario físico gestionado dentro de Kontrol, independiente del catálogo
+// de solicitudes. `stock` es el número de unidades disponibles ahora mismo:
+// baja al sacar o prestar y sube al ingresar o al devolverse un préstamo.
+
+model ItemBodega {
+  id        String   @id @default(cuid())
+  codigo    String   @unique
+  nombre    String
+  categoria String   @default("General")
+  unidad    String   @default("unidad")
+  ubicacion String?
+  stock     Int      @default(0)
+  notas     String?
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now())
+
+  movimientos MovimientoBodega[]
+  prestamos   Prestamo[]
+
+  @@index([activo])
+}
+
+model MovimientoBodega {
+  id       String         @id @default(cuid())
+  itemId   String
+  tipo     TipoMovimiento
+  // Unidades del movimiento. Para AJUSTE guarda el nuevo stock absoluto; para
+  // el resto es siempre positivo y el signo lo determina `tipo`.
+  cantidad Int
+  // Stock del ítem tras aplicar el movimiento (foto para auditoría).
+  stockResultante Int
+  // A quién se entregó o prestó. Texto libre: puede no ser usuario del sistema.
+  persona    String?
+  notas      String?
+  // Quién registró el movimiento en Kontrol.
+  usuarioId  String
+  // Préstamo asociado, cuando el movimiento es PRESTAMO o DEVOLUCION.
+  prestamoId String?
+  creadoEn   DateTime @default(now())
+
+  item     ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  usuario  Usuario    @relation(fields: [usuarioId], references: [id])
+  prestamo Prestamo?  @relation(fields: [prestamoId], references: [id], onDelete: SetNull)
+
+  @@index([itemId])
+  @@index([creadoEn])
+}
+
+model Prestamo {
+  id            String         @id @default(cuid())
+  itemId        String
+  cantidad      Int
+  persona       String
+  estado        EstadoPrestamo @default(ACTIVO)
+  notas         String?
+  prestadoPorId String
+  prestadoEn    DateTime       @default(now())
+  devueltoEn    DateTime?
+
+  // Acta firmada: la firma de salida se toma al prestar y la de devolución al
+  // recibir de vuelta. Ambas son PNG guardados como archivo. Nullable para no
+  // romper préstamos previos al acta.
+  firmaSalidaUrl        String?
+  firmaDevolucionUrl    String?
+  observacionesDevolucion String?
+  // Fotos de daños al devolver, como arreglo JSON de rutas públicas.
+  fotosDevolucion       String?
+
+  item        ItemBodega         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  prestadoPor Usuario            @relation(fields: [prestadoPorId], references: [id])
+  movimientos MovimientoBodega[]
+
+  @@index([estado])
+  @@index([itemId])
 }

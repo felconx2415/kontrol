@@ -44,7 +44,6 @@ export type CambioProximo = {
   personaId: string;
   persona: string;
   brigada: string | null;
-  talla: string | null;
   venceEn: Date;
   dias: number;
   /** Si ya hay una solicitud de reemplazo en curso para este ítem. */
@@ -178,7 +177,6 @@ export async function proximosCambios(limite = 12): Promise<CambioProximo[]> {
     personaId: i.entrega.receptor.id,
     persona: i.entrega.receptor.nombre,
     brigada: i.entrega.receptor.brigada?.nombre ?? null,
-    talla: i.solicitudItem.talla,
     venceEn: i.venceEn!,
     dias: diasRestantes(i.venceEn!),
     reemplazoEnCurso: i.reemplazadoPor !== null,

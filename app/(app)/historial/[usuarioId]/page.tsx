@@ -92,11 +92,8 @@ export default async function Historial({
                       {item.solicitudItem.articulo.nombre}
                     </p>
                     <p className="text-xs text-tinta-tenue">
-                      {item.solicitudItem.articulo.codigo}
-                      {item.solicitudItem.talla
-                        ? ` · talla ${item.solicitudItem.talla}`
-                        : ""}{" "}
-                      · {item.cantidadEntregada}{" "}
+                      {item.solicitudItem.articulo.codigo} ·{" "}
+                      {item.cantidadEntregada}{" "}
                       {item.solicitudItem.articulo.unidad}
                       {item.cantidadEntregada === 1 ? "" : "s"} · entregado{" "}
                       {formatearFecha(item.entrega.entregadaEn)}
@@ -152,8 +149,8 @@ export default async function Historial({
                     >
                       {formatearFolio(item.reemplazadoPor.solicitud.folio)}
                     </Link>
-                    {item.reemplazadoPor.motivoReemplazo
-                      ? ` · motivo: ${ETIQUETA_MOTIVO[item.reemplazadoPor.motivoReemplazo]}`
+                    {item.reemplazadoPor.motivo
+                      ? ` · motivo: ${ETIQUETA_MOTIVO[item.reemplazadoPor.motivo]}`
                       : ""}
                   </p>
                 )}

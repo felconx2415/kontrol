@@ -186,60 +186,9 @@ body {
   animation: entrar-panel 150ms ease-out;
 }
 
-/* ---------------------------------------------------------------------------
-   Menú móvil (cajón lateral)
-
-   <dialog> nativo estilado como panel a la izquierda, a la altura completa. La
-   entrada y salida se animan con @starting-style + `allow-discrete`, así el
-   cierre también anima sin desmontar a mano. El fondo (::backdrop) atenúa el
-   contenido. Bajo `md` es la navegación principal.
---------------------------------------------------------------------------- */
-.menu-movil {
-  position: fixed;
-  inset: 0 auto 0 0;
-  height: 100dvh;
-  width: 18rem;
-  max-width: 85vw;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background-color: var(--color-marca-950);
-  color: #fff;
-  transform: translateX(-100%);
-  transition:
-    transform 300ms cubic-bezier(0.32, 0.72, 0, 1),
-    overlay 300ms allow-discrete,
-    display 300ms allow-discrete;
-}
-
-.menu-movil[open] {
-  transform: translateX(0);
-}
-
-@starting-style {
-  .menu-movil[open] {
-    transform: translateX(-100%);
-  }
-}
-
-.menu-movil::backdrop {
-  background-color: rgb(0 0 0 / 0.5);
-  opacity: 0;
-  transition:
-    opacity 300ms ease,
-    overlay 300ms allow-discrete,
-    display 300ms allow-discrete;
-}
-
-.menu-movil[open]::backdrop {
-  opacity: 1;
-}
-
-@starting-style {
-  .menu-movil[open]::backdrop {
-    opacity: 0;
-  }
-}
+/* El menú móvil (cajón lateral) se estila con clases utilitarias en
+   components/menu-movil.tsx: overlay controlado por estado con transiciones de
+   transform/opacity, para máxima compatibilidad en navegadores de teléfono. */
 
 /* El canvas de firma no debe hacer scroll de la página al arrastrar. */
 .canvas-firma {

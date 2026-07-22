@@ -68,6 +68,18 @@ export default async function DetalleSolicitud({
     solicitud.estado === "PENDIENTE" &&
     (usuario.rol === "APROBADOR" || esGestion(usuario.rol));
 
+  // Envío al almacén: solo gestión, desde que la solicitud está aprobada, y solo
+  // si tiene ítems del CECO que va a ese almacén.
+  const hayItemsAlmacen = solicitud.items.some(
+    (i) => i.articulo.ceco === "FD1400D082",
+  );
+  const puedeEnviarAlmacen =
+    esGestion(usuario.rol) &&
+    hayItemsAlmacen &&
+    ["APROBADA", "EN_GESTION", "RECIBIDA", "ENTREGADA"].includes(
+      solicitud.estado,
+    );
+
   // Ajustes hechos por quien aprueba. Se leen de la auditoría, que ya guarda
   // el detalle exacto de cada cambio.
   const registrosAjuste = await db.auditoria.findMany({
@@ -213,10 +225,8 @@ export default async function DetalleSolicitud({
               articuloCodigo: item.articulo.codigo,
               categoria: item.articulo.categoria,
               unidad: item.articulo.unidad,
-              requiereTalla: item.articulo.requiereTalla,
               cantidad: item.cantidad,
-              talla: item.talla,
-              motivoReemplazo: item.motivoReemplazo,
+              motivo: item.motivo,
               detalleReemplazo: item.detalleReemplazo,
               fotoEvidenciaUrl: item.fotoEvidenciaUrl,
               entregaAnteriorFecha: item.entregaAnterior
@@ -260,6 +270,22 @@ export default async function DetalleSolicitud({
         </div>
 
         <div className="space-y-6">
+          {puedeEnviarAlmacen && (
+            <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
+              <h2 className="titulo-seccion">Envío a almacén</h2>
+              <p className="text-sm text-tinta-suave">
+                Descarga los ítems del CECO FD1400D082 en el formato para enviar
+                al almacén.
+              </p>
+              <a
+                href={`/api/solicitudes/${solicitud.id}/almacen`}
+                className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+              >
+                Descargar formato almacén (Excel)
+              </a>
+            </section>
+          )}
+
           <Tarjeta>
             <h2 className="titulo-seccion mb-4">Seguimiento</h2>
             <TimelineSolicitud hitos={hitos} interrumpido={interrumpido} />

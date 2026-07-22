@@ -68,7 +68,6 @@ export async function GET(
       codigo: i.solicitudItem.articulo.codigo,
       cantidad: i.cantidadEntregada,
       unidad: i.solicitudItem.articulo.unidad,
-      talla: i.solicitudItem.talla,
       venceEn: i.venceEn,
     })),
     firmaPng: new Uint8Array(firmaPng),

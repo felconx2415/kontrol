@@ -12,7 +12,6 @@ type Item = {
   nombre: string;
   codigo: string;
   unidad: string;
-  talla: string | null;
   cantidadPedida: number;
 };
 
@@ -46,9 +45,7 @@ export default function FormularioEntrega({
               <div>
                 <p className="text-sm font-medium">{item.nombre}</p>
                 <p className="text-xs text-tinta-tenue">
-                  {item.codigo}
-                  {item.talla ? ` · talla ${item.talla}` : ""} · pedido:{" "}
-                  {item.cantidadPedida} {item.unidad}
+                  {item.codigo} · pedido: {item.cantidadPedida} {item.unidad}
                   {item.cantidadPedida === 1 ? "" : "s"}
                 </p>
               </div>

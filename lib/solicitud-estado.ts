@@ -1,4 +1,4 @@
-import type { EstadoSolicitud, Rol } from "@/generated/prisma/enums";
+import type { EstadoSolicitud, Motivo, Rol, TipoBrigada } from "@/generated/prisma/enums";
 
 /**
  * Única fuente de verdad del ciclo de vida de una solicitud.
@@ -91,12 +91,46 @@ export const COLOR_ESTADO: Record<EstadoSolicitud, string> = {
   CANCELADA: "bg-lienzo text-tinta-tenue ring-borde",
 };
 
-export const ETIQUETA_MOTIVO: Record<string, string> = {
+export const ETIQUETA_MOTIVO: Record<Motivo, string> = {
   DESGASTE: "Desgaste por uso",
-  DANO: "Daño",
-  PERDIDA: "Pérdida",
-  VENCIMIENTO: "Vencimiento",
-  OTRO: "Otro",
+  EXTRAVIO: "Extraviado (a)",
+  HURTO_MOVIL: "Hurto desde el móvil",
+  PERDIDA_SINIESTRO: "Pérdida por siniestro",
+  ROBO_MOVIL: "Robo de móvil",
+  VENCIMIENTO_CERT: "Vencida certificación",
+  NUEVA_INCORPORACION: "Nueva incorporación",
+  PRIMERA_VEZ: "Solicitado por primera vez",
+  STOCK_FRONTEL: "Stock Frontel",
+};
+
+/**
+ * Motivos disponibles según el tipo de solicitud. Un reemplazo justifica por
+ * qué se cambia algo que ya se tenía; una solicitud nueva, por qué se pide algo
+ * por primera vez. Se envía como columna «Estado» al almacén.
+ */
+export const MOTIVOS_REEMPLAZO: Motivo[] = [
+  "DESGASTE",
+  "EXTRAVIO",
+  "HURTO_MOVIL",
+  "PERDIDA_SINIESTRO",
+  "ROBO_MOVIL",
+  "VENCIMIENTO_CERT",
+];
+
+export const MOTIVOS_NUEVO: Motivo[] = [
+  "NUEVA_INCORPORACION",
+  "PRIMERA_VEZ",
+  "STOCK_FRONTEL",
+];
+
+/** Motivos válidos para un tipo de solicitud dado. */
+export function motivosDe(tipo: "NUEVO" | "REEMPLAZO"): Motivo[] {
+  return tipo === "REEMPLAZO" ? MOTIVOS_REEMPLAZO : MOTIVOS_NUEVO;
+}
+
+export const ETIQUETA_TIPO_BRIGADA: Record<TipoBrigada, string> = {
+  EMPRESA: "Empresa",
+  CONTRATISTA: "Contratista",
 };
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
