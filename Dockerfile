@@ -12,7 +12,8 @@ WORKDIR /app
 # Placeholders de build: el chequeo de SESSION_SECRET corre al importar módulos
 # durante `next build`, y Prisma quiere una URL. Los valores REALES se pasan en
 # tiempo de ejecución (docker compose), estos solo permiten construir.
-ENV NODE_ENV=production
+# NOTA: NO fijar NODE_ENV=production antes de `npm ci`, o npm omitiría las
+# devDependencies (tailwind, typescript, prisma CLI, tsx) que el build necesita.
 ENV DATABASE_URL="file:/data/kontrol.db"
 ENV SESSION_SECRET="build-time-placeholder-override-en-runtime-32c"
 ENV PORT=3000
@@ -25,6 +26,9 @@ RUN npm ci
 # Código y build de Next (incluye `prisma generate`).
 COPY . .
 RUN npx prisma generate && npm run build
+
+# A partir de aquí, el contenedor corre en modo producción.
+ENV NODE_ENV=production
 
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
