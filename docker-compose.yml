@@ -22,7 +22,7 @@ services:
       - kontrol_data:/data                       # base SQLite persistente
       - kontrol_uploads:/app/public/uploads      # firmas, fotos, actas
     networks:
-      - web
+      - felcast_default
     # Sin `ports:` → el contenedor no ocupa ningún puerto del host.
 
     # ── Variante: Caddy en el HOST ────────────────────────────────────────
@@ -34,11 +34,10 @@ services:
     # (y elimina la sección `networks:` de abajo)
 
 networks:
-  # Red externa de Caddy. Ajusta el `name` al de tu Caddy (ver DEPLOY.md para
-  # detectarlo). Si no existe, créala:  docker network create web
-  web:
+  # Red de los contenedores Caddy del servidor (felcast_caddy es el público).
+  felcast_default:
     external: true
-    name: web
+    name: felcast_default
 
 volumes:
   kontrol_data:

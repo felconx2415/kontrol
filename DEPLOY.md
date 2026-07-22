@@ -56,6 +56,13 @@ Pega ese valor en `SESSION_SECRET=` dentro de `.env`.
 
 Kontrol se une a la **misma red** que Caddy y no expone puertos.
 
+> **En el servidor `felserv`** el proxy público es el contenedor **`felcast_caddy`**
+> (dueño de 80/443, con HTTPS automático), en la red **`felcast_default`** — que
+> ya viene puesta en `docker-compose.yml`. Su Caddyfile está en el host en
+> `/home/ubuntu/felcast/Caddyfile`. El bloque de `epp.rmsgestion.cl` va ahí
+> (ver más abajo) y se recarga con:
+> `docker exec felcast_caddy caddy reload --config /etc/caddy/Caddyfile`
+
 1. Averigua el nombre de la red de Caddy (paso 0). Ponlo en `docker-compose.yml`,
    en la sección `networks:` (`name: <la-red-de-caddy>`). Si prefieres una red
    dedicada, créala y conéctale también Caddy:
