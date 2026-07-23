@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { BotonEnlace } from "@/components/ui/boton";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
 import { Seccion, Vacio } from "@/components/ui/superficie";
+import Paginacion from "@/components/ui/paginacion";
 import FormularioItem from "./formulario-item";
 import FormularioItemCatalogo from "./formulario-item-catalogo";
 import FormularioMovimiento, { type OpcionItem } from "./formulario-movimiento";
@@ -12,11 +13,19 @@ import FilaItemBodega from "./fila-item";
 
 export const metadata = { title: "Bodega · Kontrol" };
 
+const POR_PAGINA = 10;
+
 const fecha = (d: Date) =>
   d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
 
-export default async function PaginaBodega() {
+export default async function PaginaBodega({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requerirRol(...ROLES_GESTION);
+  const { page } = await searchParams;
+  const pagina = Math.max(1, Number(page) || 1);
 
   const [items, prestamos, articulos] = await Promise.all([
     db.itemBodega.findMany({
@@ -59,6 +68,10 @@ export default async function PaginaBodega() {
   // Resumen de cabecera.
   const totalUnidades = items.reduce((s, i) => s + i.stock, 0);
   const totalPrestado = prestamos.reduce((s, p) => s + p.cantidad, 0);
+
+  // Página del inventario (los demás bloques necesitan la lista completa).
+  const totalPaginasInv = Math.ceil(items.length / POR_PAGINA);
+  const itemsPagina = items.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   return (
     <div className="space-y-6">
@@ -190,7 +203,7 @@ export default async function PaginaBodega() {
             ]}
             anchoMinimo="52rem"
           >
-            {items.map((i) => (
+            {itemsPagina.map((i) => (
               <FilaItemBodega
                 key={i.id}
                 item={{
@@ -210,6 +223,12 @@ export default async function PaginaBodega() {
           </Tabla>
         )}
       </Seccion>
+
+      <Paginacion
+        paginaActual={pagina}
+        totalPaginas={totalPaginasInv}
+        href={(p) => `/bodega?page=${p}`}
+      />
     </div>
   );
 }

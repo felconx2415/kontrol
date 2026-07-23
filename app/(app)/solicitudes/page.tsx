@@ -9,9 +9,12 @@ import Boton, { BotonEnlace } from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Tarjeta, Vacio } from "@/components/ui/superficie";
 import { ListaPanel } from "@/components/ui/tabla";
+import Paginacion from "@/components/ui/paginacion";
 import type { EstadoSolicitud, Prisma } from "@/generated/prisma/client";
 
 export const metadata = { title: "Solicitudes · Kontrol" };
+
+const POR_PAGINA = 10;
 
 const ESTADOS: EstadoSolicitud[] = [
   "PENDIENTE",
@@ -26,10 +29,11 @@ const ESTADOS: EstadoSolicitud[] = [
 export default async function ListaSolicitudes({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; mias?: string; q?: string }>;
+  searchParams: Promise<{ estado?: string; mias?: string; q?: string; page?: string }>;
 }) {
   const usuario = await requerirUsuario();
-  const { estado, mias, q } = await searchParams;
+  const { estado, mias, q, page } = await searchParams;
+  const pagina = Math.max(1, Number(page) || 1);
 
   const where: Prisma.SolicitudWhereInput = {};
 
@@ -48,16 +52,31 @@ export default async function ListaSolicitudes({
     ];
   }
 
-  const solicitudes = await db.solicitud.findMany({
-    where,
-    orderBy: { creadaEn: "desc" },
-    take: 100,
-    include: {
-      solicitante: { select: { nombre: true } },
-      brigada: { select: { nombre: true } },
-      _count: { select: { items: true } },
-    },
-  });
+  const [total, solicitudes] = await Promise.all([
+    db.solicitud.count({ where }),
+    db.solicitud.findMany({
+      where,
+      orderBy: { creadaEn: "desc" },
+      skip: (pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
+      include: {
+        solicitante: { select: { nombre: true } },
+        brigada: { select: { nombre: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+  ]);
+  const totalPaginas = Math.ceil(total / POR_PAGINA);
+
+  // Preserva los filtros al cambiar de página.
+  const hrefPagina = (p: number) => {
+    const sp = new URLSearchParams();
+    if (estado) sp.set("estado", estado);
+    if (mias) sp.set("mias", mias);
+    if (q) sp.set("q", q);
+    sp.set("page", String(p));
+    return `/solicitudes?${sp.toString()}`;
+  };
 
   return (
     <div className="space-y-5">
@@ -153,6 +172,12 @@ export default async function ListaSolicitudes({
           ))}
         </ListaPanel>
       )}
+
+      <Paginacion
+        paginaActual={pagina}
+        totalPaginas={totalPaginas}
+        href={hrefPagina}
+      />
     </div>
   );
 }

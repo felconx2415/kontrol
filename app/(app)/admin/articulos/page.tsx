@@ -2,17 +2,33 @@ import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
 import { Tabla } from "@/components/ui/tabla";
+import Paginacion from "@/components/ui/paginacion";
 import FormularioArticulo from "./formulario-articulo";
 import FilaArticulo from "./fila-articulo";
 
 export const metadata = { title: "Catálogo · Kontrol" };
 
-export default async function AdminArticulos() {
+const POR_PAGINA = 10;
+
+export default async function AdminArticulos({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   await requerirRol(...ROLES_GESTION);
 
-  const articulos = await db.articulo.findMany({
-    orderBy: [{ activo: "desc" }, { categoria: "asc" }, { nombre: "asc" }],
-  });
+  const { page } = await searchParams;
+  const pagina = Math.max(1, Number(page) || 1);
+
+  const [total, articulos] = await Promise.all([
+    db.articulo.count(),
+    db.articulo.findMany({
+      orderBy: [{ activo: "desc" }, { categoria: "asc" }, { nombre: "asc" }],
+      skip: (pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
+    }),
+  ]);
+  const totalPaginas = Math.ceil(total / POR_PAGINA);
 
   return (
     <div className="space-y-6">
@@ -53,6 +69,12 @@ export default async function AdminArticulos() {
           />
         ))}
       </Tabla>
+
+      <Paginacion
+        paginaActual={pagina}
+        totalPaginas={totalPaginas}
+        href={(p) => `/admin/articulos?page=${p}`}
+      />
     </div>
   );
 }

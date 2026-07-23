@@ -7,8 +7,11 @@ import { cantidadConSigno, COLOR_MOVIMIENTO, ETIQUETA_MOVIMIENTO } from "@/lib/b
 import Insignia from "@/components/ui/insignia";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
 import { Seccion, Vacio } from "@/components/ui/superficie";
+import Paginacion from "@/components/ui/paginacion";
 
 export const metadata = { title: "Ítem de bodega · Kontrol" };
+
+const POR_PAGINA = 10;
 
 const fechaHora = (d: Date) =>
   d.toLocaleString("es-CL", {
@@ -24,11 +27,15 @@ const fecha = (d: Date) =>
 
 export default async function DetalleItem({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
   await requerirRol(...ROLES_GESTION);
   const { id } = await params;
+  const { page } = await searchParams;
+  const pagina = Math.max(1, Number(page) || 1);
 
   const item = await db.itemBodega.findUnique({
     where: { id },
@@ -56,6 +63,13 @@ export default async function DetalleItem({
   const prestado = item.prestamos
     .filter((p) => p.estado === "ACTIVO")
     .reduce((s, p) => s + p.cantidad, 0);
+
+  // Página del historial de movimientos.
+  const totalPaginasMov = Math.ceil(item.movimientos.length / POR_PAGINA);
+  const movimientosPagina = item.movimientos.slice(
+    (pagina - 1) * POR_PAGINA,
+    pagina * POR_PAGINA,
+  );
 
   const datos = [
     { t: "Código", v: item.codigo, mono: true },
@@ -172,7 +186,7 @@ export default async function DetalleItem({
             ]}
             anchoMinimo="52rem"
           >
-            {item.movimientos.map((m) => (
+            {movimientosPagina.map((m) => (
               <Fila key={m.id}>
                 <Celda etiqueta="Fecha" tenue>
                   {fechaHora(m.creadoEn)}
@@ -202,6 +216,12 @@ export default async function DetalleItem({
           </Tabla>
         )}
       </Seccion>
+
+      <Paginacion
+        paginaActual={pagina}
+        totalPaginas={totalPaginasMov}
+        href={(p) => `/bodega/${id}?page=${p}`}
+      />
     </div>
   );
 }
