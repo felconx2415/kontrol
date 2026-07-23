@@ -8,6 +8,7 @@ import { BotonEnlace } from "@/components/ui/boton";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
 import { Seccion, Vacio } from "@/components/ui/superficie";
 import FormularioItem from "./formulario-item";
+import FormularioItemCatalogo from "./formulario-item-catalogo";
 import FormularioMovimiento, { type OpcionItem } from "./formulario-movimiento";
 
 export const metadata = { title: "Bodega · Kontrol" };
@@ -18,7 +19,7 @@ const fecha = (d: Date) =>
 export default async function PaginaBodega() {
   await requerirRol(...ROLES_GESTION);
 
-  const [items, prestamos] = await Promise.all([
+  const [items, prestamos, articulos] = await Promise.all([
     db.itemBodega.findMany({
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
@@ -33,7 +34,18 @@ export default async function PaginaBodega() {
         prestadoPor: { select: { nombre: true } },
       },
     }),
+    db.articulo.findMany({
+      where: { activo: true },
+      orderBy: { nombre: "asc" },
+      select: { id: true, codigo: true, nombre: true, categoria: true },
+    }),
   ]);
+
+  // Del catálogo solo se ofrecen los que aún no están en la bodega (por código).
+  const codigosEnBodega = new Set(items.map((i) => i.codigo));
+  const articulosDisponibles = articulos.filter(
+    (a) => !codigosEnBodega.has(a.codigo),
+  );
 
   const opciones: OpcionItem[] = items
     .filter((i) => i.activo)
@@ -76,6 +88,10 @@ export default async function PaginaBodega() {
       </dl>
 
       <FormularioItem />
+
+      {articulosDisponibles.length > 0 && (
+        <FormularioItemCatalogo articulos={articulosDisponibles} />
+      )}
 
       {opciones.length > 0 ? (
         <>

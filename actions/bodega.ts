@@ -75,6 +75,76 @@ export async function crearItemBodega(
   return { ok: `«${nombre}» agregado a la bodega.` };
 }
 
+/**
+ * Agrega a la bodega un ítem tomado del catálogo de artículos: copia código,
+ * nombre, categoría y unidad del artículo, y solo pide stock inicial y
+ * ubicación. Así no hay que tipear todo a mano.
+ */
+export async function crearItemBodegaDesdeCatalogo(
+  _estado: EstadoBodega,
+  formData: FormData,
+): Promise<EstadoBodega> {
+  const usuario = await requerirRol(...ROLES_GESTION);
+
+  const articuloId = String(formData.get("articuloId") ?? "");
+  const ubicacion = String(formData.get("ubicacion") ?? "").trim() || null;
+  const stock = leerCantidad(String(formData.get("stock") ?? "0").trim() || "0", true);
+
+  if (!articuloId) return { error: "Elige un artículo del catálogo." };
+  if (stock === null) {
+    return { error: "El stock inicial debe ser un número entero de 0 o más." };
+  }
+
+  const articulo = await db.articulo.findUnique({ where: { id: articuloId } });
+  if (!articulo || !articulo.activo) {
+    return { error: "Ese artículo del catálogo ya no está disponible." };
+  }
+
+  // El código del artículo es la clave del ítem de bodega: si ya está, no se
+  // duplica.
+  const existente = await db.itemBodega.findUnique({
+    where: { codigo: articulo.codigo },
+  });
+  if (existente) {
+    return { error: `«${articulo.nombre}» (${articulo.codigo}) ya está en la bodega.` };
+  }
+
+  const item = await db.itemBodega.create({
+    data: {
+      codigo: articulo.codigo,
+      nombre: articulo.nombre,
+      categoria: articulo.categoria === "EPP" ? "EPP" : "Equipamiento",
+      unidad: articulo.unidad,
+      ubicacion,
+      stock,
+    },
+  });
+
+  if (stock > 0) {
+    await db.movimientoBodega.create({
+      data: {
+        itemId: item.id,
+        tipo: "ENTRADA",
+        cantidad: stock,
+        stockResultante: stock,
+        notas: "Stock inicial (desde catálogo)",
+        usuarioId: usuario.id,
+      },
+    });
+  }
+
+  await registrarAuditoria({
+    usuarioId: usuario.id,
+    entidad: "ItemBodega",
+    entidadId: item.id,
+    accion: "CREADO_DESDE_CATALOGO",
+    detalle: { codigo: articulo.codigo, nombre: articulo.nombre, stock, articuloId },
+  });
+
+  revalidatePath("/bodega");
+  return { ok: `«${articulo.nombre}» agregado a la bodega.` };
+}
+
 export async function registrarMovimiento(
   _estado: EstadoBodega,
   formData: FormData,

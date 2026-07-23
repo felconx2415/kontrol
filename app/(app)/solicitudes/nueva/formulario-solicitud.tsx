@@ -14,7 +14,7 @@ import { Aviso, Tarjeta } from "@/components/ui/superficie";
 import BuscadorArticulo, {
   normalizar,
   type OpcionBuscador,
-} from "./buscador-articulo";
+} from "@/components/buscador-articulo";
 
 type Articulo = {
   id: string;
