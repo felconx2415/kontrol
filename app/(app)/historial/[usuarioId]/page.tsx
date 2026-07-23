@@ -58,6 +58,16 @@ export default async function Historial({
   const vigentes = entregados.filter((i) => i.reemplazadoEn === null);
   const historicos = entregados.filter((i) => i.reemplazadoEn !== null);
 
+  // Equipamiento entregado desde la Bodega local (asignaciones definitivas).
+  const asignacionesBodega = await db.asignacionBodega.findMany({
+    where: { usuarioId },
+    orderBy: { asignadoEn: "desc" },
+    include: {
+      item: { select: { nombre: true, codigo: true, unidad: true } },
+      asignadoPor: { select: { nombre: true } },
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -115,6 +125,33 @@ export default async function Historial({
           </ListaPanel>
         )}
       </section>
+
+      {asignacionesBodega.length > 0 && (
+        <section>
+          <h2 className="titulo-seccion mb-2">Equipamiento de bodega</h2>
+          <ListaPanel>
+            {asignacionesBodega.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+              >
+                <div>
+                  <p className="text-sm font-medium">{a.item.nombre}</p>
+                  <p className="text-xs text-tinta-tenue">
+                    {a.item.codigo} · {a.cantidad} {a.item.unidad}
+                    {a.cantidad === 1 ? "" : "s"} · asignado{" "}
+                    {formatearFecha(a.asignadoEn)} por {a.asignadoPor.nombre}
+                    {a.notas ? ` · ${a.notas}` : ""}
+                  </p>
+                </div>
+                <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
+                  Bodega
+                </Insignia>
+              </li>
+            ))}
+          </ListaPanel>
+        </section>
+      )}
 
       {historicos.length > 0 && (
         <section>

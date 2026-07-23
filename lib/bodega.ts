@@ -12,6 +12,7 @@ export const ETIQUETA_MOVIMIENTO: Record<TipoMovimiento, string> = {
   PRESTAMO: "Préstamo",
   DEVOLUCION: "Devolución",
   AJUSTE: "Ajuste",
+  ASIGNACION: "Asignación",
 };
 
 /** Color de la píldora por tipo de movimiento (clases ya resueltas). */
@@ -21,6 +22,7 @@ export const COLOR_MOVIMIENTO: Record<TipoMovimiento, string> = {
   PRESTAMO: "bg-espera-fondo text-espera ring-espera-borde",
   DEVOLUCION: "bg-marca-50 text-marca-700 ring-marca-200",
   AJUSTE: "bg-lienzo text-tinta-suave ring-borde",
+  ASIGNACION: "bg-fallo-fondo text-fallo ring-fallo-borde",
 };
 
 /**
@@ -34,6 +36,7 @@ export function cantidadConSigno(tipo: TipoMovimiento, cantidad: number): string
       return `+${cantidad}`;
     case "SALIDA":
     case "PRESTAMO":
+    case "ASIGNACION":
       return `−${cantidad}`;
     case "AJUSTE":
       return `= ${cantidad}`;

@@ -71,6 +71,7 @@ enum TipoMovimiento {
   PRESTAMO // salida temporal con devolución esperada
   DEVOLUCION // reingreso de un préstamo
   AJUSTE // corrección manual del stock a un valor absoluto
+  ASIGNACION // entrega definitiva a un usuario del sistema
 }
 
 enum EstadoPrestamo {
@@ -103,8 +104,10 @@ model Usuario {
   auditorias Auditoria[]
 
   // Bodega local
-  movimientosBodega    MovimientoBodega[]
-  prestamosRegistrados Prestamo[]
+  movimientosBodega        MovimientoBodega[]
+  prestamosRegistrados     Prestamo[]
+  equipamientoBodega       AsignacionBodega[] @relation("EquipamientoAsignado")
+  asignacionesBodegaHechas AsignacionBodega[] @relation("AsignacionesHechas")
 
   @@index([rol])
 }
@@ -282,8 +285,9 @@ model ItemBodega {
   activo    Boolean  @default(true)
   creadoEn  DateTime @default(now())
 
-  movimientos MovimientoBodega[]
-  prestamos   Prestamo[]
+  movimientos  MovimientoBodega[]
+  prestamos    Prestamo[]
+  asignaciones AsignacionBodega[]
 
   @@index([activo])
 }
@@ -339,5 +343,26 @@ model Prestamo {
   movimientos MovimientoBodega[]
 
   @@index([estado])
+  @@index([itemId])
+}
+
+/**
+ * Entrega definitiva de equipamiento de bodega a un usuario del sistema: baja
+ * el stock y queda a nombre del usuario (aparece en su «Mi equipamiento»).
+ */
+model AsignacionBodega {
+  id            String   @id @default(cuid())
+  itemId        String
+  usuarioId     String
+  cantidad      Int
+  notas         String?
+  asignadoPorId String
+  asignadoEn    DateTime @default(now())
+
+  item        ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  usuario     Usuario    @relation("EquipamientoAsignado", fields: [usuarioId], references: [id])
+  asignadoPor Usuario    @relation("AsignacionesHechas", fields: [asignadoPorId], references: [id])
+
+  @@index([usuarioId])
   @@index([itemId])
 }

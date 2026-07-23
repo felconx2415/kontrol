@@ -95,13 +95,20 @@ export default async function PaginaBodega() {
       {opciones.length > 0 ? (
         <>
           <FormularioMovimiento items={opciones} />
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-borde bg-panel p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-borde bg-panel p-4">
             <p className="text-sm text-tinta-suave">
-              Prestar un ítem genera un acta firmada de salida y de devolución.
+              <strong className="font-medium text-tinta">Prestar</strong> genera acta
+              firmada y se devuelve. <strong className="font-medium text-tinta">Asignar</strong>{" "}
+              es entrega definitiva a un usuario.
             </p>
-            <BotonEnlace href="/bodega/prestar" variante="secundario" tamano="sm">
-              Prestar ítem
-            </BotonEnlace>
+            <div className="flex gap-2">
+              <BotonEnlace href="/bodega/asignar" variante="secundario" tamano="sm">
+                Asignar
+              </BotonEnlace>
+              <BotonEnlace href="/bodega/prestar" variante="secundario" tamano="sm">
+                Prestar
+              </BotonEnlace>
+            </div>
           </div>
         </>
       ) : (

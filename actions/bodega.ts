@@ -233,6 +233,7 @@ export async function registrarMovimiento(
     PRESTAMO: `Prestadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${persona}.`,
     DEVOLUCION: `Devueltas ${cantidad} ${item.unidad}(s) de «${item.nombre}».`,
     AJUSTE: `Stock de «${item.nombre}» ajustado a ${stockResultante} ${item.unidad}(s).`,
+    ASIGNACION: `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}».`,
   };
   return { ok: mensajes[tipo] };
 }
@@ -396,6 +397,85 @@ export async function devolverPrestamo(
   await dejarAviso(`Devolución de «${prestamo.item.nombre}» registrada con firma.`);
   revalidatePath("/bodega");
   revalidatePath(`/bodega/${prestamo.itemId}`);
+  redirect("/bodega");
+}
+
+/**
+ * Asigna equipamiento de bodega a un usuario del sistema como entrega
+ * definitiva: descuenta el stock y deja el registro a nombre del usuario (que
+ * lo verá en «Mi equipamiento»). No vuelve a la bodega.
+ */
+export async function asignarItemBodega(
+  _estado: EstadoBodega,
+  formData: FormData,
+): Promise<EstadoBodega> {
+  const usuarioActual = await requerirRol(...ROLES_GESTION);
+
+  const itemId = String(formData.get("itemId") ?? "");
+  const usuarioId = String(formData.get("usuarioId") ?? "");
+  const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
+  const notas = String(formData.get("notas") ?? "").trim() || null;
+
+  if (cantidad === null) {
+    return { error: "La cantidad debe ser un número entero mayor que 0." };
+  }
+
+  const [item, usuario] = await Promise.all([
+    db.itemBodega.findUnique({ where: { id: itemId } }),
+    db.usuario.findUnique({ where: { id: usuarioId } }),
+  ]);
+
+  if (!item) return { error: "Ese ítem ya no existe en la bodega." };
+  if (!item.activo) return { error: "Ese ítem está inactivo. Actívalo antes de asignarlo." };
+  if (!usuario || !usuario.activo) return { error: "Elige un usuario válido." };
+  if (cantidad > item.stock) {
+    return {
+      error: `No hay stock suficiente: quedan ${item.stock} ${item.unidad}(s) de «${item.nombre}».`,
+    };
+  }
+
+  const stockResultante = item.stock - cantidad;
+
+  await db.$transaction(async (tx) => {
+    await tx.itemBodega.update({
+      where: { id: item.id },
+      data: { stock: stockResultante },
+    });
+    await tx.asignacionBodega.create({
+      data: {
+        itemId: item.id,
+        usuarioId: usuario.id,
+        cantidad,
+        notas,
+        asignadoPorId: usuarioActual.id,
+      },
+    });
+    await tx.movimientoBodega.create({
+      data: {
+        itemId: item.id,
+        tipo: "ASIGNACION",
+        cantidad,
+        stockResultante,
+        persona: usuario.nombre,
+        notas,
+        usuarioId: usuarioActual.id,
+      },
+    });
+  });
+
+  await registrarAuditoria({
+    usuarioId: usuarioActual.id,
+    entidad: "ItemBodega",
+    entidadId: item.id,
+    accion: "MOV_ASIGNACION",
+    detalle: { cantidad, usuarioId: usuario.id, usuario: usuario.nombre, stockResultante },
+  });
+
+  await dejarAviso(
+    `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${usuario.nombre}.`,
+  );
+  revalidatePath("/bodega");
+  revalidatePath(`/bodega/${item.id}`);
   redirect("/bodega");
 }
 
