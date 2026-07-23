@@ -226,6 +226,7 @@ export default async function DetalleSolicitud({
               categoria: item.articulo.categoria,
               unidad: item.articulo.unidad,
               cantidad: item.cantidad,
+              cantidadRecibida: item.cantidadRecibida,
               motivo: item.motivo,
               detalleReemplazo: item.detalleReemplazo,
               fotoEvidenciaUrl: item.fotoEvidenciaUrl,
@@ -296,6 +297,13 @@ export default async function DetalleSolicitud({
               solicitudId={solicitud.id}
               acciones={acciones.map((a) => ({ hacia: a.hacia, texto: a.accion }))}
               puedeEntregar={solicitud.estado === "RECIBIDA" && esGestion(usuario.rol)}
+              items={solicitud.items.map((item) => ({
+                id: item.id,
+                nombre: item.articulo.nombre,
+                codigo: item.articulo.codigo,
+                unidad: item.articulo.unidad,
+                cantidad: item.cantidad,
+              }))}
             />
           )}
         </div>

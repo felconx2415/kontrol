@@ -311,6 +311,122 @@ export async function cambiarEstado(
   return {};
 }
 
+export type ItemRecepcion = {
+  itemId: string;
+  cantidadRecibida: number;
+};
+
+/**
+ * Marca una solicitud como recibida registrando, por ítem, cuánto llegó
+ * realmente del almacén. A veces no llega todo, así que cada ítem puede
+ * recibirse por una cantidad menor a la pedida (nunca mayor, ni negativa).
+ * Lo recibido pasa a ser el tope de lo que luego se puede entregar.
+ */
+export async function marcarRecibida(
+  solicitudId: string,
+  recepcion: ItemRecepcion[],
+): Promise<{ error?: string }> {
+  const usuario = await requerirUsuario();
+
+  const solicitud = await db.solicitud.findUnique({
+    where: { id: solicitudId },
+    include: { items: { include: { articulo: true } } },
+  });
+  if (!solicitud) return { error: "La solicitud no existe." };
+
+  if (!puedeTransicionar(solicitud.estado, "RECIBIDA", usuario.rol)) {
+    return { error: "No puedes marcar como recibida esta solicitud." };
+  }
+
+  const porId = new Map(solicitud.items.map((i) => [i.id, i]));
+  const recibidoPorItem = new Map<string, number>();
+
+  for (const r of recepcion) {
+    const item = porId.get(r.itemId);
+    if (!item) return { error: "Uno de los ítems ya no pertenece a esta solicitud." };
+    if (
+      !Number.isInteger(r.cantidadRecibida) ||
+      r.cantidadRecibida < 0 ||
+      r.cantidadRecibida > item.cantidad
+    ) {
+      return {
+        error: `Cantidad recibida inválida para ${item.articulo.nombre} (entre 0 y ${item.cantidad}).`,
+      };
+    }
+    recibidoPorItem.set(r.itemId, r.cantidadRecibida);
+  }
+
+  // Todo ítem debe traer su cantidad recibida: lo que no viene se asume pedido.
+  for (const item of solicitud.items) {
+    if (!recibidoPorItem.has(item.id)) recibidoPorItem.set(item.id, item.cantidad);
+  }
+
+  if ([...recibidoPorItem.values()].every((c) => c === 0)) {
+    return { error: "No se recibió ningún ítem. Si no llegó nada, cancela o deja pendiente el pedido." };
+  }
+
+  // Detalle legible: solo los ítems donde lo recibido no coincide con lo pedido.
+  const detalle: string[] = [];
+  for (const item of solicitud.items) {
+    const recibido = recibidoPorItem.get(item.id)!;
+    if (recibido !== item.cantidad) {
+      detalle.push(`${item.articulo.nombre}: pedido ${item.cantidad}, recibido ${recibido}`);
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    for (const item of solicitud.items) {
+      await tx.solicitudItem.update({
+        where: { id: item.id },
+        data: { cantidadRecibida: recibidoPorItem.get(item.id) },
+      });
+    }
+    await tx.solicitud.update({
+      where: { id: solicitudId },
+      data: { estado: "RECIBIDA", gestorId: usuario.id, recibidaEn: new Date() },
+    });
+  });
+
+  await registrarAuditoria({
+    usuarioId: usuario.id,
+    entidad: "Solicitud",
+    entidadId: solicitudId,
+    accion: "RECIBIDA",
+    detalle: detalle.length > 0 ? detalle : { completo: true },
+  });
+
+  await dejarAviso(
+    detalle.length > 0
+      ? "Marcada como recibida (recepción parcial registrada)."
+      : "Marcada como recibida en bodega.",
+  );
+
+  revalidatePath(`/solicitudes/${solicitudId}`);
+  revalidatePath("/solicitudes");
+  revalidatePath("/escritorio");
+  return {};
+}
+
+/** Wrapper de marcarRecibida para un <form action> con cantidades por ítem. */
+export async function accionMarcarRecibida(formData: FormData) {
+  const solicitudId = String(formData.get("solicitudId") ?? "");
+
+  let recepcion: ItemRecepcion[];
+  try {
+    recepcion = JSON.parse(String(formData.get("recepcion") ?? "[]"));
+  } catch {
+    redirect(
+      `/solicitudes/${solicitudId}?error=${encodeURIComponent("No se pudo leer la recepción.")}`,
+    );
+  }
+
+  const resultado = await marcarRecibida(solicitudId, recepcion!);
+  if (resultado.error) {
+    redirect(`/solicitudes/${solicitudId}?error=${encodeURIComponent(resultado.error)}`);
+  }
+  redirect(`/solicitudes/${solicitudId}`);
+}
+
 /** Wrapper para usar cambiarEstado directamente desde un <form action>. */
 export async function accionCambiarEstado(formData: FormData) {
   const solicitudId = String(formData.get("solicitudId") ?? "");

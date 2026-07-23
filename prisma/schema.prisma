@@ -185,6 +185,10 @@ model SolicitudItem {
   solicitudId String
   articuloId  String
   cantidad    Int     @default(1)
+  // Cantidad realmente recibida del almacén al marcar la solicitud como
+  // recibida. Puede ser menor a la pedida (a veces no llega todo). Null
+  // mientras no se ha recibido; al marcar recibida se fija por ítem.
+  cantidadRecibida Int?
 
   // Motivo del ítem (todas las solicitudes lo llevan; ver enum Motivo).
   motivo           Motivo?

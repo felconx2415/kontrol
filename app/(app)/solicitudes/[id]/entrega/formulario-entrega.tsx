@@ -13,6 +13,7 @@ type Item = {
   codigo: string;
   unidad: string;
   cantidadPedida: number;
+  cantidadRecibida: number;
 };
 
 export default function FormularioEntrega({
@@ -47,6 +48,12 @@ export default function FormularioEntrega({
                 <p className="text-xs text-tinta-tenue">
                   {item.codigo} · pedido: {item.cantidadPedida} {item.unidad}
                   {item.cantidadPedida === 1 ? "" : "s"}
+                  {item.cantidadRecibida !== item.cantidadPedida && (
+                    <span className="text-espera">
+                      {" "}
+                      · recibido: {item.cantidadRecibida}
+                    </span>
+                  )}
                 </p>
               </div>
               <label className="flex items-center gap-2">
@@ -55,8 +62,8 @@ export default function FormularioEntrega({
                   type="number"
                   name={`cantidad_${item.id}`}
                   min={0}
-                  max={item.cantidadPedida}
-                  defaultValue={item.cantidadPedida}
+                  max={item.cantidadRecibida}
+                  defaultValue={item.cantidadRecibida}
                   className="w-20 tabular-nums"
                 />
               </label>

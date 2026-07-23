@@ -40,14 +40,16 @@ export async function registrarEntrega(
     };
   }
 
-  // Cantidades realmente entregadas, que pueden ser menores a lo pedido.
+  // Cantidades realmente entregadas. El tope es lo recibido del almacén (que
+  // puede ser menor a lo pedido); si no se registró recepción, se cae a lo pedido.
   const cantidades = new Map<string, number>();
   for (const item of solicitud.items) {
+    const tope = item.cantidadRecibida ?? item.cantidad;
     const bruto = formData.get(`cantidad_${item.id}`);
-    const cantidad = Number(bruto ?? item.cantidad);
-    if (!Number.isInteger(cantidad) || cantidad < 0 || cantidad > item.cantidad) {
+    const cantidad = Number(bruto ?? tope);
+    if (!Number.isInteger(cantidad) || cantidad < 0 || cantidad > tope) {
       return {
-        error: `Cantidad inválida para ${item.articulo.nombre} (máximo ${item.cantidad}).`,
+        error: `Cantidad inválida para ${item.articulo.nombre} (máximo ${tope}).`,
       };
     }
     cantidades.set(item.id, cantidad);

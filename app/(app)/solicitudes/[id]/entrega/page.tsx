@@ -67,6 +67,9 @@ export default async function PaginaEntrega({
           codigo: i.articulo.codigo,
           unidad: i.articulo.unidad,
           cantidadPedida: i.cantidad,
+          // Tope de la entrega: lo que realmente llegó del almacén. Si nunca se
+          // registró recepción por ítem, se cae a lo pedido.
+          cantidadRecibida: i.cantidadRecibida ?? i.cantidad,
         }))}
       />
     </div>

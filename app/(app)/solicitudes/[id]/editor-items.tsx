@@ -15,6 +15,7 @@ export type ItemEditable = {
   categoria: string;
   unidad: string;
   cantidad: number;
+  cantidadRecibida: number | null;
   motivo: string | null;
   detalleReemplazo: string | null;
   fotoEvidenciaUrl: string | null;
@@ -100,10 +101,18 @@ export default function EditorItems({
                     {item.categoria === "EPP" ? "EPP" : "Equipamiento"}
                   </p>
                 </div>
-                <p className="text-sm tabular-nums text-tinta-suave">
-                  {item.cantidad} {item.unidad}
-                  {item.cantidad === 1 ? "" : "s"}
-                </p>
+                <div className="text-right">
+                  <p className="text-sm tabular-nums text-tinta-suave">
+                    {item.cantidad} {item.unidad}
+                    {item.cantidad === 1 ? "" : "s"}
+                  </p>
+                  {item.cantidadRecibida !== null &&
+                    item.cantidadRecibida !== item.cantidad && (
+                      <p className="text-xs tabular-nums text-espera">
+                        recibido: {item.cantidadRecibida}
+                      </p>
+                    )}
+                </div>
               </div>
 
               {item.motivo && (
