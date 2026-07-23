@@ -156,6 +156,12 @@ export default async function PaginaBodega({
             sácalo, préstalo o asígnalo. Cada movimiento queda registrado.
           </p>
         </div>
+        <a
+          href="/api/bodega/pdf"
+          className="foco-anillo inline-flex min-h-11 items-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+        >
+          Exportar PDF
+        </a>
       </div>
 
       <BarraAcciones
