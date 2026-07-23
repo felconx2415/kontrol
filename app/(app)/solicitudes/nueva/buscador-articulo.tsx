@@ -137,7 +137,9 @@ export default function BuscadorArticulo({
                       i === activo ? "bg-marca-50 text-marca-800" : "text-tinta hover:bg-panel-suave"
                     }`}
                   >
-                    <span className="min-w-0 flex-1 truncate">{o.principal}</span>
+                    <span className="min-w-0 flex-1 whitespace-normal break-words">
+                      {o.principal}
+                    </span>
                     {o.secundario && (
                       <span className="shrink-0 font-mono text-xs text-tinta-tenue">
                         {o.secundario}

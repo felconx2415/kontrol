@@ -99,7 +99,7 @@ export default function FormularioSolicitud({
     () =>
       articulos.map((a) => ({
         id: a.id,
-        principal: `${a.categoria === "EPP" ? "EPP" : "Equipo"} · ${a.nombre}`,
+        principal: a.nombre,
         secundario: a.codigo,
         buscable: normalizar(`${a.nombre} ${a.codigo}`),
       })),
