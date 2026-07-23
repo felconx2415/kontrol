@@ -399,6 +399,63 @@ export async function devolverPrestamo(
   redirect("/bodega");
 }
 
+/**
+ * Edita los datos de un ítem de bodega (no el stock: eso cambia por
+ * movimientos). El código sigue siendo único.
+ */
+export async function editarItemBodega(
+  _estado: EstadoBodega,
+  formData: FormData,
+): Promise<EstadoBodega> {
+  const usuario = await requerirRol(...ROLES_GESTION);
+  const id = String(formData.get("itemId") ?? "");
+
+  const item = await db.itemBodega.findUnique({ where: { id } });
+  if (!item) return { error: "Ese ítem ya no existe en la bodega." };
+
+  const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const categoria = String(formData.get("categoria") ?? "").trim() || "General";
+  const unidad = String(formData.get("unidad") ?? "unidad").trim() || "unidad";
+  const ubicacion = String(formData.get("ubicacion") ?? "").trim() || null;
+  const notas = String(formData.get("notas") ?? "").trim() || null;
+
+  if (!codigo) return { error: "Indica el código del ítem." };
+  if (!nombre) return { error: "Indica el nombre del ítem." };
+
+  if (codigo !== item.codigo) {
+    const existente = await db.itemBodega.findUnique({ where: { codigo } });
+    if (existente) return { error: "Ese código ya existe en la bodega." };
+  }
+
+  const cambios: Record<string, [unknown, unknown]> = {};
+  if (item.codigo !== codigo) cambios.codigo = [item.codigo, codigo];
+  if (item.nombre !== nombre) cambios.nombre = [item.nombre, nombre];
+  if (item.categoria !== categoria) cambios.categoria = [item.categoria, categoria];
+  if (item.unidad !== unidad) cambios.unidad = [item.unidad, unidad];
+  if (item.ubicacion !== ubicacion) cambios.ubicacion = [item.ubicacion, ubicacion];
+  if (item.notas !== notas) cambios.notas = [item.notas, notas];
+
+  if (Object.keys(cambios).length === 0) return { ok: "Sin cambios que guardar." };
+
+  await db.itemBodega.update({
+    where: { id },
+    data: { codigo, nombre, categoria, unidad, ubicacion, notas },
+  });
+
+  await registrarAuditoria({
+    usuarioId: usuario.id,
+    entidad: "ItemBodega",
+    entidadId: id,
+    accion: "EDITADO",
+    detalle: cambios,
+  });
+
+  revalidatePath("/bodega");
+  revalidatePath(`/bodega/${id}`);
+  return { ok: `«${nombre}» actualizado.` };
+}
+
 export async function alternarItemBodega(formData: FormData) {
   const usuario = await requerirRol(...ROLES_GESTION);
   const id = String(formData.get("itemId") ?? "");

@@ -2,14 +2,13 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
-import { alternarItemBodega } from "@/actions/bodega";
-import Insignia from "@/components/ui/insignia";
 import { BotonEnlace } from "@/components/ui/boton";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
 import { Seccion, Vacio } from "@/components/ui/superficie";
 import FormularioItem from "./formulario-item";
 import FormularioItemCatalogo from "./formulario-item-catalogo";
 import FormularioMovimiento, { type OpcionItem } from "./formulario-movimiento";
+import FilaItemBodega from "./fila-item";
 
 export const metadata = { title: "Bodega · Kontrol" };
 
@@ -184,60 +183,23 @@ export default async function PaginaBodega() {
             ]}
             anchoMinimo="52rem"
           >
-            {items.map((i) => {
-              const prestado = i.prestamos.reduce((s, p) => s + p.cantidad, 0);
-              return (
-                <Fila key={i.id} atenuada={!i.activo}>
-                  <Celda etiqueta="Código" mono tenue>
-                    {i.codigo}
-                  </Celda>
-                  <Celda etiqueta="Nombre">
-                    <Link
-                      href={`/bodega/${i.id}`}
-                      className="foco-anillo rounded font-medium text-tinta underline-offset-2 hover:underline"
-                    >
-                      {i.nombre}
-                    </Link>
-                  </Celda>
-                  <Celda etiqueta="Categoría" tenue>
-                    {i.categoria}
-                  </Celda>
-                  <Celda etiqueta="Ubicación" tenue>
-                    {i.ubicacion ?? "—"}
-                  </Celda>
-                  <Celda etiqueta="Stock" derecha mono>
-                    <span className={i.stock === 0 ? "text-fallo" : "text-tinta"}>
-                      {i.stock} {i.unidad}
-                    </span>
-                  </Celda>
-                  <Celda etiqueta="Prestado" derecha mono tenue>
-                    {prestado > 0 ? prestado : "—"}
-                  </Celda>
-                  <Celda etiqueta="Estado">
-                    <Insignia
-                      clases={
-                        i.activo
-                          ? "bg-exito-fondo text-exito ring-exito-borde"
-                          : "bg-lienzo text-tinta-tenue ring-borde"
-                      }
-                    >
-                      {i.activo ? "Activo" : "Inactivo"}
-                    </Insignia>
-                  </Celda>
-                  <Celda derecha completa>
-                    <form action={alternarItemBodega}>
-                      <input type="hidden" name="itemId" value={i.id} />
-                      <button
-                        type="submit"
-                        className="foco-anillo inline-flex min-h-11 cursor-pointer items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
-                      >
-                        {i.activo ? "Desactivar" : "Activar"}
-                      </button>
-                    </form>
-                  </Celda>
-                </Fila>
-              );
-            })}
+            {items.map((i) => (
+              <FilaItemBodega
+                key={i.id}
+                item={{
+                  id: i.id,
+                  codigo: i.codigo,
+                  nombre: i.nombre,
+                  categoria: i.categoria,
+                  unidad: i.unidad,
+                  ubicacion: i.ubicacion,
+                  notas: i.notas,
+                  stock: i.stock,
+                  prestado: i.prestamos.reduce((s, p) => s + p.cantidad, 0),
+                  activo: i.activo,
+                }}
+              />
+            ))}
           </Tabla>
         )}
       </Seccion>
