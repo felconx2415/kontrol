@@ -7,8 +7,13 @@ import FormularioPrestamo from "./formulario-prestamo";
 
 export const metadata = { title: "Prestar ítem · Kontrol" };
 
-export default async function PaginaPrestar() {
+export default async function PaginaPrestar({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string }>;
+}) {
   await requerirRol(...ROLES_GESTION);
+  const { item: itemPreseleccionado } = await searchParams;
 
   const items = await db.itemBodega.findMany({
     where: { activo: true, stock: { gt: 0 } },
@@ -35,7 +40,7 @@ export default async function PaginaPrestar() {
       {items.length === 0 ? (
         <Vacio mensaje="No hay ítems con stock disponible para prestar." />
       ) : (
-        <FormularioPrestamo items={items} />
+        <FormularioPrestamo items={items} itemPreseleccionado={itemPreseleccionado} />
       )}
     </div>
   );

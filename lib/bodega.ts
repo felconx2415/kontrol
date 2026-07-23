@@ -55,3 +55,10 @@ export const TIPOS_MOVIMIENTO_MANUAL: TipoMovimiento[] = [
 
 /** Estos tipos identifican a la persona que recibe/toma el material. */
 export const REQUIERE_PERSONA: TipoMovimiento[] = ["SALIDA"];
+
+/**
+ * Stock igual o inferior a este valor se marca como «bajo» en el KPI y el
+ * filtro del inventario. Incluye el 0 (sin stock). Es un umbral global simple;
+ * si más adelante hace falta un mínimo por ítem, se mueve al modelo.
+ */
+export const UMBRAL_STOCK_BAJO = 3;

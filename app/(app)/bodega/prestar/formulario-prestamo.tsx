@@ -15,18 +15,28 @@ type ItemOpcion = {
   stock: number;
 };
 
-export default function FormularioPrestamo({ items }: { items: ItemOpcion[] }) {
+export default function FormularioPrestamo({
+  items,
+  itemPreseleccionado,
+}: {
+  items: ItemOpcion[];
+  itemPreseleccionado?: string;
+}) {
   const [estado, accion] = useActionState<EstadoBodega, FormData>(
     registrarPrestamo,
     {},
   );
   const [tieneFirma, setTieneFirma] = useState(false);
 
+  const preseleccion = items.some((i) => i.id === itemPreseleccionado)
+    ? itemPreseleccionado
+    : "";
+
   return (
     <form action={accion} className="space-y-6">
       <Tarjeta className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Ítem" htmlFor="itemId" className="sm:col-span-2">
-          <Seleccion id="itemId" name="itemId" required defaultValue="">
+          <Seleccion id="itemId" name="itemId" required defaultValue={preseleccion}>
             <option value="" disabled>
               Selecciona un ítem…
             </option>

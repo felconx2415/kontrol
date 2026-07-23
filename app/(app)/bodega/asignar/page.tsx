@@ -7,8 +7,13 @@ import FormularioAsignar from "./formulario-asignar";
 
 export const metadata = { title: "Asignar equipamiento · Kontrol" };
 
-export default async function PaginaAsignar() {
+export default async function PaginaAsignar({
+  searchParams,
+}: {
+  searchParams: Promise<{ item?: string }>;
+}) {
   await requerirRol(...ROLES_GESTION);
+  const { item: itemPreseleccionado } = await searchParams;
 
   const [items, usuarios] = await Promise.all([
     db.itemBodega.findMany({
@@ -44,6 +49,7 @@ export default async function PaginaAsignar() {
       ) : (
         <FormularioAsignar
           items={items}
+          itemPreseleccionado={itemPreseleccionado}
           usuarios={usuarios.map((u) => ({
             id: u.id,
             nombre: u.nombre,

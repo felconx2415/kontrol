@@ -5,10 +5,17 @@ import { useActionState, useState } from "react";
 import {
   alternarItemBodega,
   editarItemBodega,
+  registrarMovimiento,
   type EstadoBodega,
 } from "@/actions/bodega";
-import Boton from "@/components/ui/boton";
-import { Campo, Entrada, AreaTexto } from "@/components/ui/campo";
+import {
+  ETIQUETA_MOVIMIENTO,
+  REQUIERE_PERSONA,
+  TIPOS_MOVIMIENTO_MANUAL,
+} from "@/lib/bodega";
+import type { TipoMovimiento } from "@/generated/prisma/enums";
+import Boton, { BotonEnlace } from "@/components/ui/boton";
+import { Campo, Entrada, Seleccion, AreaTexto } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
 import Insignia from "@/components/ui/insignia";
 
@@ -25,11 +32,15 @@ export type ItemFila = {
   activo: boolean;
 };
 
-const CLASES_ACCION =
-  "foco-anillo inline-flex min-h-11 cursor-pointer items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta";
+// Vista del panel que se despliega bajo la fila. Un dropdown flotante se
+// recortaría contra el contenedor con scroll de la tabla, así que las acciones
+// viven en una fila expandible (mismo patrón que editar y movimiento).
+type Vista = "acciones" | "movimiento" | "editar" | null;
 
 export default function FilaItemBodega({ item }: { item: ItemFila }) {
-  const [editando, setEditando] = useState(false);
+  const [vista, setVista] = useState<Vista>(null);
+
+  const puedeSalir = item.activo && item.stock > 0;
 
   return (
     <>
@@ -75,33 +86,196 @@ export default function FilaItemBodega({ item }: { item: ItemFila }) {
           </Insignia>
         </td>
         <td className="celda-completa px-4 py-2.5">
-          <div className="flex flex-wrap justify-end gap-1">
+          <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => setEditando((v) => !v)}
-              aria-expanded={editando}
-              className={`${CLASES_ACCION} ${editando ? "text-tinta" : ""}`}
+              onClick={() => setVista((v) => (v ? null : "acciones"))}
+              aria-haspopup="menu"
+              aria-expanded={vista !== null}
+              aria-label={`Acciones de ${item.nombre}`}
+              className={`foco-anillo inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-lg text-lg leading-none transition-colors duration-150 hover:bg-panel-suave hover:text-tinta ${
+                vista ? "bg-panel-suave text-tinta" : "text-tinta-suave"
+              }`}
             >
-              Editar
+              ⋯
             </button>
-            <form action={alternarItemBodega}>
-              <input type="hidden" name="itemId" value={item.id} />
-              <button type="submit" className={CLASES_ACCION}>
-                {item.activo ? "Desactivar" : "Activar"}
-              </button>
-            </form>
           </div>
         </td>
       </tr>
 
-      {editando && (
+      {vista && (
         <tr className="bg-panel-suave">
           <td colSpan={8} className="celda-completa panel-expandible px-4 py-4">
-            <PanelEditar item={item} onCerrar={() => setEditando(false)} />
+            {vista === "acciones" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Boton
+                  type="button"
+                  tamano="sm"
+                  variante="secundario"
+                  onClick={() => setVista("movimiento")}
+                >
+                  Registrar movimiento
+                </Boton>
+                {puedeSalir && (
+                  <BotonEnlace
+                    href={`/bodega/prestar?item=${item.id}`}
+                    tamano="sm"
+                    variante="secundario"
+                  >
+                    Prestar
+                  </BotonEnlace>
+                )}
+                {puedeSalir && (
+                  <BotonEnlace
+                    href={`/bodega/asignar?item=${item.id}`}
+                    tamano="sm"
+                    variante="secundario"
+                  >
+                    Asignar a usuario
+                  </BotonEnlace>
+                )}
+                <Boton
+                  type="button"
+                  tamano="sm"
+                  variante="secundario"
+                  onClick={() => setVista("editar")}
+                >
+                  Editar
+                </Boton>
+                <form action={alternarItemBodega} className="contents">
+                  <input type="hidden" name="itemId" value={item.id} />
+                  <Boton type="submit" tamano="sm" variante="secundario">
+                    {item.activo ? "Desactivar" : "Activar"}
+                  </Boton>
+                </form>
+                <button
+                  type="button"
+                  onClick={() => setVista(null)}
+                  className="foco-anillo ml-auto inline-flex min-h-9 cursor-pointer items-center rounded px-2 text-sm text-tinta-suave transition-colors duration-150 hover:text-tinta"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+
+            {vista === "movimiento" && (
+              <PanelMovimiento item={item} onCerrar={() => setVista(null)} />
+            )}
+            {vista === "editar" && (
+              <PanelEditar item={item} onCerrar={() => setVista(null)} />
+            )}
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+/** Movimiento de stock (ingreso/salida/ajuste) acotado a un ítem concreto. */
+function PanelMovimiento({
+  item,
+  onCerrar,
+}: {
+  item: ItemFila;
+  onCerrar: () => void;
+}) {
+  const [estado, accion] = useActionState<EstadoBodega, FormData>(
+    registrarMovimiento,
+    {},
+  );
+  const [tipo, setTipo] = useState<TipoMovimiento>("ENTRADA");
+
+  const pidePersona = REQUIERE_PERSONA.includes(tipo);
+  const esAjuste = tipo === "AJUSTE";
+
+  return (
+    <form action={accion} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <input type="hidden" name="itemId" value={item.id} />
+      <p className="text-sm font-semibold text-tinta sm:col-span-2 lg:col-span-4">
+        Movimiento · {item.codigo} — {item.nombre}{" "}
+        <span className="font-normal text-tinta-tenue">
+          ({item.stock} {item.unidad} en stock)
+        </span>
+      </p>
+
+      <Campo etiqueta="Tipo" htmlFor={`movTipo-${item.id}`}>
+        <Seleccion
+          id={`movTipo-${item.id}`}
+          name="tipo"
+          value={tipo}
+          onChange={(e) => setTipo(e.target.value as TipoMovimiento)}
+        >
+          {TIPOS_MOVIMIENTO_MANUAL.map((t) => (
+            <option key={t} value={t}>
+              {ETIQUETA_MOVIMIENTO[t]}
+            </option>
+          ))}
+        </Seleccion>
+      </Campo>
+
+      <Campo
+        etiqueta={esAjuste ? "Nuevo stock" : "Cantidad"}
+        htmlFor={`movCantidad-${item.id}`}
+        pista={esAjuste ? "Fija el stock a este valor." : undefined}
+      >
+        <Entrada
+          id={`movCantidad-${item.id}`}
+          name="cantidad"
+          type="number"
+          min={esAjuste ? 0 : 1}
+          required
+          defaultValue={esAjuste ? 0 : 1}
+        />
+      </Campo>
+
+      {pidePersona && (
+        <Campo
+          etiqueta="¿A quién se entrega?"
+          htmlFor={`movPersona-${item.id}`}
+          className="sm:col-span-2"
+        >
+          <Entrada
+            id={`movPersona-${item.id}`}
+            name="persona"
+            required
+            placeholder="Nombre o brigada"
+          />
+        </Campo>
+      )}
+
+      <Campo
+        etiqueta="Nota (opcional)"
+        htmlFor={`movNotas-${item.id}`}
+        className="sm:col-span-2 lg:col-span-2"
+      >
+        <AreaTexto
+          id={`movNotas-${item.id}`}
+          name="notas"
+          rows={1}
+          placeholder="Detalle del movimiento"
+        />
+      </Campo>
+
+      {estado.error && (
+        <Aviso tono="error" className="sm:col-span-2 lg:col-span-4">
+          {estado.error}
+        </Aviso>
+      )}
+      {estado.ok && (
+        <Aviso tono="exito" className="sm:col-span-2 lg:col-span-4">
+          {estado.ok}
+        </Aviso>
+      )}
+
+      <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
+        <Boton type="submit" tamano="sm" textoPendiente="Registrando…">
+          Registrar movimiento
+        </Boton>
+        <Boton type="button" tamano="sm" variante="secundario" onClick={onCerrar}>
+          Cerrar
+        </Boton>
+      </div>
+    </form>
   );
 }
 
