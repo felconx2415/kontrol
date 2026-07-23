@@ -5,11 +5,17 @@ import { formatearFolio } from "@/lib/folio";
 import { formatearFecha } from "@/lib/vencimientos";
 import { ETIQUETA_ESTADO, ROLES_GESTION } from "@/lib/solicitud-estado";
 import EstadoBadge from "@/components/estado-badge";
+import Insignia from "@/components/ui/insignia";
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Tarjeta, Vacio } from "@/components/ui/superficie";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
-import { construirFiltro, type FiltrosReporte } from "@/lib/reportes";
+import { Seccion } from "@/components/ui/superficie";
+import {
+  construirFiltro,
+  construirRangoFechas,
+  type FiltrosReporte,
+} from "@/lib/reportes";
 import type { EstadoSolicitud } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Reportes · Kontrol" };
@@ -32,7 +38,12 @@ export default async function Reportes({
   await requerirRol(...ROLES_GESTION);
   const filtros = await searchParams;
 
-  const [brigadas, solicitudes] = await Promise.all([
+  // El rango de fechas se aplica también a la bodega (préstamos por prestadoEn,
+  // traslados por asignadoEn). Los filtros de estado/categoría son propios de
+  // las solicitudes; brigada sí acota los traslados por la brigada del usuario.
+  const rango = construirRangoFechas(filtros);
+
+  const [brigadas, solicitudes, prestamos, traslados] = await Promise.all([
     db.brigada.findMany({ orderBy: { nombre: "asc" } }),
     db.solicitud.findMany({
       where: construirFiltro(filtros),
@@ -44,7 +55,31 @@ export default async function Reportes({
         _count: { select: { items: true } },
       },
     }),
+    db.prestamo.findMany({
+      where: rango ? { prestadoEn: rango } : {},
+      orderBy: { prestadoEn: "desc" },
+      take: 200,
+      include: {
+        item: { select: { codigo: true, nombre: true, unidad: true } },
+        prestadoPor: { select: { nombre: true } },
+      },
+    }),
+    db.asignacionBodega.findMany({
+      where: {
+        ...(rango ? { asignadoEn: rango } : {}),
+        ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
+      },
+      orderBy: { asignadoEn: "desc" },
+      take: 200,
+      include: {
+        item: { select: { codigo: true, nombre: true, unidad: true } },
+        usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+        asignadoPor: { select: { nombre: true } },
+      },
+    }),
   ]);
+
+  const prestamosActivos = prestamos.filter((p) => p.estado === "ACTIVO").length;
 
   const parametros = new URLSearchParams(
     Object.entries(filtros).filter(([, v]) => Boolean(v)) as [string, string][],
@@ -164,6 +199,102 @@ export default async function Reportes({
           ))}
         </Tabla>
       )}
+
+      <div className="pt-2">
+        <h2 className="titulo-pagina text-lg">Bodega local</h2>
+        <p className="text-sm text-tinta-suave">
+          Material fuera de la bodega en el período: {prestamosActivos} préstamo
+          {prestamosActivos === 1 ? "" : "s"} activo
+          {prestamosActivos === 1 ? "" : "s"} · {traslados.length} traslado
+          {traslados.length === 1 ? "" : "s"}.
+        </p>
+      </div>
+
+      <Seccion titulo={`Préstamos (${prestamos.length})`} plano>
+        {prestamos.length === 0 ? (
+          <div className="p-4">
+            <Vacio mensaje="No hay préstamos en el rango seleccionado." />
+          </div>
+        ) : (
+          <Tabla
+            encabezados={[
+              "Ítem",
+              "Código",
+              { texto: "Cantidad", alineado: "der" },
+              "Prestado a",
+              "Estado",
+              "Registró",
+              "Salida",
+              "Devuelto",
+            ]}
+            anchoMinimo="52rem"
+          >
+            {prestamos.map((p) => (
+              <Fila key={p.id}>
+                <Celda>{p.item.nombre}</Celda>
+                <Celda mono tenue>
+                  {p.item.codigo}
+                </Celda>
+                <Celda derecha mono>
+                  {p.cantidad} {p.item.unidad}
+                </Celda>
+                <Celda>{p.persona}</Celda>
+                <Celda>
+                  <Insignia
+                    clases={
+                      p.estado === "ACTIVO"
+                        ? "bg-espera-fondo text-espera ring-espera-borde"
+                        : "bg-exito-fondo text-exito ring-exito-borde"
+                    }
+                  >
+                    {p.estado === "ACTIVO" ? "Activo" : "Devuelto"}
+                  </Insignia>
+                </Celda>
+                <Celda tenue>{p.prestadoPor.nombre}</Celda>
+                <Celda tenue>{formatearFecha(p.prestadoEn)}</Celda>
+                <Celda tenue>{p.devueltoEn ? formatearFecha(p.devueltoEn) : "—"}</Celda>
+              </Fila>
+            ))}
+          </Tabla>
+        )}
+      </Seccion>
+
+      <Seccion titulo={`Traslados / equipamiento asignado (${traslados.length})`} plano>
+        {traslados.length === 0 ? (
+          <div className="p-4">
+            <Vacio mensaje="No hay traslados en el rango seleccionado." />
+          </div>
+        ) : (
+          <Tabla
+            encabezados={[
+              "Ítem",
+              "Código",
+              { texto: "Cantidad", alineado: "der" },
+              "Asignado a",
+              "Brigada",
+              "Asignó",
+              "Fecha",
+            ]}
+            anchoMinimo="52rem"
+          >
+            {traslados.map((t) => (
+              <Fila key={t.id}>
+                <Celda>{t.item.nombre}</Celda>
+                <Celda mono tenue>
+                  {t.item.codigo}
+                </Celda>
+                <Celda derecha mono>
+                  {t.cantidad} {t.item.unidad}
+                </Celda>
+                <Celda>{t.usuario.nombre}</Celda>
+                <Celda tenue>{t.usuario.brigada?.nombre ?? "—"}</Celda>
+                <Celda tenue>{t.asignadoPor.nombre}</Celda>
+                <Celda tenue>{formatearFecha(t.asignadoEn)}</Celda>
+              </Fila>
+            ))}
+          </Tabla>
+        )}
+      </Seccion>
     </div>
   );
 }

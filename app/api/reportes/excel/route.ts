@@ -3,7 +3,11 @@ import ExcelJS from "exceljs";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatearFolio } from "@/lib/folio";
-import { construirFiltro, type FiltrosReporte } from "@/lib/reportes";
+import {
+  construirFiltro,
+  construirRangoFechas,
+  type FiltrosReporte,
+} from "@/lib/reportes";
 import { esGestion, ETIQUETA_ESTADO, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 
 export async function GET(request: Request) {
@@ -21,22 +25,46 @@ export async function GET(request: Request) {
     categoria: url.searchParams.get("categoria") ?? undefined,
   };
 
-  const solicitudes = await db.solicitud.findMany({
-    where: construirFiltro(filtros),
-    orderBy: { creadaEn: "desc" },
-    include: {
-      solicitante: { select: { nombre: true, rut: true } },
-      brigada: { select: { nombre: true } },
-      aprobador: { select: { nombre: true } },
-      entrega: { select: { entregadaEn: true } },
-      items: {
-        include: {
-          articulo: true,
-          entregaItem: { select: { cantidadEntregada: true, venceEn: true } },
+  const rango = construirRangoFechas(filtros);
+
+  const [solicitudes, prestamos, traslados] = await Promise.all([
+    db.solicitud.findMany({
+      where: construirFiltro(filtros),
+      orderBy: { creadaEn: "desc" },
+      include: {
+        solicitante: { select: { nombre: true, rut: true } },
+        brigada: { select: { nombre: true } },
+        aprobador: { select: { nombre: true } },
+        entrega: { select: { entregadaEn: true } },
+        items: {
+          include: {
+            articulo: true,
+            entregaItem: { select: { cantidadEntregada: true, venceEn: true } },
+          },
         },
       },
-    },
-  });
+    }),
+    db.prestamo.findMany({
+      where: rango ? { prestadoEn: rango } : {},
+      orderBy: { prestadoEn: "desc" },
+      include: {
+        item: { select: { codigo: true, nombre: true, unidad: true } },
+        prestadoPor: { select: { nombre: true } },
+      },
+    }),
+    db.asignacionBodega.findMany({
+      where: {
+        ...(rango ? { asignadoEn: rango } : {}),
+        ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
+      },
+      orderBy: { asignadoEn: "desc" },
+      include: {
+        item: { select: { codigo: true, nombre: true, unidad: true } },
+        usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+        asignadoPor: { select: { nombre: true } },
+      },
+    }),
+  ]);
 
   const libro = new ExcelJS.Workbook();
   libro.creator = "Kontrol";
@@ -97,6 +125,79 @@ export async function GET(request: Request) {
   for (const clave of ["creada", "entregadaEn", "vence"]) {
     hoja.getColumn(clave).numFmt = "dd-mm-yyyy";
   }
+
+  // Estilo compartido para la cabecera de cada hoja.
+  const encabezar = (h: ExcelJS.Worksheet) => {
+    h.getRow(1).font = { bold: true };
+    h.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE2E8F0" },
+    };
+    h.views = [{ state: "frozen", ySplit: 1 }];
+  };
+
+  // Hoja de préstamos de la bodega local.
+  const hojaPrestamos = libro.addWorksheet("Préstamos");
+  hojaPrestamos.columns = [
+    { header: "Ítem", key: "item", width: 30 },
+    { header: "Código", key: "codigo", width: 12 },
+    { header: "Cantidad", key: "cantidad", width: 10 },
+    { header: "Unidad", key: "unidad", width: 10 },
+    { header: "Prestado a", key: "persona", width: 24 },
+    { header: "Estado", key: "estado", width: 12 },
+    { header: "Registró", key: "registro", width: 22 },
+    { header: "Salida", key: "salida", width: 14 },
+    { header: "Devuelto", key: "devuelto", width: 14 },
+    { header: "Nota", key: "nota", width: 30 },
+  ];
+  encabezar(hojaPrestamos);
+  for (const p of prestamos) {
+    hojaPrestamos.addRow({
+      item: p.item.nombre,
+      codigo: p.item.codigo,
+      cantidad: p.cantidad,
+      unidad: p.item.unidad,
+      persona: p.persona,
+      estado: p.estado === "ACTIVO" ? "Activo" : "Devuelto",
+      registro: p.prestadoPor.nombre,
+      salida: p.prestadoEn,
+      devuelto: p.devueltoEn ?? "",
+      nota: p.notas ?? "",
+    });
+  }
+  for (const clave of ["salida", "devuelto"]) {
+    hojaPrestamos.getColumn(clave).numFmt = "dd-mm-yyyy";
+  }
+
+  // Hoja de traslados (equipamiento asignado a un usuario en forma definitiva).
+  const hojaTraslados = libro.addWorksheet("Traslados");
+  hojaTraslados.columns = [
+    { header: "Ítem", key: "item", width: 30 },
+    { header: "Código", key: "codigo", width: 12 },
+    { header: "Cantidad", key: "cantidad", width: 10 },
+    { header: "Unidad", key: "unidad", width: 10 },
+    { header: "Asignado a", key: "usuario", width: 24 },
+    { header: "Brigada", key: "brigada", width: 18 },
+    { header: "Asignó", key: "asigno", width: 22 },
+    { header: "Fecha", key: "fecha", width: 14 },
+    { header: "Nota", key: "nota", width: 30 },
+  ];
+  encabezar(hojaTraslados);
+  for (const t of traslados) {
+    hojaTraslados.addRow({
+      item: t.item.nombre,
+      codigo: t.item.codigo,
+      cantidad: t.cantidad,
+      unidad: t.item.unidad,
+      usuario: t.usuario.nombre,
+      brigada: t.usuario.brigada?.nombre ?? "",
+      asigno: t.asignadoPor.nombre,
+      fecha: t.asignadoEn,
+      nota: t.notas ?? "",
+    });
+  }
+  hojaTraslados.getColumn("fecha").numFmt = "dd-mm-yyyy";
 
   const buffer = await libro.xlsx.writeBuffer();
   const fecha = new Date().toISOString().slice(0, 10);
