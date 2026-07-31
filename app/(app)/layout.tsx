@@ -43,9 +43,14 @@ export default async function LayoutApp({
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="no-print bg-marca-950 text-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
+      {/* La barra dejó de ser una franja a sangre con una segunda fila de
+          pestañas: ahora es una sola píldora oscura flotando sobre el lienzo.
+          Todo cabe en una línea, así que el contenido empieza ~44px más
+          arriba. Bajo lg los ocho destinos no entran, y el cajón toma el
+          relevo. */}
+      <header className="no-print px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
+          <div className="flex min-w-0 items-center gap-1">
             <MenuMovil
               enlaces={enlaces}
               usuarioNombre={usuario.nombre}
@@ -55,9 +60,9 @@ export default async function LayoutApp({
             />
             <Link
               href="/escritorio"
-              className="foco-anillo-claro flex min-h-11 items-center gap-2.5 rounded"
+              className="foco-anillo-claro flex items-center gap-2.5 rounded-full py-1 pr-2 lg:pr-4"
             >
-              <span className="flex size-7 items-center justify-center rounded-md bg-white text-sm font-bold text-marca-950">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-marca-950">
                 K
               </span>
               <span className="text-base font-semibold tracking-tight">
@@ -66,26 +71,30 @@ export default async function LayoutApp({
             </Link>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium leading-tight">{usuario.nombre}</p>
-              <p className="text-xs leading-tight text-marca-200">
+          <NavPrincipal enlaces={enlaces} />
+
+          {/* `min-w-0` + `truncate`: un nombre largo se recorta en vez de
+              empujar los destinos y solaparse con ellos. */}
+          <div className="ml-auto flex min-w-0 items-center gap-3">
+            <div className="hidden min-w-0 text-right sm:block">
+              <p className="truncate text-sm font-medium leading-tight">
+                {usuario.nombre}
+              </p>
+              <p className="truncate text-xs leading-tight text-marca-200">
                 {ETIQUETA_ROL[usuario.rol]}
                 {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
               </p>
             </div>
-            <form action={cerrarSesion}>
+            <form action={cerrarSesion} className="shrink-0">
               <button
                 type="submit"
-                className="foco-anillo-claro inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-white/25 px-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/10"
+                className="foco-anillo-claro inline-flex cursor-pointer items-center rounded-full border border-white/25 px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/10"
               >
                 Salir
               </button>
             </form>
           </div>
         </div>
-
-        <NavPrincipal enlaces={enlaces} />
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>

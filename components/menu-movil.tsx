@@ -8,8 +8,8 @@ import { Icono, type EnlaceNav } from "./nav-principal";
 
 /**
  * Menú de navegación para móvil: un botón hamburguesa que abre un cajón lateral
- * con todos los destinos. Reemplaza al scroll horizontal de la barra en
- * pantallas < md, donde los enlaces de la derecha quedaban sin descubrir.
+ * con todos los destinos. Toma el relevo bajo lg, donde los ocho destinos ya
+ * no caben en la píldora de la barra.
  *
  * Implementado con un overlay controlado por estado (no <dialog>) y animaciones
  * de `transform`/`opacity`: funciona en cualquier navegador de teléfono. Antes
@@ -82,7 +82,7 @@ export default function MenuMovil({
         aria-label="Abrir menú"
         aria-haspopup="dialog"
         aria-expanded={montado}
-        className="foco-anillo-claro -ml-1 inline-flex size-11 items-center justify-center rounded-lg text-white md:hidden"
+        className="foco-anillo-claro -ml-1 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-colors duration-150 hover:bg-white/10 lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -100,7 +100,7 @@ export default function MenuMovil({
       {montado &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 md:hidden"
+            className="fixed inset-0 z-50 lg:hidden"
             role="dialog"
             aria-modal="true"
           >
