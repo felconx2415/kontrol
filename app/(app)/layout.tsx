@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { cookies } from "next/headers";
 import { requerirUsuario } from "@/lib/auth";
 import { ETIQUETA_ROL, esAdmin, esGestion } from "@/lib/solicitud-estado";
@@ -60,14 +61,19 @@ export default async function LayoutApp({
             />
             <Link
               href="/escritorio"
-              className="foco-anillo-claro flex items-center gap-2.5 rounded-full py-1 pr-2 lg:pr-4"
+              aria-label="Kontrol · ir al escritorio"
+              className="foco-anillo-claro flex items-center rounded-full py-1 pr-2 lg:pr-4"
             >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-marca-950">
-                K
-              </span>
-              <span className="text-base font-semibold tracking-tight">
-                Kontrol
-              </span>
+              {/* Logotipo completo: la palabra viene en blanco y la píldora es
+                  oscura, así que se apoya tal cual sobre ella. */}
+              <Image
+                src="/logo-kontrol.png"
+                alt="Kontrol"
+                width={600}
+                height={148}
+                priority
+                className="h-6 w-auto"
+              />
             </Link>
           </div>
 
@@ -96,6 +102,19 @@ export default async function LayoutApp({
           </div>
         </div>
       </header>
+
+      {/* Al imprimir, la píldora se oculta (`no-print`) y la hoja quedaba sin
+          marca. Este encabezado solo existe en papel, con la variante de
+          palabra oscura. */}
+      <div className="hidden px-4 pt-6 print:block">
+        <Image
+          src="/logo-kontrol-oscuro.png"
+          alt="Kontrol"
+          width={600}
+          height={148}
+          className="h-6 w-auto"
+        />
+      </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
 

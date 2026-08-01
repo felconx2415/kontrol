@@ -9,6 +9,8 @@ import {
   type FiltrosReporte,
 } from "@/lib/reportes";
 import { esGestion, ETIQUETA_ESTADO, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { LOGO_ALTO, LOGO_ANCHO, LOGO_PNG_BASE64 } from "@/lib/logo";
+import { formatearFechaHora } from "@/lib/vencimientos";
 
 export async function GET(request: Request) {
   const usuario = await usuarioActual();
@@ -66,9 +68,71 @@ export async function GET(request: Request) {
     }),
   ]);
 
+  const brigada = filtros.brigadaId
+    ? await db.brigada.findUnique({
+        where: { id: filtros.brigadaId },
+        select: { nombre: true },
+      })
+    : null;
+
   const libro = new ExcelJS.Workbook();
   libro.creator = "Kontrol";
   libro.created = new Date();
+
+  // Portada: la marca, quién y cuándo generó la planilla, y con qué filtros.
+  // Va en hoja aparte para no tocar la rejilla de las hojas de datos, donde
+  // una banda de encabezado correría las filas y rompería el filtro y el
+  // panel congelado.
+  const portada = libro.addWorksheet("Portada");
+  portada.views = [{ showGridLines: false }];
+  portada.getColumn(1).width = 22;
+  portada.getColumn(2).width = 46;
+  portada.getRow(1).height = 46;
+
+  const idLogo = libro.addImage({
+    base64: LOGO_PNG_BASE64,
+    extension: "png",
+  });
+  portada.addImage(idLogo, {
+    tl: { col: 0.3, row: 0.35 },
+    ext: { width: 200, height: (200 * LOGO_ALTO) / LOGO_ANCHO },
+  });
+
+  const filaPortada = (etiqueta: string, valor: string, negrita = false) => {
+    const fila = portada.addRow([etiqueta, valor]);
+    fila.getCell(1).font = { color: { argb: "FF64748B" }, size: 10 };
+    fila.getCell(2).font = { bold: negrita };
+    return fila;
+  };
+
+  portada.addRow([]);
+  const titulo = portada.addRow(["Reporte de solicitudes, préstamos y traslados"]);
+  titulo.getCell(1).font = { bold: true, size: 14, color: { argb: "FF031A29" } };
+  portada.addRow([]);
+  filaPortada("Generado", formatearFechaHora(new Date()));
+  filaPortada("Generado por", usuario.nombre);
+  portada.addRow([]);
+
+  const cabeceraFiltros = portada.addRow(["Filtros aplicados"]);
+  cabeceraFiltros.getCell(1).font = { bold: true, color: { argb: "FF031A29" } };
+  filaPortada("Desde", filtros.desde || "Sin límite");
+  filaPortada("Hasta", filtros.hasta || "Sin límite");
+  filaPortada("Brigada", brigada?.nombre ?? "Todas");
+  filaPortada(
+    "Estado",
+    filtros.estado
+      ? (ETIQUETA_ESTADO[filtros.estado as keyof typeof ETIQUETA_ESTADO] ??
+        filtros.estado)
+      : "Todos",
+  );
+  filaPortada("Categoría", filtros.categoria || "Todas");
+  portada.addRow([]);
+
+  const cabeceraContenido = portada.addRow(["Contenido"]);
+  cabeceraContenido.getCell(1).font = { bold: true, color: { argb: "FF031A29" } };
+  filaPortada("Solicitudes", `${solicitudes.length} solicitudes`);
+  filaPortada("Préstamos", `${prestamos.length} registros`);
+  filaPortada("Traslados", `${traslados.length} registros`);
 
   // Una fila por ítem: es el grano que sirve para analizar consumo.
   const hoja = libro.addWorksheet("Solicitudes");

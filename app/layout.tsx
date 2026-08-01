@@ -12,10 +12,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const DESCRIPCION =
+  "Gestión de solicitudes y entrega de equipamiento y EPP para brigadas y personal.";
+
 export const metadata: Metadata = {
   title: "Kontrol",
-  description:
-    "Gestión de solicitudes y entrega de equipamiento y EPP para brigadas y personal.",
+  description: DESCRIPCION,
+  // El favicon y los iconos salen de app/icon.png y app/apple-icon.png por
+  // convención del App Router; aquí solo va la tarjeta de los enlaces
+  // compartidos (WhatsApp, correo), que necesita una imagen propia.
+  openGraph: {
+    title: "Kontrol",
+    description: DESCRIPCION,
+    siteName: "Kontrol",
+    locale: "es_CL",
+    type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Kontrol" }],
+  },
 };
 
 export default function RootLayout({

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { dibujarLogo, incrustarLogo } from "@/lib/logo-pdf";
 import { formatearFolio } from "@/lib/folio";
 import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
 
@@ -60,21 +61,23 @@ export async function generarActaPdf(datos: DatosActa): Promise<Uint8Array> {
     });
   };
 
-  // Encabezado
-  texto("KONTROL", { size: 18, font: negrita });
-  y -= 16;
-  texto("Acta de entrega de equipamiento y EPP", { size: 10, color: GRIS });
-  y -= 8;
+  // Encabezado: el logotipo reemplaza al antiguo «KONTROL» compuesto en
+  // Helvetica. El folio se alinea con el centro óptico del logotipo.
+  const ALTO_LOGO = 26;
+  const logo = await incrustarLogo(pdf);
+  dibujarLogo(pagina, logo, { x: MARGEN, yTop: y, alto: ALTO_LOGO });
 
   pagina.drawText(formatearFolio(datos.folio), {
     x: width - MARGEN - negrita.widthOfTextAtSize(formatearFolio(datos.folio), 14),
-    y: height - MARGEN,
+    y: y - ALTO_LOGO + 8,
     size: 14,
     font: negrita,
     color: NEGRO,
   });
 
-  y -= 12;
+  y -= ALTO_LOGO + 12;
+  texto("Acta de entrega de equipamiento y EPP", { size: 10, color: GRIS });
+  y -= 10;
   linea();
   y -= 24;
 

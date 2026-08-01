@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
+import { dibujarLogo, incrustarLogo } from "@/lib/logo-pdf";
 import { formatearFechaHora } from "@/lib/vencimientos";
 
 export type ItemStockPdf = {
@@ -142,10 +143,12 @@ export async function generarBodegaPdf(datos: {
   };
 
   // Encabezado del documento.
-  pagina.drawText("KONTROL", { x: MARGEN, y, size: 16, font: negrita, color: NEGRO });
+  const ALTO_LOGO = 22;
+  const logo = await incrustarLogo(pdf);
+  const anchoLogo = dibujarLogo(pagina, logo, { x: MARGEN, yTop: y, alto: ALTO_LOGO });
   pagina.drawText("Bodega local", {
-    x: MARGEN + 92,
-    y: y + 1,
+    x: MARGEN + anchoLogo + 12,
+    y: y - 15,
     size: 10,
     font: regular,
     color: GRIS,
@@ -155,12 +158,12 @@ export async function generarBodegaPdf(datos: {
   );
   pagina.drawText(pie, {
     x: ANCHO - MARGEN - regular.widthOfTextAtSize(pie, 8),
-    y: y + 2,
+    y: y - 15,
     size: 8,
     font: regular,
     color: GRIS,
   });
-  y -= 28;
+  y -= ALTO_LOGO + 16;
 
   // Sección 1 — Stock en bodega.
   const totalUnidades = datos.items.reduce((s, i) => s + i.stock, 0);
@@ -234,9 +237,12 @@ export async function generarBodegaPdf(datos: {
     }
   }
 
-  // Numeración de páginas.
+  // Pie de todas las páginas: la marca a la izquierda y la numeración a la
+  // derecha. Solo la primera lleva encabezado, así que este pie es lo que
+  // identifica a las hojas sueltas del listado si se imprimen.
   const paginas = pdf.getPages();
   paginas.forEach((p, i) => {
+    dibujarLogo(p, logo, { x: MARGEN, yTop: 30, alto: 10 });
     const t = `Página ${i + 1} de ${paginas.length}`;
     p.drawText(t, {
       x: ANCHO - MARGEN - regular.widthOfTextAtSize(t, 7),

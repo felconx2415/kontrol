@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { usuarioActual } from "@/lib/auth";
 import FormularioLogin from "./formulario-login";
@@ -10,12 +11,16 @@ export default async function PaginaLogin() {
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-marca-950 text-sm font-bold text-white">
-            K
-          </span>
-          <span className="text-lg font-semibold tracking-tight">Kontrol</span>
-        </div>
+        {/* Fondo claro: aquí va la variante con la palabra en marca-950; la
+            del sitio interno la lleva en blanco para la píldora oscura. */}
+        <Image
+          src="/logo-kontrol-oscuro.png"
+          alt="Kontrol"
+          width={600}
+          height={148}
+          priority
+          className="h-8 w-auto"
+        />
 
         <h2 className="titulo-pagina mt-10">Ingresa a tu cuenta</h2>
         <p className="mt-1 text-sm text-tinta-suave">

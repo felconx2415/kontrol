@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Icono, type EnlaceNav } from "./nav-principal";
 
@@ -119,8 +120,36 @@ export default function MenuMovil({
                 visible ? "translate-x-0" : "-translate-x-full"
               }`}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                <div className="min-w-0">
+              <div className="border-b border-white/10 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  {/* El cajón es oscuro: usa el logotipo de palabra blanca. */}
+                  <Image
+                    src="/logo-kontrol.png"
+                    alt="Kontrol"
+                    width={600}
+                    height={148}
+                    className="h-6 w-auto"
+                  />
+                  <button
+                    type="button"
+                    onClick={cerrar}
+                    aria-label="Cerrar menú"
+                    className="foco-anillo-claro -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-marca-200 transition-colors duration-150 hover:text-white"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      className="size-5"
+                      aria-hidden="true"
+                    >
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="mt-3 min-w-0">
                   <p className="truncate text-sm font-semibold">
                     {usuarioNombre}
                   </p>
@@ -128,24 +157,6 @@ export default function MenuMovil({
                     {usuarioRol}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={cerrar}
-                  aria-label="Cerrar menú"
-                  className="foco-anillo-claro inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-marca-200 transition-colors duration-150 hover:text-white"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    className="size-5"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
               </div>
 
               <nav className="flex-1 overflow-y-auto p-2">

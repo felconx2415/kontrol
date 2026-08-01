@@ -1,6 +1,7 @@
 import "server-only";
 
 import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFPage } from "pdf-lib";
+import { dibujarLogo, incrustarLogo } from "@/lib/logo-pdf";
 import { formatearFechaHora } from "@/lib/vencimientos";
 
 export type FotoActa = { bytes: Uint8Array; tipo: "png" | "jpg" };
@@ -61,8 +62,10 @@ export async function generarActaPrestamoPdf(
   };
 
   // Encabezado
-  texto("KONTROL", { size: 18, font: negrita });
-  y -= 16;
+  const ALTO_LOGO = 26;
+  const logo = await incrustarLogo(pdf);
+  dibujarLogo(pagina, logo, { x: MARGEN, yTop: y, alto: ALTO_LOGO });
+  y -= ALTO_LOGO + 12;
   texto("Acta de préstamo de bodega", { size: 10, color: GRIS });
   y -= 12;
   linea();
