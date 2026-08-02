@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   // son pocas y pequeñas, y así no dependemos de `sharp` en producción ni de
   // que el optimizador alcance la ruta que las sirve.
   images: { unoptimized: true },
+
+  // Playwright lanza Chromium desde node_modules y resuelve rutas propias en
+  // tiempo de ejecución: empaquetarlo lo rompe. Se deja fuera del bundle del
+  // servidor para que se cargue como módulo de Node normal.
+  serverExternalPackages: ["playwright"],
 };
 
 export default nextConfig;

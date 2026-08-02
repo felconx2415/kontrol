@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { asignarItemBodega, type EstadoBodega } from "@/actions/bodega";
+import FirmaCanvas from "@/components/firma-canvas";
 import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
@@ -29,6 +30,8 @@ export default function FormularioAsignar({
     asignarItemBodega,
     {},
   );
+
+  const [tieneFirma, setTieneFirma] = useState(false);
 
   const preseleccion = items.some((i) => i.id === itemPreseleccionado)
     ? itemPreseleccionado
@@ -73,9 +76,24 @@ export default function FormularioAsignar({
         </Campo>
       </Tarjeta>
 
+      <Tarjeta>
+        <h2 className="titulo-seccion mb-3">
+          Firma de quien recibe{" "}
+          <span className="text-fallo" aria-hidden="true">
+            *
+          </span>
+        </h2>
+        <FirmaCanvas name="firma" onCambio={setTieneFirma} />
+      </Tarjeta>
+
       {estado.error && <Aviso tono="error">{estado.error}</Aviso>}
 
-      <Boton type="submit" bloque textoPendiente="Asignando…">
+      <Boton
+        type="submit"
+        bloque
+        disabled={!tieneFirma}
+        textoPendiente="Asignando…"
+      >
         Asignar equipamiento
       </Boton>
     </form>

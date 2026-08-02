@@ -150,7 +150,7 @@ export default async function DetalleItem({
                       href={`/api/bodega/prestamos/${p.id}/acta`}
                       className="foco-anillo inline-flex min-h-11 items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
                     >
-                      Acta
+                      Acta de entrega
                     </a>
                     {p.estado === "ACTIVO" && (
                       <Link

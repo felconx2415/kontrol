@@ -1,8 +1,19 @@
 import "server-only";
 
-import { PDFDocument, StandardFonts, rgb, type PDFImage, type PDFPage } from "pdf-lib";
+import { PDFDocument, StandardFonts, type PDFImage } from "pdf-lib";
 import { dibujarLogo, incrustarLogo } from "@/lib/logo-pdf";
 import { formatearFechaHora } from "@/lib/vencimientos";
+import {
+  ALTO,
+  ALTO_FIRMA,
+  ANCHO,
+  bloqueFirma,
+  envolver,
+  GRIS,
+  LINEA,
+  MARGEN,
+  NEGRO,
+} from "@/lib/acta-comun";
 
 export type FotoActa = { bytes: Uint8Array; tipo: "png" | "jpg" };
 
@@ -21,13 +32,6 @@ export type DatosActaPrestamo = {
   firmaDevolucionPng: Uint8Array | null;
   fotos: FotoActa[];
 };
-
-const MARGEN = 50;
-const NEGRO = rgb(0.06, 0.09, 0.16);
-const GRIS = rgb(0.45, 0.5, 0.56);
-const LINEA = rgb(0.85, 0.87, 0.9);
-const ANCHO = 595;
-const ALTO = 842; // A4
 
 export async function generarActaPrestamoPdf(
   datos: DatosActaPrestamo,
@@ -105,9 +109,26 @@ export async function generarActaPrestamoPdf(
     parrafo("Observaciones de la devolución", datos.observacionesDevolucion);
   }
 
+  // Declaración de recepción. Sin esto el documento solo describe un
+  // movimiento; con esto sirve de respaldo de la entrega, que es para lo que
+  // se firma. Es la contraparte de la declaración del acta de solicitudes,
+  // ajustada a un préstamo: aquí además hay que devolver el material.
   y -= 10;
+  texto(
+    "Declaro haber recibido en préstamo el material detallado, en buen estado y",
+    { size: 9, color: GRIS },
+  );
+  y -= 12;
+  texto(
+    "conforme, y me comprometo a devolverlo en las mismas condiciones.",
+    { size: 9, color: GRIS },
+  );
+  y -= 10;
+
   linea();
-  y -= 30;
+  // El hueco tiene que superar el alto de la firma o el trazo se monta sobre
+  // el texto de encima.
+  y -= ALTO_FIRMA + 14;
 
   // Firmas: salida a la izquierda, devolución a la derecha.
   const yFirmas = y;
@@ -195,72 +216,3 @@ export async function generarActaPrestamoPdf(
   return pdf.save();
 }
 
-/** Dibuja una firma (o un espacio en blanco) con su línea y nombre debajo. */
-async function bloqueFirma(
-  pdf: PDFDocument,
-  pagina: PDFPage,
-  firmaPng: Uint8Array | null,
-  x: number,
-  yBase: number,
-  titulo: string,
-  nombre: string,
-) {
-  const ancho = 200;
-  if (firmaPng) {
-    try {
-      const firma = await pdf.embedPng(firmaPng);
-      const escala = Math.min(180 / firma.width, 60 / firma.height);
-      pagina.drawImage(firma, {
-        x,
-        y: yBase + 6,
-        width: firma.width * escala,
-        height: firma.height * escala,
-      });
-    } catch {
-      // firma ilegible: se deja el espacio en blanco.
-    }
-  }
-  pagina.drawLine({
-    start: { x, y: yBase },
-    end: { x: x + ancho, y: yBase },
-    thickness: 0.75,
-    color: NEGRO,
-  });
-  pagina.drawText(nombre, {
-    x,
-    y: yBase - 14,
-    size: 9,
-    font: await pdf.embedFont(StandardFonts.HelveticaBold),
-    color: NEGRO,
-  });
-  pagina.drawText(titulo, {
-    x,
-    y: yBase - 26,
-    size: 8,
-    font: await pdf.embedFont(StandardFonts.Helvetica),
-    color: GRIS,
-  });
-}
-
-/** Envuelve texto a mano: pdf-lib no lo hace solo. */
-function envolver(
-  texto: string,
-  font: Awaited<ReturnType<PDFDocument["embedFont"]>>,
-  size: number,
-  anchoMax: number,
-): string[] {
-  const palabras = texto.split(/\s+/);
-  const renglones: string[] = [];
-  let actual = "";
-  for (const palabra of palabras) {
-    const tentativo = actual ? `${actual} ${palabra}` : palabra;
-    if (font.widthOfTextAtSize(tentativo, size) > anchoMax && actual) {
-      renglones.push(actual);
-      actual = palabra;
-    } else {
-      actual = tentativo;
-    }
-  }
-  if (actual) renglones.push(actual);
-  return renglones;
-}

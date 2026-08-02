@@ -1,15 +1,13 @@
-import Link from "next/link";
 import { requerirUsuario } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { formatearFolio } from "@/lib/folio";
 import { formatearFecha } from "@/lib/vencimientos";
-import { ETIQUETA_ESTADO } from "@/lib/solicitud-estado";
-import EstadoBadge from "@/components/estado-badge";
+import { formatearFolio } from "@/lib/folio";
+import { esGestion, ETIQUETA_ESTADO } from "@/lib/solicitud-estado";
 import Boton, { BotonEnlace } from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Tarjeta, Vacio } from "@/components/ui/superficie";
-import { ListaPanel } from "@/components/ui/tabla";
 import Paginacion from "@/components/ui/paginacion";
+import ListaSeleccionable from "./lista-seleccionable";
 import type { EstadoSolicitud, Prisma } from "@/generated/prisma/client";
 
 export const metadata = { title: "Solicitudes · Kontrol" };
@@ -141,36 +139,20 @@ export default async function ListaSolicitudes({
           accion={<BotonEnlace href="/solicitudes/nueva">Nueva solicitud</BotonEnlace>}
         />
       ) : (
-        <ListaPanel>
-          {solicitudes.map((s) => (
-            <li key={s.id}>
-              <Link
-                href={`/solicitudes/${s.id}`}
-                className="foco-anillo flex items-center justify-between gap-4 min-h-11 px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
-              >
-                <div className="flex min-w-0 items-baseline gap-3">
-                  <span className="font-mono text-xs tabular-nums text-tinta-tenue">
-                    {formatearFolio(s.folio)}
-                  </span>
-                  <span className="truncate text-sm font-medium">
-                    {s.solicitante.nombre}
-                  </span>
-                  <span className="hidden truncate text-xs text-tinta-tenue sm:inline">
-                    {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
-                    {s._count.items} ítem{s._count.items === 1 ? "" : "s"}
-                    {s.brigada ? ` · ${s.brigada.nombre}` : ""}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="hidden text-xs text-tinta-tenue md:inline">
-                    {formatearFecha(s.creadaEn)}
-                  </span>
-                  <EstadoBadge estado={s.estado} />
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ListaPanel>
+        <ListaSeleccionable
+          puedeAprobar={usuario.rol === "APROBADOR" || esGestion(usuario.rol)}
+          puedeGestionar={esGestion(usuario.rol)}
+          solicitudes={solicitudes.map((s) => ({
+            id: s.id,
+            folioTexto: formatearFolio(s.folio),
+            estado: s.estado,
+            tipo: s.tipo,
+            solicitanteNombre: s.solicitante.nombre,
+            brigadaNombre: s.brigada?.nombre ?? null,
+            creadaEnTexto: formatearFecha(s.creadaEn),
+            totalItems: s._count.items,
+          }))}
+        />
       )}
 
       <Paginacion

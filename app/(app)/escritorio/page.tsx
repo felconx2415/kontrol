@@ -12,6 +12,7 @@ import {
 import { BotonEnlace } from "@/components/ui/boton";
 import { Aviso } from "@/components/ui/superficie";
 import Insignia from "@/components/ui/insignia";
+import ProgresoSolicitud from "@/components/progreso-solicitud";
 import TarjetaKpi from "@/components/graficos/tarjeta-kpi";
 import BarrasHorizontales from "@/components/graficos/barras-horizontales";
 import ColumnasVencimiento from "@/components/graficos/columnas-vencimiento";
@@ -255,25 +256,40 @@ export default async function Escritorio({
 
       {mias && (
         <Panel titulo="Mis solicitudes en curso" descripcion={mias.indicacion}>
+          {/* A diferencia de las colas de gestión, aquí no hay nada que hacer:
+              lo único que se quiere saber es en qué paso va cada pedido, así
+              que la fila lleva la barra de progreso en vez de un verbo. */}
           <ul className="-mx-4 -my-4 divide-y divide-borde">
             {mias.solicitudes.map((s) => (
               <li key={s.id}>
                 <Link
                   href={`/solicitudes/${s.id}`}
-                  className="foco-anillo group flex min-h-11 items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
+                  className="foco-anillo group block px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
                 >
-                  <div className="flex min-w-0 items-baseline gap-3">
-                    <span className="font-mono text-xs tabular-nums text-tinta-tenue">
-                      {formatearFolio(s.folio)}
-                    </span>
-                    <span className="truncate text-sm">
-                      {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
-                      {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
+                  <div className="flex items-baseline justify-between gap-4">
+                    <div className="flex min-w-0 items-baseline gap-3">
+                      <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                        {formatearFolio(s.folio)}
+                      </span>
+                      <span className="truncate text-sm">
+                        {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
+                        {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
+                      Ver →
                     </span>
                   </div>
-                  <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
-                    Ver →
-                  </span>
+
+                  <div className="mt-2 max-w-md">
+                    <ProgresoSolicitud estado={s.estado} />
+                  </div>
+
+                  {s.creadaPorNombre && (
+                    <p className="mt-1 text-xs text-tinta-tenue">
+                      Registrada por {s.creadaPorNombre} a tu nombre.
+                    </p>
+                  )}
                 </Link>
               </li>
             ))}

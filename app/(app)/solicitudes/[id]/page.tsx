@@ -8,6 +8,7 @@ import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
 import { accionesDisponibles, esGestion, ETIQUETA_ESTADO } from "@/lib/solicitud-estado";
 import EstadoBadge from "@/components/estado-badge";
 import TimelineSolicitud, { type HitoTimeline } from "@/components/timeline-solicitud";
+import ProgresoSolicitud from "@/components/progreso-solicitud";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
 import AccionesSolicitud from "./acciones-solicitud";
 import EditorItems from "./editor-items";
@@ -27,6 +28,7 @@ export default async function DetalleSolicitud({
     where: { id },
     include: {
       solicitante: { select: { id: true, nombre: true } },
+      creadaPor: { select: { nombre: true } },
       aprobador: { select: { nombre: true } },
       gestor: { select: { nombre: true } },
       editadaPor: { select: { nombre: true } },
@@ -115,6 +117,11 @@ export default async function DetalleSolicitud({
       titulo: ETIQUETA_ESTADO.PENDIENTE,
       fecha: solicitud.enviadaEn,
       responsable: solicitud.solicitante.nombre,
+      // Cuando la registró gestión, el hito debe distinguir a nombre de quién
+      // va el pedido de quién lo escribió: el acta la firma el primero.
+      nota: solicitud.creadaPor
+        ? `Registrada por ${solicitud.creadaPor.nombre} a nombre de ${solicitud.solicitante.nombre}.`
+        : null,
     },
     // Los ajustes ocurren entre el envío y la aprobación.
     ...ajustes,
@@ -183,7 +190,7 @@ export default async function DetalleSolicitud({
           <EstadoBadge estado={solicitud.estado} />
         </div>
         <p className="mt-1 text-sm text-tinta-suave">
-          Solicitada por{" "}
+          {solicitud.creadaPor ? "A nombre de" : "Solicitada por"}{" "}
           <Link
             href={`/historial/${solicitud.solicitante.id}`}
             className="foco-anillo rounded font-medium underline underline-offset-2"
@@ -192,6 +199,9 @@ export default async function DetalleSolicitud({
           </Link>
           {solicitud.brigada ? ` · ${solicitud.brigada.nombre}` : ""} ·{" "}
           {formatearFechaHora(solicitud.creadaEn)}
+          {solicitud.creadaPor
+            ? ` · registrada por ${solicitud.creadaPor.nombre}`
+            : ""}
         </p>
       </div>
 
@@ -279,7 +289,7 @@ export default async function DetalleSolicitud({
                 al almacén.
               </p>
               <a
-                href={`/api/solicitudes/${solicitud.id}/almacen`}
+                href={`/api/solicitudes/almacen?ids=${solicitud.id}`}
                 className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
               >
                 Descargar formato almacén (Excel)
@@ -288,7 +298,12 @@ export default async function DetalleSolicitud({
           )}
 
           <Tarjeta>
-            <h2 className="titulo-seccion mb-4">Seguimiento</h2>
+            <h2 className="titulo-seccion">Seguimiento</h2>
+            {/* El progreso arriba responde «¿en qué va?» de un vistazo; la
+                línea de tiempo, debajo, responde «¿qué pasó y cuándo?». */}
+            <div className="mb-4 mt-3">
+              <ProgresoSolicitud estado={solicitud.estado} />
+            </div>
             <TimelineSolicitud hitos={hitos} interrumpido={interrumpido} />
           </Tarjeta>
 

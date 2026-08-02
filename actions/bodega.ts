@@ -272,7 +272,7 @@ export async function registrarPrestamo(
   const firmaSalidaUrl = await guardarImagen(firma, "image/png", "firmas");
   const stockResultante = item.stock - cantidad;
 
-  await db.$transaction(async (tx) => {
+  const prestamoId = await db.$transaction(async (tx) => {
     await tx.itemBodega.update({
       where: { id: item.id },
       data: { stock: stockResultante },
@@ -299,6 +299,7 @@ export async function registrarPrestamo(
         prestamoId: prestamo.id,
       },
     });
+    return prestamo.id;
   });
 
   await registrarAuditoria({
@@ -314,7 +315,10 @@ export async function registrarPrestamo(
   );
   revalidatePath("/bodega");
   revalidatePath(`/bodega/${item.id}`);
-  redirect("/bodega");
+  // Se vuelve a la bodega con el acta recién firmada en primer plano: el
+  // respaldo de la entrega se necesita en ese momento, no cuando alguien se
+  // acuerde de buscarlo en la tabla.
+  redirect(`/bodega?tab=prestamos&acta=${prestamoId}`);
 }
 
 /**
@@ -415,10 +419,14 @@ export async function asignarItemBodega(
   const usuarioId = String(formData.get("usuarioId") ?? "");
   const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
   const notas = String(formData.get("notas") ?? "").trim() || null;
+  const firma = bufferDesdeDataUrl(String(formData.get("firma") ?? ""));
 
   if (cantidad === null) {
     return { error: "La cantidad debe ser un número entero mayor que 0." };
   }
+  // La asignación es una entrega definitiva: sale de bodega y queda a nombre
+  // de la persona, así que se firma igual que un préstamo.
+  if (!firma) return { error: "Falta la firma de quien recibe el equipamiento." };
 
   const [item, usuario] = await Promise.all([
     db.itemBodega.findUnique({ where: { id: itemId } }),
@@ -434,20 +442,22 @@ export async function asignarItemBodega(
     };
   }
 
+  const firmaPngUrl = await guardarImagen(firma, "image/png", "firmas");
   const stockResultante = item.stock - cantidad;
 
-  await db.$transaction(async (tx) => {
+  const asignacionId = await db.$transaction(async (tx) => {
     await tx.itemBodega.update({
       where: { id: item.id },
       data: { stock: stockResultante },
     });
-    await tx.asignacionBodega.create({
+    const asignacion = await tx.asignacionBodega.create({
       data: {
         itemId: item.id,
         usuarioId: usuario.id,
         cantidad,
         notas,
         asignadoPorId: usuarioActual.id,
+        firmaPngUrl,
       },
     });
     await tx.movimientoBodega.create({
@@ -461,6 +471,7 @@ export async function asignarItemBodega(
         usuarioId: usuarioActual.id,
       },
     });
+    return asignacion.id;
   });
 
   await registrarAuditoria({
@@ -472,11 +483,13 @@ export async function asignarItemBodega(
   });
 
   await dejarAviso(
-    `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${usuario.nombre}.`,
+    `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${usuario.nombre} con firma.`,
   );
   revalidatePath("/bodega");
   revalidatePath(`/bodega/${item.id}`);
-  redirect("/bodega");
+  revalidatePath(`/historial/${usuario.id}`);
+  // Igual que en el préstamo: el respaldo de la entrega se ofrece al entregar.
+  redirect(`/bodega?asignacion=${asignacionId}`);
 }
 
 /**

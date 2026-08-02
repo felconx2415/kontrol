@@ -71,7 +71,9 @@ Kontrol se une a la **misma red** que Caddy y no expone puertos.
    docker network connect web <contenedor_caddy>
    ```
 
-2. Levanta Kontrol (la primera vez compila la imagen; en ARM puede tardar):
+2. Levanta Kontrol (la primera vez compila la imagen; en ARM puede tardar
+   bastante: la imagen incluye Chromium, que es lo que imprime las actas en
+   PDF y pesa ~400 MB):
    ```bash
    docker compose up -d --build
    docker compose logs -f kontrol     # verás: migraciones → admin → codigario

@@ -11,6 +11,7 @@ import {
 } from "@/lib/vencimientos";
 import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 import Insignia from "@/components/ui/insignia";
+import ProgresoSolicitud from "@/components/progreso-solicitud";
 import { Vacio } from "@/components/ui/superficie";
 import { ListaPanel } from "@/components/ui/tabla";
 
@@ -29,12 +30,34 @@ export default async function Historial({
     redirect("/escritorio?error=sin-permiso");
   }
 
+  const esMio = actual.id === usuarioId;
+
   const persona = await db.usuario.findUnique({
     where: { id: usuarioId },
     include: { brigada: { select: { nombre: true } } },
   });
 
   if (!persona) notFound();
+
+  // Pedidos todavía en curso. Van en esta página porque es la que la gente
+  // abre para saber «qué tengo y qué me falta»: sin esto, un pedido que un
+  // gestor registró a su nombre era invisible hasta que aparecía entregado.
+  const enCurso = await db.solicitud.findMany({
+    where: {
+      solicitanteId: usuarioId,
+      estado: { in: ["PENDIENTE", "APROBADA", "EN_GESTION", "RECIBIDA"] },
+    },
+    orderBy: { creadaEn: "desc" },
+    select: {
+      id: true,
+      folio: true,
+      tipo: true,
+      estado: true,
+      creadaEn: true,
+      creadaPor: { select: { nombre: true } },
+      items: { select: { articulo: { select: { nombre: true } } } },
+    },
+  });
 
   const entregados = await db.entregaItem.findMany({
     where: { entrega: { receptorId: usuarioId } },
@@ -72,7 +95,7 @@ export default async function Historial({
     <div className="space-y-6">
       <div>
         <h1 className="titulo-pagina">
-          {actual.id === usuarioId ? "Mi equipamiento" : persona.nombre}
+          {esMio ? "Mi equipamiento" : persona.nombre}
         </h1>
         <p className="text-sm text-tinta-suave">
           {persona.brigada?.nombre ?? "Sin brigada"} · {vigentes.length} ítem
@@ -80,6 +103,49 @@ export default async function Historial({
           {vigentes.length === 1 ? "" : "s"}
         </p>
       </div>
+
+      {enCurso.length > 0 && (
+        <section>
+          <h2 className="titulo-seccion mb-2">
+            {esMio ? "Mis solicitudes en curso" : "Solicitudes en curso"}
+          </h2>
+          <ListaPanel>
+            {enCurso.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/solicitudes/${s.id}`}
+                  className="foco-anillo group block px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="min-w-0 text-sm font-medium">
+                      {/* Los artículos pedidos importan más que el folio: es lo
+                          que la persona está esperando. */}
+                      <span className="truncate">
+                        {s.items.map((i) => i.articulo.nombre).join(", ")}
+                      </span>
+                    </p>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-tinta-tenue">
+                      {formatearFolio(s.folio)}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 max-w-md">
+                    <ProgresoSolicitud estado={s.estado} />
+                  </div>
+
+                  <p className="mt-1 text-xs text-tinta-tenue">
+                    {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Equipamiento nuevo"} ·
+                    pedido el {formatearFecha(s.creadaEn)}
+                    {s.creadaPor
+                      ? ` · registrada por ${s.creadaPor.nombre}${esMio ? " a tu nombre" : ""}`
+                      : ""}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ListaPanel>
+        </section>
+      )}
 
       <section>
         <h2 className="titulo-seccion mb-2">
@@ -144,9 +210,21 @@ export default async function Historial({
                     {a.notas ? ` · ${a.notas}` : ""}
                   </p>
                 </div>
-                <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
-                  Bodega
-                </Insignia>
+                <div className="flex items-center gap-3">
+                  {/* Solo las asignaciones firmadas tienen acta: las anteriores
+                      a que se pidiera firma no pueden respaldar nada. */}
+                  {a.firmaPngUrl && (
+                    <a
+                      href={`/api/bodega/asignaciones/${a.id}/acta`}
+                      className="foco-anillo rounded text-xs text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
+                    >
+                      Acta de entrega
+                    </a>
+                  )}
+                  <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
+                    Bodega
+                  </Insignia>
+                </div>
               </li>
             ))}
           </ListaPanel>

@@ -4,8 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { registrarAuditoria, requerirUsuario } from "@/lib/auth";
-import { siguienteFolio } from "@/lib/folio";
-import { esGestion, motivosDe, puedeTransicionar } from "@/lib/solicitud-estado";
+import { formatearFolio, siguienteFolio } from "@/lib/folio";
+import {
+  esGestion,
+  MAXIMO_BENEFICIARIOS,
+  motivosDe,
+  puedeTransicionar,
+} from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
 import type { EstadoSolicitud, Motivo, TipoSolicitud } from "@/generated/prisma/enums";
 
@@ -20,100 +25,268 @@ type ItemEntrante = {
   entregaAnteriorItemId?: string | null;
 };
 
+/** Un destinatario del envío: a quién se le pide y qué se le pide. */
+type DestinatarioEntrante = {
+  usuarioId: string;
+  tipo: TipoSolicitud;
+  items: ItemEntrante[];
+};
+
+/**
+ * Crea las solicitudes. Normalmente el beneficiario es quien la escribe, pero
+ * gestión puede pedir a nombre de otros: en terreno la brigada avisa por radio
+ * o WhatsApp y quien tiene la cuenta abierta es el gestor. Cada solicitud queda
+ * a nombre de su beneficiario —él la ve en su cuenta, él firma al recibir— y
+ * `creadaPorId` guarda quién la tecleó.
+ *
+ * El envío puede traer varios destinatarios, y **cada uno con su propia carga**:
+ * no todos necesitan lo mismo, así que cada persona lleva su tipo de solicitud
+ * y sus ítems. Se crea una solicitud por persona, nunca una compartida: cada
+ * una tiene su folio, se aprueba por separado y termina en un acta firmada por
+ * su dueño.
+ *
+ * No se salta ningún paso: nacen PENDIENTE y siguen el mismo camino de siempre
+ * hasta el pedido al almacén.
+ */
 export async function crearSolicitud(
   _estado: EstadoFormulario,
   formData: FormData,
 ): Promise<EstadoFormulario> {
   const usuario = await requerirUsuario();
 
-  const tipo = String(formData.get("tipo") ?? "") as TipoSolicitud;
-  if (tipo !== "NUEVO" && tipo !== "REEMPLAZO") {
-    return { error: "Selecciona el tipo de solicitud." };
+  let destinatarios: DestinatarioEntrante[];
+  try {
+    const crudo = JSON.parse(String(formData.get("destinatarios") ?? "[]"));
+    destinatarios = Array.isArray(crudo) ? crudo : [];
+  } catch {
+    return { error: "No se pudo leer el contenido de la solicitud." };
+  }
+
+  if (destinatarios.length === 0) {
+    return { error: "Agrega al menos una persona con su equipamiento." };
+  }
+  if (destinatarios.length > MAXIMO_BENEFICIARIOS) {
+    return {
+      error: `No se puede pedir para más de ${MAXIMO_BENEFICIARIOS} personas a la vez.`,
+    };
+  }
+
+  const ids = destinatarios.map((d) => String(d.usuarioId ?? ""));
+  if (ids.some((id) => id === "")) {
+    return { error: "Falta indicar a quién corresponde una de las cargas." };
+  }
+  if (new Set(ids).size !== ids.length) {
+    return {
+      error:
+        "Una persona aparece dos veces. Junta su equipamiento en una sola carga.",
+    };
+  }
+
+  const aNombreDeOtros = ids.some((id) => id !== usuario.id);
+  if (aNombreDeOtros && !esGestion(usuario.rol)) {
+    return { error: "Solo gestión puede solicitar a nombre de otros usuarios." };
+  }
+
+  const personas = await db.usuario.findMany({
+    where: { id: { in: ids }, activo: true },
+    select: { id: true, nombre: true, brigadaId: true },
+  });
+  const personaPorId = new Map(personas.map((p) => [p.id, p]));
+
+  if (personas.length !== ids.length) {
+    return {
+      error:
+        "Alguno de los usuarios para los que solicitas ya no existe o está desactivado.",
+    };
   }
 
   const justificacion = String(formData.get("justificacion") ?? "").trim() || null;
 
-  let items: ItemEntrante[];
-  try {
-    items = JSON.parse(String(formData.get("items") ?? "[]"));
-  } catch {
-    return { error: "No se pudieron leer los ítems de la solicitud." };
-  }
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return { error: "Agrega al menos un ítem a la solicitud." };
-  }
-
-  // Validar contra el catálogo: nunca confiar en los ids que llegan del cliente.
+  // ── Validación, carga por carga ─────────────────────────────────────────
+  // Los errores nombran a la persona: con varias cargas en pantalla, «indica un
+  // motivo» a secas no diría dónde mirar.
+  const articulosPedidos = destinatarios.flatMap((d) =>
+    (d.items ?? []).map((i) => i.articuloId),
+  );
   const articulos = await db.articulo.findMany({
-    where: { id: { in: items.map((i) => i.articuloId) }, activo: true },
+    where: { id: { in: articulosPedidos }, activo: true },
   });
-  const porId = new Map(articulos.map((a) => [a.id, a]));
+  const articuloPorId = new Map(articulos.map((a) => [a.id, a]));
 
-  // El motivo debe pertenecer al grupo del tipo de solicitud (nuevo/reemplazo).
-  const motivosValidos = motivosDe(tipo);
-  for (const item of items) {
-    const articulo = porId.get(item.articuloId);
-    if (!articulo) return { error: "Uno de los artículos ya no está disponible." };
-    if (!Number.isInteger(item.cantidad) || item.cantidad < 1) {
-      return { error: `Cantidad inválida para ${articulo.nombre}.` };
+  // Los ítems entregados que se vienen a reemplazar, en una sola consulta.
+  const referencias = destinatarios.flatMap((d) =>
+    (d.items ?? [])
+      .map((i) => i.entregaAnteriorItemId)
+      .filter((v): v is string => Boolean(v)),
+  );
+  if (new Set(referencias).size !== referencias.length) {
+    return { error: "Hay un mismo ítem repetido para reemplazar." };
+  }
+
+  const previos = await db.entregaItem.findMany({
+    where: { id: { in: referencias } },
+    select: {
+      id: true,
+      reemplazadoEn: true,
+      entrega: { select: { receptorId: true } },
+      reemplazadoPor: { select: { id: true } },
+    },
+  });
+  const previoPorId = new Map(previos.map((p) => [p.id, p]));
+
+  for (const destinatario of destinatarios) {
+    const persona = personaPorId.get(destinatario.usuarioId)!;
+    const items = destinatario.items ?? [];
+    const tipo = destinatario.tipo;
+
+    if (tipo !== "NUEVO" && tipo !== "REEMPLAZO") {
+      return { error: `${persona.nombre}: selecciona el tipo de solicitud.` };
     }
-    if (!item.motivo || !motivosValidos.includes(item.motivo)) {
-      return { error: `Indica un motivo válido para ${articulo.nombre}.` };
+    if (!Array.isArray(items) || items.length === 0) {
+      return { error: `${persona.nombre}: agrega al menos un ítem.` };
+    }
+
+    const motivosValidos = motivosDe(tipo);
+    for (const item of items) {
+      const articulo = articuloPorId.get(item.articuloId);
+      if (!articulo) {
+        return { error: `${persona.nombre}: uno de los artículos ya no está disponible.` };
+      }
+      if (!Number.isInteger(item.cantidad) || item.cantidad < 1) {
+        return { error: `${persona.nombre}: cantidad inválida para ${articulo.nombre}.` };
+      }
+      if (!item.motivo || !motivosValidos.includes(item.motivo)) {
+        return { error: `${persona.nombre}: indica un motivo válido para ${articulo.nombre}.` };
+      }
+
+      // Un EntregaItem solo puede reemplazarse una vez, y solo por su dueño: el
+      // id llega del cliente, así que hay que comprobar de quién es.
+      if (!item.entregaAnteriorItemId) continue;
+
+      if (tipo !== "REEMPLAZO") {
+        return { error: `${persona.nombre}: solo un reemplazo puede apuntar a un ítem entregado.` };
+      }
+      const previo = previoPorId.get(item.entregaAnteriorItemId);
+      if (!previo) {
+        return { error: `${persona.nombre}: uno de los ítems a reemplazar ya no existe.` };
+      }
+      if (previo.entrega.receptorId !== persona.id) {
+        return {
+          error: `Uno de los ítems a reemplazar no está asignado a ${persona.nombre}.`,
+        };
+      }
+      if (previo.reemplazadoPor || previo.reemplazadoEn) {
+        return {
+          error: `${persona.nombre}: uno de los ítems seleccionados ya tiene un reemplazo en curso.`,
+        };
+      }
     }
   }
 
-  // Un EntregaItem solo puede ser reemplazado una vez.
-  const referencias = items
-    .map((i) => i.entregaAnteriorItemId)
-    .filter((v): v is string => Boolean(v));
-  if (referencias.length > 0) {
-    const yaReemplazados = await db.solicitudItem.count({
-      where: { entregaAnteriorItemId: { in: referencias } },
-    });
-    if (yaReemplazados > 0) {
-      return {
-        error: "Uno de los ítems seleccionados ya tiene un reemplazo en curso.",
-      };
-    }
-  }
+  const enviadaEn = new Date();
 
-  const solicitud = await db.$transaction(async (tx) => {
-    const folio = await siguienteFolio(tx);
-    return tx.solicitud.create({
-      data: {
-        folio,
-        solicitanteId: usuario.id,
-        brigadaId: usuario.brigadaId,
-        tipo,
-        estado: "PENDIENTE",
-        enviadaEn: new Date(),
-        justificacion,
-        items: {
-          create: items.map((i) => ({
-            articuloId: i.articuloId,
-            cantidad: i.cantidad,
-            motivo: i.motivo,
-            // Detalle, foto y cadena de reemplazo solo aplican a reemplazos.
-            detalleReemplazo: tipo === "REEMPLAZO" ? i.detalleReemplazo || null : null,
-            fotoEvidenciaUrl: tipo === "REEMPLAZO" ? i.fotoEvidenciaUrl || null : null,
-            entregaAnteriorItemId: tipo === "REEMPLAZO" ? i.entregaAnteriorItemId || null : null,
-          })),
+  // Todas las solicitudes se crean juntas o no se crea ninguna: si el pedido
+  // para la quinta persona falla, dejar las cuatro primeras vivas obligaría a
+  // adivinar cuáles hay que repetir.
+  const creadas = await db.$transaction(async (tx) => {
+    const resultado: {
+      id: string;
+      folio: number;
+      nombre: string;
+      esPropia: boolean;
+      items: number;
+      tipo: TipoSolicitud;
+    }[] = [];
+
+    for (const destinatario of destinatarios) {
+      const persona = personaPorId.get(destinatario.usuarioId)!;
+      const tipo = destinatario.tipo;
+      const items = destinatario.items;
+
+      const folio = await siguienteFolio(tx);
+      const solicitud = await tx.solicitud.create({
+        data: {
+          folio,
+          solicitanteId: persona.id,
+          // La brigada es la del beneficiario, no la de quien registra: es la
+          // que va en el formato del almacén.
+          brigadaId: persona.brigadaId,
+          creadaPorId: persona.id === usuario.id ? null : usuario.id,
+          tipo,
+          estado: "PENDIENTE",
+          enviadaEn,
+          justificacion,
+          items: {
+            create: items.map((i) => ({
+              articuloId: i.articuloId,
+              cantidad: i.cantidad,
+              motivo: i.motivo,
+              // Detalle, foto y cadena de reemplazo solo aplican a reemplazos.
+              detalleReemplazo: tipo === "REEMPLAZO" ? i.detalleReemplazo || null : null,
+              fotoEvidenciaUrl: tipo === "REEMPLAZO" ? i.fotoEvidenciaUrl || null : null,
+              entregaAnteriorItemId:
+                tipo === "REEMPLAZO" ? i.entregaAnteriorItemId || null : null,
+            })),
+          },
         },
+      });
+
+      resultado.push({
+        id: solicitud.id,
+        folio,
+        nombre: persona.nombre,
+        esPropia: persona.id === usuario.id,
+        items: items.length,
+        tipo,
+      });
+    }
+
+    return resultado;
+  });
+
+  for (const creada of creadas) {
+    await registrarAuditoria({
+      usuarioId: usuario.id,
+      entidad: "Solicitud",
+      entidadId: creada.id,
+      accion: "CREADA",
+      detalle: {
+        tipo: creada.tipo,
+        items: creada.items,
+        ...(creada.esPropia ? {} : { aNombreDe: creada.nombre }),
+        // Con un envío múltiple, deja rastro de con qué otras nació.
+        ...(creadas.length > 1
+          ? {
+              juntoConFolios: creadas
+                .filter((c) => c.id !== creada.id)
+                .map((c) => formatearFolio(c.folio)),
+            }
+          : {}),
       },
     });
-  });
+  }
 
-  await registrarAuditoria({
-    usuarioId: usuario.id,
-    entidad: "Solicitud",
-    entidadId: solicitud.id,
-    accion: "CREADA",
-    detalle: { tipo, items: items.length },
-  });
+  revalidatePath("/solicitudes");
+  revalidatePath("/escritorio");
 
-  await dejarAviso("Solicitud enviada. Queda a la espera de aprobación.");
-  redirect(`/solicitudes/${solicitud.id}`);
+  // Con una sola solicitud se va a su detalle, que es lo que se quiere ver.
+  // Con varias no hay un detalle único al que ir: el listado las muestra todas.
+  if (creadas.length === 1) {
+    const [unica] = creadas;
+    await dejarAviso(
+      unica.esPropia
+        ? "Solicitud enviada. Queda a la espera de aprobación."
+        : `Solicitud creada a nombre de ${unica.nombre}. Queda a la espera de aprobación.`,
+    );
+    redirect(`/solicitudes/${unica.id}`);
+  }
+
+  await dejarAviso(
+    `Se crearon ${creadas.length} solicitudes, una por persona (${creadas
+      .map((c) => formatearFolio(c.folio))
+      .join(", ")}). Todas quedan a la espera de aprobación.`,
+  );
+  redirect("/solicitudes?estado=PENDIENTE");
 }
 
 export type CambioItem = {
@@ -444,4 +617,151 @@ export async function accionCambiarEstado(formData: FormData) {
   }
 
   redirect(`/solicitudes/${solicitudId}`);
+}
+
+/**
+ * Aprueba varias solicitudes de una vez.
+ *
+ * Cuando un gestor carga el equipamiento de una brigada entera quedan diez o
+ * quince pedidos idénticos en la cola; aprobarlos uno por uno es puro trámite.
+ * Se valida cada uno igual que en la vía individual —mismo rol, mismo estado de
+ * origen— y las que no correspondan se dejan intactas y se informan, en vez de
+ * fallar el lote completo o aprobarlas a la fuerza.
+ */
+export async function aprobarVarias(
+  ids: string[],
+): Promise<{ error?: string; mensaje?: string }> {
+  const usuario = await requerirUsuario();
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { error: "No seleccionaste ninguna solicitud." };
+  }
+
+  const solicitudes = await db.solicitud.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, folio: true, estado: true },
+  });
+
+  const aprobables = solicitudes.filter((s) =>
+    puedeTransicionar(s.estado, "APROBADA", usuario.rol),
+  );
+
+  if (aprobables.length === 0) {
+    return {
+      error:
+        "Ninguna de las solicitudes seleccionadas se puede aprobar: revisa que sigan pendientes.",
+    };
+  }
+
+  const ahora = new Date();
+  await db.solicitud.updateMany({
+    where: { id: { in: aprobables.map((s) => s.id) } },
+    data: { estado: "APROBADA", aprobadorId: usuario.id, aprobadaEn: ahora },
+  });
+
+  for (const s of aprobables) {
+    await registrarAuditoria({
+      usuarioId: usuario.id,
+      entidad: "Solicitud",
+      entidadId: s.id,
+      accion: "APROBADA",
+      detalle: aprobables.length > 1 ? { enLoteDe: aprobables.length } : undefined,
+    });
+  }
+
+  const omitidas = solicitudes.length - aprobables.length;
+  const mensaje =
+    aprobables.length === 1
+      ? "Solicitud aprobada."
+      : `Se aprobaron ${aprobables.length} solicitudes.`;
+
+  await dejarAviso(
+    omitidas > 0
+      ? `${mensaje} ${omitidas} no estaba${omitidas === 1 ? "" : "n"} pendiente${
+          omitidas === 1 ? "" : "s"
+        } y quedó${omitidas === 1 ? "" : "aron"} sin cambios.`
+      : mensaje,
+  );
+
+  revalidatePath("/solicitudes");
+  revalidatePath("/escritorio");
+  return { mensaje };
+}
+
+/**
+ * Marca varias solicitudes como pedidas al almacén, con una misma referencia.
+ *
+ * Va de la mano del formato combinado: se descarga un único documento con
+ * todas las seleccionadas y se envía una sola vez, así que registrarlas por
+ * separado obligaría a repetir el mismo número de pedido una y otra vez.
+ */
+export async function enviarVariasAlAlmacen(
+  ids: string[],
+  pedidoExternoRef?: string,
+): Promise<{ error?: string; mensaje?: string }> {
+  const usuario = await requerirUsuario();
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { error: "No seleccionaste ninguna solicitud." };
+  }
+
+  const solicitudes = await db.solicitud.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, estado: true },
+  });
+
+  const enviables = solicitudes.filter((s) =>
+    puedeTransicionar(s.estado, "EN_GESTION", usuario.rol),
+  );
+
+  if (enviables.length === 0) {
+    return {
+      error:
+        "Ninguna de las solicitudes seleccionadas se puede pedir al almacén: deben estar aprobadas.",
+    };
+  }
+
+  const referencia = pedidoExternoRef?.trim() || null;
+  const ahora = new Date();
+
+  await db.solicitud.updateMany({
+    where: { id: { in: enviables.map((s) => s.id) } },
+    data: {
+      estado: "EN_GESTION",
+      gestorId: usuario.id,
+      enGestionEn: ahora,
+      pedidoExternoRef: referencia,
+    },
+  });
+
+  for (const s of enviables) {
+    await registrarAuditoria({
+      usuarioId: usuario.id,
+      entidad: "Solicitud",
+      entidadId: s.id,
+      accion: "EN_GESTION",
+      detalle: {
+        ...(referencia ? { pedidoExternoRef: referencia } : {}),
+        ...(enviables.length > 1 ? { enLoteDe: enviables.length } : {}),
+      },
+    });
+  }
+
+  const omitidas = solicitudes.length - enviables.length;
+  const mensaje =
+    enviables.length === 1
+      ? "Pedido registrado con el almacén."
+      : `Se registraron ${enviables.length} solicitudes como pedidas al almacén.`;
+
+  await dejarAviso(
+    omitidas > 0
+      ? `${mensaje} ${omitidas} no estaba${omitidas === 1 ? "" : "n"} aprobada${
+          omitidas === 1 ? "" : "s"
+        } y quedó${omitidas === 1 ? "" : "aron"} sin cambios.`
+      : mensaje,
+  );
+
+  revalidatePath("/solicitudes");
+  revalidatePath("/escritorio");
+  return { mensaje };
 }

@@ -91,6 +91,63 @@ export const COLOR_ESTADO: Record<EstadoSolicitud, string> = {
   CANCELADA: "bg-lienzo text-tinta-tenue ring-borde",
 };
 
+/**
+ * Tope de beneficiarios en un envío múltiple: una brigada entera cabe de
+ * sobra. Vive aquí y no en la Server Action porque un archivo "use server"
+ * solo puede exportar funciones async.
+ */
+export const MAXIMO_BENEFICIARIOS = 50;
+
+/**
+ * Avance normal de una solicitud, en orden. Existe para poder decirle al
+ * beneficiario «paso 3 de 5» en vez de obligarlo a interpretar el nombre del
+ * estado. Los desenlaces negativos no son etapas: cortan el flujo en vez de
+ * avanzarlo, y BORRADOR queda fuera porque todavía no empieza el trámite.
+ */
+export const ETAPAS_FLUJO: EstadoSolicitud[] = [
+  "PENDIENTE",
+  "APROBADA",
+  "EN_GESTION",
+  "RECIBIDA",
+  "ENTREGADA",
+];
+
+/**
+ * Qué está pasando ahora, en las palabras de quien espera el equipamiento y no
+ * conoce el proceso interno. ETIQUETA_ESTADO nombra el estado; esto explica qué
+ * significa para él y quién tiene la pelota.
+ */
+export const ESPERA_DEL_SOLICITANTE: Record<EstadoSolicitud, string> = {
+  BORRADOR: "Todavía sin enviar.",
+  PENDIENTE: "A la espera de que la aprueben.",
+  APROBADA: "Aprobada. Falta que se pida al almacén.",
+  EN_GESTION: "Pedida al almacén: el material viene en camino.",
+  RECIBIDA: "El material ya llegó a bodega. Te citarán para entregártelo.",
+  ENTREGADA: "Entregada y firmada.",
+  RECHAZADA: "No fue aprobada.",
+  CANCELADA: "Se canceló antes de completarse.",
+};
+
+export type PasoSolicitud = {
+  /** Posición en ETAPAS_FLUJO, 1-indexada. 0 si el flujo no avanzó por ahí. */
+  paso: number;
+  total: number;
+  /** El flujo llegó a su fin natural. */
+  completado: boolean;
+  /** Rechazada o cancelada: el avance se cortó y ya no continúa. */
+  interrumpido: boolean;
+};
+
+export function pasoDeSolicitud(estado: EstadoSolicitud): PasoSolicitud {
+  const indice = ETAPAS_FLUJO.indexOf(estado);
+  return {
+    paso: indice + 1, // -1 + 1 = 0 para los estados fuera del avance
+    total: ETAPAS_FLUJO.length,
+    completado: estado === "ENTREGADA",
+    interrumpido: estado === "RECHAZADA" || estado === "CANCELADA",
+  };
+}
+
 export const ETIQUETA_MOTIVO: Record<Motivo, string> = {
   DESGASTE: "Desgaste por uso",
   EXTRAVIO: "Extraviado (a)",

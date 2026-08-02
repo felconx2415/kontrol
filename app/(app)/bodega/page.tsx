@@ -53,10 +53,13 @@ export default async function PaginaBodega({
     estado?: string;
     stock?: string;
     page?: string;
+    acta?: string;
+    asignacion?: string;
   }>;
 }) {
   await requerirRol(...ROLES_GESTION);
-  const { tab: tabParam, q, cat, estado, stock, page } = await searchParams;
+  const { tab: tabParam, q, cat, estado, stock, page, acta, asignacion } =
+    await searchParams;
   const tab: Tab = TABS.some((t) => t.id === tabParam) ? (tabParam as Tab) : "inventario";
   const pagina = Math.max(1, Number(page) || 1);
 
@@ -136,6 +139,35 @@ export default async function PaginaBodega({
     totalPaginasMov = Math.ceil(res.total / POR_PAGINA);
   }
 
+  // Préstamo recién registrado, para ofrecer su acta de inmediato.
+  const recien = acta
+    ? await db.prestamo.findUnique({
+        where: { id: acta },
+        select: {
+          id: true,
+          cantidad: true,
+          persona: true,
+          prestadoEn: true,
+          item: { select: { nombre: true, unidad: true } },
+        },
+      })
+    : null;
+
+  // Asignación recién registrada: mismo trato que el préstamo, porque también
+  // es una entrega de material que alguien acaba de firmar.
+  const recienAsignado = asignacion
+    ? await db.asignacionBodega.findUnique({
+        where: { id: asignacion },
+        select: {
+          id: true,
+          cantidad: true,
+          asignadoEn: true,
+          item: { select: { nombre: true, unidad: true } },
+          usuario: { select: { nombre: true } },
+        },
+      })
+    : null;
+
   const hrefInv = (p: number) => {
     const sp = new URLSearchParams({ tab: "inventario" });
     if (q) sp.set("q", q);
@@ -163,6 +195,71 @@ export default async function PaginaBodega({
           Exportar PDF
         </a>
       </div>
+
+      {/* Respaldo de la entrega, en el momento de la entrega. Sigue el mismo
+          patrón que el acta de una solicitud entregada: panel en verde con el
+          documento a un clic, en vez de un enlace perdido en la tabla. */}
+      {recien && (
+        <section className="no-print rounded-xl border border-exito-borde bg-exito-fondo p-4">
+          <h2 className="text-sm font-semibold text-exito">Préstamo registrado</h2>
+          {/* La fecha va al final de su propia línea: `fechaHora` ya termina en
+              punto («p. m.») y encadenar otra frase dejaba un punto doble. */}
+          <p className="mt-1 text-sm text-tinta">
+            {recien.cantidad} {recien.item.unidad}
+            {recien.cantidad === 1 ? "" : "s"} de «{recien.item.nombre}» a{" "}
+            {recien.persona} · {fechaHora(recien.prestadoEn)}
+          </p>
+          <p className="mt-0.5 text-sm text-tinta-suave">
+            Descarga el acta firmada como respaldo de la entrega.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <a
+              href={`/api/bodega/prestamos/${recien.id}/acta`}
+              className="foco-anillo inline-flex min-h-11 items-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+            >
+              Descargar acta de entrega (PDF)
+            </a>
+            <Link
+              href="/bodega?tab=prestamos"
+              className="foco-anillo inline-flex min-h-11 items-center rounded px-1 text-sm text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
+            >
+              Cerrar
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {recienAsignado && (
+        <section className="no-print rounded-xl border border-exito-borde bg-exito-fondo p-4">
+          <h2 className="text-sm font-semibold text-exito">
+            Equipamiento entregado
+          </h2>
+          <p className="mt-1 text-sm text-tinta">
+            {recienAsignado.cantidad} {recienAsignado.item.unidad}
+            {recienAsignado.cantidad === 1 ? "" : "s"} de «
+            {recienAsignado.item.nombre}» a {recienAsignado.usuario.nombre} ·{" "}
+            {fechaHora(recienAsignado.asignadoEn)}
+          </p>
+          <p className="mt-0.5 text-sm text-tinta-suave">
+            Entrega definitiva: el material queda a su nombre en «Mi
+            equipamiento». Descarga el acta firmada como respaldo.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <a
+              href={`/api/bodega/asignaciones/${recienAsignado.id}/acta`}
+              className="foco-anillo inline-flex min-h-11 items-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+            >
+              Descargar acta de entrega (PDF)
+            </a>
+            <Link
+              href="/bodega"
+              className="foco-anillo inline-flex min-h-11 items-center rounded px-1 text-sm text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
+            >
+              Cerrar
+            </Link>
+          </div>
+        </section>
+      )}
 
       <BarraAcciones
         formularioItem={<FormularioItem />}
@@ -371,7 +468,7 @@ export default async function PaginaBodega({
                         href={`/api/bodega/prestamos/${p.id}/acta`}
                         className="foco-anillo inline-flex min-h-11 items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
                       >
-                        Acta
+                        Acta de entrega
                       </a>
                       <Link
                         href={`/bodega/prestamos/${p.id}/devolver`}

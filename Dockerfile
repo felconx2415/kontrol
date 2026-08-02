@@ -23,6 +23,17 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# Chromium para imprimir las actas en PDF. El formato de acta se maqueta en
+# HTML/CSS y se imprime con Playwright, así que el navegador es parte del
+# runtime, no una herramienta de desarrollo. `--with-deps` instala además las
+# bibliotecas de sistema que Chromium necesita en Debian.
+#
+# Es lo que más pesa de la imagen (~400 MB) y lo que más tarda en compilar en
+# ARM; va en su propia capa para que solo se rehaga si cambia Playwright.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install --with-deps chromium \
+  && rm -rf /var/lib/apt/lists/*
+
 # Código y build de Next (incluye `prisma generate`).
 COPY . .
 RUN npx prisma generate && npm run build

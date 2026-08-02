@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import type { Rol } from "@/generated/prisma/enums";
+import type { EstadoSolicitud, Rol } from "@/generated/prisma/enums";
 import { DIAS_AVISO_VENCIMIENTO } from "@/lib/vencimientos";
 import { esGestion } from "@/lib/solicitud-estado";
 
@@ -26,8 +26,11 @@ export type SolicitudBandeja = {
   id: string;
   folio: number;
   tipo: "NUEVO" | "REEMPLAZO";
+  estado: EstadoSolicitud;
   solicitanteNombre: string;
   brigadaNombre: string | null;
+  /** Quién la registró, si no fue el propio beneficiario. */
+  creadaPorNombre: string | null;
   creadaEn: Date;
   totalItems: number;
 };
@@ -37,8 +40,10 @@ const SELECCION = {
     id: true,
     folio: true,
     tipo: true,
+    estado: true,
     creadaEn: true,
     solicitante: { select: { nombre: true } },
+    creadaPor: { select: { nombre: true } },
     brigada: { select: { nombre: true } },
     _count: { select: { items: true } },
   },
@@ -48,8 +53,10 @@ type FilaCruda = {
   id: string;
   folio: number;
   tipo: "NUEVO" | "REEMPLAZO";
+  estado: EstadoSolicitud;
   creadaEn: Date;
   solicitante: { nombre: string };
+  creadaPor: { nombre: string } | null;
   brigada: { nombre: string } | null;
   _count: { items: number };
 };
@@ -59,8 +66,10 @@ function mapear(filas: FilaCruda[]): SolicitudBandeja[] {
     id: s.id,
     folio: s.folio,
     tipo: s.tipo,
+    estado: s.estado,
     solicitanteNombre: s.solicitante.nombre,
     brigadaNombre: s.brigada?.nombre ?? null,
+    creadaPorNombre: s.creadaPor?.nombre ?? null,
     creadaEn: s.creadaEn,
     totalItems: s._count.items,
   }));

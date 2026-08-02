@@ -97,6 +97,7 @@ model Usuario {
   solicitudesAprobadas   Solicitud[] @relation("Aprobador")
   solicitudesGestionadas Solicitud[] @relation("Gestor")
   solicitudesEditadas    Solicitud[] @relation("EditorSolicitud")
+  solicitudesRegistradas Solicitud[] @relation("CreadorSolicitud")
 
   entregasRecibidas Entrega[] @relation("Receptor")
   entregasHechas    Entrega[] @relation("EntregadoPor")
@@ -143,14 +144,21 @@ model Articulo {
 }
 
 model Solicitud {
-  id            String          @id @default(cuid())
-  folio         Int             @unique
+  id String @id @default(cuid())
+  folio Int @unique
+  // Beneficiario: para quién es el equipamiento. Es quien firma al recibir y
+  // en cuyo «Mi equipamiento» queda el ítem, aunque no haya tecleado él la
+  // solicitud (ver creadaPorId).
   solicitanteId String
   brigadaId     String?
   tipo          TipoSolicitud
   estado        EstadoSolicitud @default(BORRADOR)
   justificacion String?
   creadaEn      DateTime        @default(now())
+
+  // Quién registró la solicitud cuando no es el propio beneficiario: gestión
+  // puede pedir equipamiento a nombre de un usuario. Null = la creó él mismo.
+  creadaPorId String?
 
   enviadaEn     DateTime?
   aprobadorId   String?
@@ -171,6 +179,7 @@ model Solicitud {
   canceladaEn DateTime?
 
   solicitante Usuario  @relation("Solicitante", fields: [solicitanteId], references: [id])
+  creadaPor   Usuario? @relation("CreadorSolicitud", fields: [creadaPorId], references: [id])
   aprobador   Usuario? @relation("Aprobador", fields: [aprobadorId], references: [id])
   gestor      Usuario? @relation("Gestor", fields: [gestorId], references: [id])
   editadaPor  Usuario? @relation("EditorSolicitud", fields: [editadaPorId], references: [id])
@@ -358,6 +367,11 @@ model AsignacionBodega {
   notas         String?
   asignadoPorId String
   asignadoEn    DateTime @default(now())
+
+  // Firma de quien recibe, como PNG guardado en /uploads. Es el respaldo de la
+  // entrega y alimenta el acta en PDF. Nullable por las asignaciones anteriores
+  // a que se pidiera firma.
+  firmaPngUrl String?
 
   item        ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
   usuario     Usuario    @relation("EquipamientoAsignado", fields: [usuarioId], references: [id])
