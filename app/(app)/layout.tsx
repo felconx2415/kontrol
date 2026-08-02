@@ -48,8 +48,9 @@ export default async function LayoutApp({
           pestañas: ahora es una sola píldora oscura flotando sobre el lienzo.
           Todo cabe en una línea, así que el contenido empieza ~44px más
           arriba. Bajo lg los ocho destinos no entran, y el cajón toma el
-          relevo. */}
-      <header className="no-print px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4">
+          relevo. La píldora es pegajosa: al hacer scroll queda flotando sobre
+          el contenido, con el hueco de su padding dejando ver el lienzo. */}
+      <header className="no-print sticky top-0 z-[var(--z-pegajoso)] px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4">
         <div className="mx-auto flex max-w-6xl items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
           <div className="flex min-w-0 items-center gap-1">
             <MenuMovil
