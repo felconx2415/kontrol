@@ -67,14 +67,19 @@ export default async function PaginaBodega({
     db.itemBodega.findMany({
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
-        prestamos: { where: { estado: "ACTIVO" }, select: { cantidad: true } },
+        lineasPrestamo: {
+          where: { devueltoEn: null, prestamo: { estado: "ACTIVO" } },
+          select: { cantidad: true },
+        },
       },
     }),
     db.prestamo.findMany({
       where: { estado: "ACTIVO" },
       orderBy: { prestadoEn: "asc" },
       include: {
-        item: { select: { id: true, nombre: true, unidad: true } },
+        items: {
+          include: { item: { select: { id: true, nombre: true, unidad: true } } },
+        },
         prestadoPor: { select: { nombre: true } },
       },
     }),
@@ -103,7 +108,10 @@ export default async function PaginaBodega({
 
   // Resumen de cabecera.
   const totalUnidades = items.reduce((s, i) => s + i.stock, 0);
-  const totalPrestado = prestamos.reduce((s, p) => s + p.cantidad, 0);
+  const totalPrestado = prestamos.reduce(
+    (s, p) => s + p.items.reduce((n, l) => n + l.cantidad, 0),
+    0,
+  );
   const stockBajo = items.filter(
     (i) => i.activo && i.stock <= UMBRAL_STOCK_BAJO,
   ).length;
@@ -145,10 +153,15 @@ export default async function PaginaBodega({
         where: { id: acta },
         select: {
           id: true,
-          cantidad: true,
           persona: true,
           prestadoEn: true,
-          item: { select: { nombre: true, unidad: true } },
+          estado: true,
+          items: {
+            select: {
+              cantidad: true,
+              item: { select: { nombre: true, unidad: true } },
+            },
+          },
         },
       })
     : null;
@@ -201,15 +214,24 @@ export default async function PaginaBodega({
           documento a un clic, en vez de un enlace perdido en la tabla. */}
       {recien && (
         <section className="no-print rounded-xl border border-exito-borde bg-exito-fondo p-4">
-          <h2 className="text-sm font-semibold text-exito">Préstamo registrado</h2>
+          <h2 className="text-sm font-semibold text-exito">
+            {recien.estado === "DEVUELTO" ? "Devolución registrada" : "Préstamo registrado"}
+          </h2>
           {/* La fecha va al final de su propia línea: `fechaHora` ya termina en
               punto («p. m.») y encadenar otra frase dejaba un punto doble. */}
           <p className="mt-1 text-sm text-tinta">
-            {recien.cantidad} {recien.item.unidad}
-            {recien.cantidad === 1 ? "" : "s"} de «{recien.item.nombre}» a{" "}
+            {recien.items.length} ítem{recien.items.length === 1 ? "" : "s"} a{" "}
             {recien.persona} · {fechaHora(recien.prestadoEn)}
           </p>
-          <p className="mt-0.5 text-sm text-tinta-suave">
+          <ul className="mt-1 text-sm text-tinta-suave">
+            {recien.items.map((l, n) => (
+              <li key={n}>
+                · {l.cantidad} {l.item.unidad}
+                {l.cantidad === 1 ? "" : "s"} de «{l.item.nombre}»
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-sm text-tinta-suave">
             Descarga el acta firmada como respaldo de la entrega.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -405,7 +427,7 @@ export default async function PaginaBodega({
                       ubicacion: i.ubicacion,
                       notas: i.notas,
                       stock: i.stock,
-                      prestado: i.prestamos.reduce((s, p) => s + p.cantidad, 0),
+                      prestado: i.lineasPrestamo.reduce((s, l) => s + l.cantidad, 0),
                       activo: i.activo,
                     }}
                   />
@@ -434,8 +456,7 @@ export default async function PaginaBodega({
           ) : (
             <Tabla
               encabezados={[
-                "Ítem",
-                "Cantidad",
+                "Material",
                 "Prestado a",
                 "Registró",
                 "Fecha",
@@ -444,16 +465,25 @@ export default async function PaginaBodega({
             >
               {prestamos.map((p) => (
                 <Fila key={p.id}>
-                  <Celda etiqueta="Ítem">
-                    <Link
-                      href={`/bodega/${p.item.id}`}
-                      className="foco-anillo rounded font-medium text-marca-700 underline-offset-2 hover:underline"
-                    >
-                      {p.item.nombre}
-                    </Link>
-                  </Celda>
-                  <Celda etiqueta="Cantidad" mono>
-                    {p.cantidad} {p.item.unidad}
+                  {/* Un préstamo puede llevar varias cosas: se listan todas,
+                      que es lo que hay que devolver. */}
+                  <Celda etiqueta="Material">
+                    <ul className="space-y-0.5">
+                      {p.items.map((l) => (
+                        <li key={l.id}>
+                          <Link
+                            href={`/bodega/${l.item.id}`}
+                            className="foco-anillo rounded font-medium text-marca-700 underline-offset-2 hover:underline"
+                          >
+                            {l.item.nombre}
+                          </Link>
+                          <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                            {" "}
+                            ×{l.cantidad}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </Celda>
                   <Celda etiqueta="Prestado a">{p.persona}</Celda>
                   <Celda etiqueta="Registró" tenue>

@@ -238,9 +238,21 @@ export async function registrarMovimiento(
   return { ok: mensajes[tipo] };
 }
 
+/** Una línea del préstamo tal como llega del formulario. */
+type LineaPrestamo = {
+  itemId: string;
+  cantidad: number;
+  numeroSerie?: string | null;
+};
+
 /**
- * Registra un préstamo firmado: descuenta stock, crea el préstamo con su firma
- * de salida y deja el movimiento. La firma es obligatoria (acta de salida).
+ * Registra un préstamo firmado con una o varias líneas.
+ *
+ * A una cuadrilla se le entregan varias cosas de una vez y firma una sola
+ * acta; cuando el préstamo era de un ítem había que repetir el trámite —y la
+ * firma— tantas veces como herramientas salieran.
+ *
+ * La firma de salida es obligatoria: es lo que convierte el registro en acta.
  */
 export async function registrarPrestamo(
   _estado: EstadoBodega,
@@ -248,84 +260,127 @@ export async function registrarPrestamo(
 ): Promise<EstadoBodega> {
   const usuario = await requerirRol(...ROLES_GESTION);
 
-  const itemId = String(formData.get("itemId") ?? "");
-  const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
   const persona = String(formData.get("persona") ?? "").trim();
   const notas = String(formData.get("notas") ?? "").trim() || null;
-  const numeroSerie = String(formData.get("numeroSerie") ?? "").trim() || null;
   const firma = bufferDesdeDataUrl(String(formData.get("firmaSalida") ?? ""));
 
-  if (cantidad === null) {
-    return { error: "La cantidad debe ser un número entero mayor que 0." };
-  }
   if (!persona) return { error: "Indica a quién se presta el material." };
   if (!firma) return { error: "Falta la firma de salida de quien recibe." };
 
-  const item = await db.itemBodega.findUnique({ where: { id: itemId } });
-  if (!item) return { error: "Ese ítem ya no existe en la bodega." };
-  if (!item.activo) return { error: "Ese ítem está inactivo. Actívalo antes de prestarlo." };
-  if (cantidad > item.stock) {
-    return {
-      error: `No hay stock suficiente: quedan ${item.stock} ${item.unidad}(s) de «${item.nombre}».`,
-    };
+  let lineas: LineaPrestamo[];
+  try {
+    const crudo = JSON.parse(String(formData.get("items") ?? "[]"));
+    lineas = Array.isArray(crudo) ? crudo : [];
+  } catch {
+    return { error: "No se pudieron leer los ítems del préstamo." };
+  }
+
+  if (lineas.length === 0) return { error: "Agrega al menos un ítem al préstamo." };
+
+  const ids = lineas.map((l) => String(l.itemId ?? ""));
+  if (new Set(ids).size !== ids.length) {
+    return { error: "Hay un ítem repetido. Súmalo en una sola línea." };
+  }
+
+  const items = await db.itemBodega.findMany({ where: { id: { in: ids } } });
+  const porId = new Map(items.map((i) => [i.id, i]));
+
+  // Se valida todo antes de tocar nada: un préstamo a medias dejaría stock
+  // descontado sin registro que lo respalde.
+  for (const linea of lineas) {
+    const item = porId.get(linea.itemId);
+    if (!item) return { error: "Uno de los ítems ya no existe en la bodega." };
+    if (!item.activo) {
+      return { error: `«${item.nombre}» está inactivo. Actívalo antes de prestarlo.` };
+    }
+    if (!Number.isInteger(linea.cantidad) || linea.cantidad < 1) {
+      return { error: `Cantidad inválida para «${item.nombre}».` };
+    }
+    if (linea.cantidad > item.stock) {
+      return {
+        error: `No hay stock suficiente de «${item.nombre}»: quedan ${item.stock} ${item.unidad}(s).`,
+      };
+    }
   }
 
   const firmaSalidaUrl = await guardarImagen(firma, "image/png", "firmas");
-  const stockResultante = item.stock - cantidad;
 
   const prestamoId = await db.$transaction(async (tx) => {
-    await tx.itemBodega.update({
-      where: { id: item.id },
-      data: { stock: stockResultante },
-    });
     const prestamo = await tx.prestamo.create({
-      data: {
-        itemId: item.id,
-        cantidad,
-        numeroSerie,
-        persona,
-        notas,
-        prestadoPorId: usuario.id,
-        firmaSalidaUrl,
-      },
+      data: { persona, notas, prestadoPorId: usuario.id, firmaSalidaUrl },
     });
-    await tx.movimientoBodega.create({
-      data: {
-        itemId: item.id,
-        tipo: "PRESTAMO",
-        cantidad,
-        stockResultante,
-        persona,
-        notas,
-        usuarioId: usuario.id,
-        prestamoId: prestamo.id,
-      },
-    });
+
+    for (const linea of lineas) {
+      const item = porId.get(linea.itemId)!;
+      const stockResultante = item.stock - linea.cantidad;
+
+      await tx.itemBodega.update({
+        where: { id: item.id },
+        data: { stock: stockResultante },
+      });
+      await tx.prestamoItem.create({
+        data: {
+          prestamoId: prestamo.id,
+          itemId: item.id,
+          cantidad: linea.cantidad,
+          numeroSerie: String(linea.numeroSerie ?? "").trim() || null,
+        },
+      });
+      await tx.movimientoBodega.create({
+        data: {
+          itemId: item.id,
+          tipo: "PRESTAMO",
+          cantidad: linea.cantidad,
+          stockResultante,
+          persona,
+          notas,
+          usuarioId: usuario.id,
+          prestamoId: prestamo.id,
+        },
+      });
+    }
+
     return prestamo.id;
   });
 
   await registrarAuditoria({
     usuarioId: usuario.id,
-    entidad: "ItemBodega",
-    entidadId: item.id,
+    entidad: "Prestamo",
+    entidadId: prestamoId,
     accion: "MOV_PRESTAMO",
-    detalle: { cantidad, persona, stockResultante },
+    detalle: { persona, lineas: lineas.length },
   });
 
   await dejarAviso(
-    `Préstamo de «${item.nombre}» a ${persona} registrado con firma.`,
+    lineas.length === 1
+      ? `Préstamo a ${persona} registrado con firma.`
+      : `Préstamo de ${lineas.length} ítems a ${persona} registrado con firma.`,
   );
   revalidatePath("/bodega");
-  revalidatePath(`/bodega/${item.id}`);
   // Se vuelve a la bodega con el acta recién firmada en primer plano: el
   // respaldo de la entrega se necesita en ese momento, no cuando alguien se
   // acuerde de buscarlo en la tabla.
   redirect(`/bodega?tab=prestamos&acta=${prestamoId}`);
 }
 
+/** Cómo vuelve cada línea, tal como llega del formulario de devolución. */
+type LineaDevolucion = {
+  lineaId: string;
+  estado: "BUENO" | "DANADO" | "PERDIDO";
+  observacion?: string | null;
+  fotos?: string[];
+};
+
 /**
- * Registra la devolución firmada de un préstamo: repone stock, guarda la firma
- * de entrega, las observaciones y las fotos de daños (si las hay).
+ * Registra la devolución firmada de un préstamo, línea por línea.
+ *
+ * Cada ítem se recibe con su propio estado, porque es lo que se comprueba al
+ * revisarlos: uno puede volver intacto y el de al lado roto. Lo que vuelve
+ * —bien o dañado— repone stock; lo que se declara perdido no, porque
+ * físicamente no está.
+ *
+ * Se devuelve el préstamo completo en un acto: así la firma de quien entrega
+ * corresponde sin ambigüedad a todo lo que se está recibiendo.
  */
 export async function devolverPrestamo(
   _estado: EstadoBodega,
@@ -339,71 +394,118 @@ export async function devolverPrestamo(
 
   if (!firma) return { error: "Falta la firma de entrega de quien devuelve." };
 
-  let fotos: string[] = [];
+  let devoluciones: LineaDevolucion[];
   try {
-    const leido = JSON.parse(String(formData.get("fotos") ?? "[]"));
-    if (Array.isArray(leido)) fotos = leido.filter((u) => typeof u === "string");
+    const crudo = JSON.parse(String(formData.get("devoluciones") ?? "[]"));
+    devoluciones = Array.isArray(crudo) ? crudo : [];
   } catch {
-    // Fotos ilegibles: se ignoran, no deben bloquear la devolución.
+    return { error: "No se pudo leer el estado de los ítems devueltos." };
   }
 
   const prestamo = await db.prestamo.findUnique({
     where: { id: prestamoId },
-    include: { item: true },
+    include: { items: { include: { item: true } } },
   });
   if (!prestamo || prestamo.estado !== "ACTIVO") {
     return { error: "Ese préstamo ya no está activo." };
   }
 
+  const pendientes = prestamo.items.filter((l) => l.devueltoEn === null);
+  const porLinea = new Map(devoluciones.map((d) => [d.lineaId, d]));
+
+  const ESTADOS = ["BUENO", "DANADO", "PERDIDO"] as const;
+  for (const linea of pendientes) {
+    const dev = porLinea.get(linea.id);
+    if (!dev) {
+      return { error: `Falta indicar cómo volvió «${linea.item.nombre}».` };
+    }
+    if (!ESTADOS.includes(dev.estado)) {
+      return { error: `Estado inválido para «${linea.item.nombre}».` };
+    }
+    if (dev.estado !== "BUENO" && !String(dev.observacion ?? "").trim()) {
+      return {
+        error: `Describe qué pasó con «${linea.item.nombre}»: no volvió en buen estado.`,
+      };
+    }
+  }
+
   const firmaDevolucionUrl = await guardarImagen(firma, "image/png", "firmas");
-  const stockResultante = prestamo.item.stock + prestamo.cantidad;
+  const ahora = new Date();
 
   await db.$transaction(async (tx) => {
-    await tx.itemBodega.update({
-      where: { id: prestamo.itemId },
-      data: { stock: stockResultante },
-    });
+    for (const linea of pendientes) {
+      const dev = porLinea.get(linea.id)!;
+      const fotos = (dev.fotos ?? []).filter((u) => typeof u === "string");
+
+      await tx.prestamoItem.update({
+        where: { id: linea.id },
+        data: {
+          devueltoEn: ahora,
+          estadoDevolucion: dev.estado,
+          observacion: String(dev.observacion ?? "").trim() || null,
+          fotos: fotos.length > 0 ? JSON.stringify(fotos) : null,
+        },
+      });
+
+      // Lo perdido no vuelve al stock: no está.
+      if (dev.estado === "PERDIDO") continue;
+
+      const actual = await tx.itemBodega.findUnique({ where: { id: linea.itemId } });
+      const stockResultante = (actual?.stock ?? 0) + linea.cantidad;
+
+      await tx.itemBodega.update({
+        where: { id: linea.itemId },
+        data: { stock: stockResultante },
+      });
+      await tx.movimientoBodega.create({
+        data: {
+          itemId: linea.itemId,
+          tipo: "DEVOLUCION",
+          cantidad: linea.cantidad,
+          stockResultante,
+          persona: prestamo.persona,
+          notas:
+            dev.estado === "DANADO"
+              ? `Devuelto con daños: ${String(dev.observacion ?? "").trim()}`
+              : observaciones,
+          usuarioId: usuario.id,
+          prestamoId: prestamo.id,
+        },
+      });
+    }
+
     await tx.prestamo.update({
       where: { id: prestamo.id },
       data: {
         estado: "DEVUELTO",
-        devueltoEn: new Date(),
+        devueltoEn: ahora,
         firmaDevolucionUrl,
         observacionesDevolucion: observaciones,
-        fotosDevolucion: fotos.length > 0 ? JSON.stringify(fotos) : null,
-      },
-    });
-    await tx.movimientoBodega.create({
-      data: {
-        itemId: prestamo.itemId,
-        tipo: "DEVOLUCION",
-        cantidad: prestamo.cantidad,
-        stockResultante,
-        persona: prestamo.persona,
-        notas: observaciones,
-        usuarioId: usuario.id,
-        prestamoId: prestamo.id,
       },
     });
   });
+
+  const conNovedad = pendientes.filter(
+    (l) => porLinea.get(l.id)!.estado !== "BUENO",
+  ).length;
 
   await registrarAuditoria({
     usuarioId: usuario.id,
-    entidad: "ItemBodega",
-    entidadId: prestamo.itemId,
+    entidad: "Prestamo",
+    entidadId: prestamo.id,
     accion: "MOV_DEVOLUCION",
-    detalle: {
-      prestamoId: prestamo.id,
-      cantidad: prestamo.cantidad,
-      persona: prestamo.persona,
-      fotos: fotos.length,
-    },
+    detalle: { persona: prestamo.persona, lineas: pendientes.length, conNovedad },
   });
 
-  await dejarAviso(`Devolución de «${prestamo.item.nombre}» registrada con firma.`);
+  await dejarAviso(
+    conNovedad > 0
+      ? `Devolución registrada con firma. ${conNovedad} ítem${
+          conNovedad === 1 ? "" : "s"
+        } volvió con novedad.`
+      : "Devolución registrada con firma.",
+  );
   revalidatePath("/bodega");
-  revalidatePath(`/bodega/${prestamo.itemId}`);
-  redirect("/bodega");
+  redirect(`/bodega?tab=prestamos&acta=${prestamo.id}`);
 }
 
 /**

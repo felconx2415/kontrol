@@ -108,8 +108,15 @@ function bloqueParte(rotulo: string, parte: ParteActa, primera: boolean): string
 }
 
 function filaItem(item: ItemActa, n: number): string {
+  // Un ítem con novedad tiene que saltar a la vista en el papel: es lo que se
+  // reclama o se da de baja.
+  const claseChip = item.alerta
+    ? " alerta"
+    : /nuevo/i.test(item.estado ?? "")
+      ? " nuevo"
+      : "";
   const estado = item.estado
-    ? `<span class="chip${/nuevo/i.test(item.estado) ? " nuevo" : ""}">${esc(item.estado)}</span>`
+    ? `<span class="chip${claseChip}">${esc(item.estado)}</span>`
     : `<span class="vacio">—</span>`;
   return `<tr>
         <td class="c-n">${n}</td>
@@ -350,6 +357,7 @@ td.c-n{ font-family:var(--mono); font-size:8pt; color:var(--gris) }
   color:var(--gris);
 }
 .chip.nuevo{ border-color:var(--celeste); color:#0B7FB0 }
+.chip.alerta{ border-color:var(--ambar); color:var(--ambar); font-weight:700 }
 
 .vacio{ color:#B6C0CE }
 .is-alerta{ color:var(--ambar); font-weight:500 }

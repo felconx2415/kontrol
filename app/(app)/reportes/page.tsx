@@ -55,13 +55,20 @@ export default async function Reportes({
         _count: { select: { items: true } },
       },
     }),
-    db.prestamo.findMany({
-      where: rango ? { prestadoEn: rango } : {},
-      orderBy: { prestadoEn: "desc" },
+    db.prestamoItem.findMany({
+      where: rango ? { prestamo: { prestadoEn: rango } } : {},
+      orderBy: { prestamo: { prestadoEn: "desc" } },
       take: 200,
       include: {
         item: { select: { codigo: true, nombre: true, unidad: true } },
-        prestadoPor: { select: { nombre: true } },
+        prestamo: {
+          select: {
+            persona: true,
+            estado: true,
+            prestadoEn: true,
+            prestadoPor: { select: { nombre: true } },
+          },
+        },
       },
     }),
     db.asignacionBodega.findMany({
@@ -79,7 +86,7 @@ export default async function Reportes({
     }),
   ]);
 
-  const prestamosActivos = prestamos.filter((p) => p.estado === "ACTIVO").length;
+  const prestamosActivos = prestamos.filter((l) => l.devueltoEn === null).length;
 
   const parametros = new URLSearchParams(
     Object.entries(filtros).filter(([, v]) => Boolean(v)) as [string, string][],
@@ -229,30 +236,38 @@ export default async function Reportes({
             ]}
             anchoMinimo="52rem"
           >
-            {prestamos.map((p) => (
-              <Fila key={p.id}>
-                <Celda>{p.item.nombre}</Celda>
+            {prestamos.map((l) => (
+              <Fila key={l.id}>
+                <Celda>{l.item.nombre}</Celda>
                 <Celda mono tenue>
-                  {p.item.codigo}
+                  {l.item.codigo}
                 </Celda>
                 <Celda derecha mono>
-                  {p.cantidad} {p.item.unidad}
+                  {l.cantidad} {l.item.unidad}
                 </Celda>
-                <Celda>{p.persona}</Celda>
+                <Celda>{l.prestamo.persona}</Celda>
                 <Celda>
                   <Insignia
                     clases={
-                      p.estado === "ACTIVO"
-                        ? "bg-espera-fondo text-espera ring-espera-borde"
-                        : "bg-exito-fondo text-exito ring-exito-borde"
+                      l.estadoDevolucion === "DANADO" || l.estadoDevolucion === "PERDIDO"
+                        ? "bg-fallo-fondo text-fallo ring-fallo-borde"
+                        : l.devueltoEn
+                          ? "bg-exito-fondo text-exito ring-exito-borde"
+                          : "bg-espera-fondo text-espera ring-espera-borde"
                     }
                   >
-                    {p.estado === "ACTIVO" ? "Activo" : "Devuelto"}
+                    {l.estadoDevolucion === "DANADO"
+                      ? "Devuelto dañado"
+                      : l.estadoDevolucion === "PERDIDO"
+                        ? "No devuelto"
+                        : l.devueltoEn
+                          ? "Devuelto"
+                          : "En préstamo"}
                   </Insignia>
                 </Celda>
-                <Celda tenue>{p.prestadoPor.nombre}</Celda>
-                <Celda tenue>{formatearFecha(p.prestadoEn)}</Celda>
-                <Celda tenue>{p.devueltoEn ? formatearFecha(p.devueltoEn) : "—"}</Celda>
+                <Celda tenue>{l.prestamo.prestadoPor.nombre}</Celda>
+                <Celda tenue>{formatearFecha(l.prestamo.prestadoEn)}</Celda>
+                <Celda tenue>{l.devueltoEn ? formatearFecha(l.devueltoEn) : "—"}</Celda>
               </Fila>
             ))}
           </Tabla>

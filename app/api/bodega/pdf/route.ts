@@ -15,7 +15,10 @@ export async function GET() {
     db.itemBodega.findMany({
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
-        prestamos: { where: { estado: "ACTIVO" }, select: { cantidad: true } },
+        lineasPrestamo: {
+        where: { devueltoEn: null, prestamo: { estado: "ACTIVO" } },
+        select: { cantidad: true },
+      },
       },
     }),
     db.movimientoBodega.findMany({
@@ -37,7 +40,7 @@ export async function GET() {
       ubicacion: i.ubicacion,
       stock: i.stock,
       unidad: i.unidad,
-      prestado: i.prestamos.reduce((s, p) => s + p.cantidad, 0),
+      prestado: i.lineasPrestamo.reduce((s: number, l: { cantidad: number }) => s + l.cantidad, 0),
       activo: i.activo,
     })),
     movimientos: movimientos.map((m) => ({

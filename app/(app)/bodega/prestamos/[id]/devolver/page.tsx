@@ -20,7 +20,12 @@ export default async function PaginaDevolver({
 
   const prestamo = await db.prestamo.findUnique({
     where: { id },
-    include: { item: { select: { nombre: true, codigo: true, unidad: true } } },
+    include: {
+      items: {
+        where: { devueltoEn: null },
+        include: { item: { select: { nombre: true, codigo: true, unidad: true } } },
+      },
+    },
   });
 
   // Si ya no está activo (o no existe), no hay nada que devolver.
@@ -37,12 +42,23 @@ export default async function PaginaDevolver({
         </Link>
         <h1 className="titulo-pagina mt-2">Registrar devolución</h1>
         <p className="text-sm text-tinta-suave">
-          {prestamo.cantidad} {prestamo.item.unidad} de «{prestamo.item.nombre}» ·
-          prestado a {prestamo.persona} el {fecha(prestamo.prestadoEn)}.
+          {prestamo.items.length} ítem{prestamo.items.length === 1 ? "" : "s"}{" "}
+          prestado{prestamo.items.length === 1 ? "" : "s"} a {prestamo.persona} el{" "}
+          {fecha(prestamo.prestadoEn)}. Revisa cada uno y anota cómo vuelve.
         </p>
       </div>
 
-      <FormularioDevolucion prestamoId={prestamo.id} />
+      <FormularioDevolucion
+        prestamoId={prestamo.id}
+        lineas={prestamo.items.map((l) => ({
+          id: l.id,
+          nombre: l.item.nombre,
+          codigo: l.item.codigo,
+          unidad: l.item.unidad,
+          cantidad: l.cantidad,
+          numeroSerie: l.numeroSerie,
+        }))}
+      />
     </div>
   );
 }

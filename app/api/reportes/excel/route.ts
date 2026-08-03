@@ -50,7 +50,9 @@ export async function GET(request: Request) {
       where: rango ? { prestadoEn: rango } : {},
       orderBy: { prestadoEn: "desc" },
       include: {
-        item: { select: { codigo: true, nombre: true, unidad: true } },
+        items: {
+          include: { item: { select: { codigo: true, nombre: true, unidad: true } } },
+        },
         prestadoPor: { select: { nombre: true } },
       },
     }),
@@ -216,19 +218,28 @@ export async function GET(request: Request) {
     { header: "Nota", key: "nota", width: 30 },
   ];
   encabezar(hojaPrestamos);
+  const ETIQUETA_VUELTA: Record<string, string> = {
+    BUENO: "Devuelto OK",
+    DANADO: "Devuelto dañado",
+    PERDIDO: "No devuelto",
+  };
   for (const p of prestamos) {
-    hojaPrestamos.addRow({
-      item: p.item.nombre,
-      codigo: p.item.codigo,
-      cantidad: p.cantidad,
-      unidad: p.item.unidad,
-      persona: p.persona,
-      estado: p.estado === "ACTIVO" ? "Activo" : "Devuelto",
-      registro: p.prestadoPor.nombre,
-      salida: p.prestadoEn,
-      devuelto: p.devueltoEn ?? "",
-      nota: p.notas ?? "",
-    });
+    for (const linea of p.items) {
+      hojaPrestamos.addRow({
+        item: linea.item.nombre,
+        codigo: linea.item.codigo,
+        cantidad: linea.cantidad,
+        unidad: linea.item.unidad,
+        persona: p.persona,
+        estado: linea.estadoDevolucion
+          ? ETIQUETA_VUELTA[linea.estadoDevolucion]
+          : "En préstamo",
+        registro: p.prestadoPor.nombre,
+        salida: p.prestadoEn,
+        devuelto: linea.devueltoEn ?? "",
+        nota: [p.notas, linea.observacion].filter(Boolean).join(" · "),
+      });
+    }
   }
   for (const clave of ["salida", "devuelto"]) {
     hojaPrestamos.getColumn(clave).numFmt = "dd-mm-yyyy";

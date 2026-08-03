@@ -44,15 +44,16 @@ export default async function DetalleItem({
         orderBy: { creadoEn: "desc" },
         include: { usuario: { select: { nombre: true } } },
       },
-      prestamos: {
-        orderBy: { prestadoEn: "desc" },
+      lineasPrestamo: {
+        orderBy: { prestamo: { prestadoEn: "desc" } },
         select: {
           id: true,
           cantidad: true,
-          persona: true,
-          estado: true,
-          prestadoEn: true,
           devueltoEn: true,
+          estadoDevolucion: true,
+          prestamo: {
+            select: { id: true, persona: true, estado: true, prestadoEn: true },
+          },
         },
       },
     },
@@ -60,9 +61,9 @@ export default async function DetalleItem({
 
   if (!item) notFound();
 
-  const prestado = item.prestamos
-    .filter((p) => p.estado === "ACTIVO")
-    .reduce((s, p) => s + p.cantidad, 0);
+  const prestado = item.lineasPrestamo
+    .filter((l) => l.devueltoEn === null && l.prestamo.estado === "ACTIVO")
+    .reduce((s, l) => s + l.cantidad, 0);
 
   // Página del historial de movimientos.
   const totalPaginasMov = Math.ceil(item.movimientos.length / POR_PAGINA);
@@ -108,8 +109,8 @@ export default async function DetalleItem({
         ))}
       </dl>
 
-      {item.prestamos.length > 0 && (
-        <Seccion titulo={`Préstamos (${item.prestamos.length})`} plano>
+      {item.lineasPrestamo.length > 0 && (
+        <Seccion titulo={`Préstamos (${item.lineasPrestamo.length})`} plano>
           <Tabla
             encabezados={[
               "Prestado a",
@@ -121,40 +122,50 @@ export default async function DetalleItem({
             ]}
             anchoMinimo="48rem"
           >
-            {item.prestamos.map((p) => (
-              <Fila key={p.id}>
-                <Celda etiqueta="Prestado a">{p.persona}</Celda>
+            {item.lineasPrestamo.map((l) => (
+              <Fila key={l.id}>
+                <Celda etiqueta="Prestado a">{l.prestamo.persona}</Celda>
                 <Celda etiqueta="Cantidad" derecha mono>
-                  {p.cantidad} {item.unidad}
+                  {l.cantidad} {item.unidad}
                 </Celda>
                 <Celda etiqueta="Salida" tenue>
-                  {fecha(p.prestadoEn)}
+                  {fecha(l.prestamo.prestadoEn)}
                 </Celda>
+                {/* El estado es el de esta línea, no el del préstamo entero:
+                    de un mismo préstamo una cosa puede volver bien y otra no. */}
                 <Celda etiqueta="Estado">
                   <Insignia
                     clases={
-                      p.estado === "ACTIVO"
-                        ? "bg-espera-fondo text-espera ring-espera-borde"
-                        : "bg-exito-fondo text-exito ring-exito-borde"
+                      l.estadoDevolucion === "DANADO" || l.estadoDevolucion === "PERDIDO"
+                        ? "bg-fallo-fondo text-fallo ring-fallo-borde"
+                        : l.devueltoEn
+                          ? "bg-exito-fondo text-exito ring-exito-borde"
+                          : "bg-espera-fondo text-espera ring-espera-borde"
                     }
                   >
-                    {p.estado === "ACTIVO" ? "Activo" : "Devuelto"}
+                    {l.estadoDevolucion === "DANADO"
+                      ? "Devuelto dañado"
+                      : l.estadoDevolucion === "PERDIDO"
+                        ? "No devuelto"
+                        : l.devueltoEn
+                          ? "Devuelto"
+                          : "En préstamo"}
                   </Insignia>
                 </Celda>
                 <Celda etiqueta="Devuelto" tenue>
-                  {p.devueltoEn ? fecha(p.devueltoEn) : "—"}
+                  {l.devueltoEn ? fecha(l.devueltoEn) : "—"}
                 </Celda>
                 <Celda derecha completa>
                   <div className="flex flex-wrap justify-end gap-1">
                     <a
-                      href={`/api/bodega/prestamos/${p.id}/acta`}
+                      href={`/api/bodega/prestamos/${l.prestamo.id}/acta`}
                       className="foco-anillo inline-flex min-h-11 items-center rounded px-2 text-xs font-medium text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
                     >
                       Acta de entrega
                     </a>
-                    {p.estado === "ACTIVO" && (
+                    {l.prestamo.estado === "ACTIVO" && (
                       <Link
-                        href={`/bodega/prestamos/${p.id}/devolver`}
+                        href={`/bodega/prestamos/${l.prestamo.id}/devolver`}
                         className="foco-anillo inline-flex min-h-11 items-center rounded px-2 text-xs font-medium text-marca-700 underline underline-offset-2 transition-colors duration-150 hover:text-marca-800"
                       >
                         Devolver

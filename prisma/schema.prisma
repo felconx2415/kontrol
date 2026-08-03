@@ -79,6 +79,13 @@ enum EstadoPrestamo {
   DEVUELTO
 }
 
+/** Con qué condición volvió cada ítem prestado. */
+enum EstadoDevolucion {
+  BUENO // vuelve al stock sin novedad
+  DANADO // vuelve, pero con daños que hay que revisar antes de reutilizarlo
+  PERDIDO // no vuelve: no se repone stock
+}
+
 model Usuario {
   id           String   @id @default(cuid())
   username     String   @unique
@@ -301,9 +308,9 @@ model ItemBodega {
   activo    Boolean  @default(true)
   creadoEn  DateTime @default(now())
 
-  movimientos  MovimientoBodega[]
-  prestamos    Prestamo[]
-  asignaciones AsignacionBodega[]
+  movimientos    MovimientoBodega[]
+  lineasPrestamo PrestamoItem[]
+  asignaciones   AsignacionBodega[]
 
   @@index([activo])
 }
@@ -334,17 +341,20 @@ model MovimientoBodega {
   @@index([creadoEn])
 }
 
+/**
+ * Salida temporal de material de bodega. Agrupa varias líneas (PrestamoItem)
+ * porque a una cuadrilla se le entregan varias cosas de una vez y firma una
+ * sola acta; tratarlas como préstamos sueltos obligaba a repetir la firma
+ * tantas veces como ítems.
+ */
 model Prestamo {
   id            String         @id @default(cuid())
-  itemId        String
-  cantidad      Int
-  // Serie o lote del material prestado, para el que lo tenga.
-  numeroSerie   String?
   persona       String
   estado        EstadoPrestamo @default(ACTIVO)
   notas         String?
   prestadoPorId String
   prestadoEn    DateTime       @default(now())
+  // Se fija cuando vuelve la última línea pendiente.
   devueltoEn    DateTime?
 
   // Acta firmada: la firma de salida se toma al prestar y la de devolución al
@@ -356,11 +366,37 @@ model Prestamo {
   // Fotos de daños al devolver, como arreglo JSON de rutas públicas.
   fotosDevolucion       String?
 
-  item        ItemBodega         @relation(fields: [itemId], references: [id], onDelete: Cascade)
   prestadoPor Usuario            @relation(fields: [prestadoPorId], references: [id])
+  items       PrestamoItem[]
   movimientos MovimientoBodega[]
 
   @@index([estado])
+}
+
+/**
+ * Una línea del préstamo: qué se prestó y cómo volvió. La devolución se
+ * registra por línea porque es lo que se revisa al recibir —una cosa puede
+ * volver bien y otra rota— y porque permite devoluciones parciales.
+ */
+model PrestamoItem {
+  id          String  @id @default(cuid())
+  prestamoId  String
+  itemId      String
+  cantidad    Int
+  // Serie o lote de lo prestado, para el que lo tenga.
+  numeroSerie String?
+
+  devueltoEn       DateTime?
+  estadoDevolucion EstadoDevolucion?
+  // Qué le pasó, cuando no volvió en buen estado.
+  observacion      String?
+  // Fotos del estado en que volvió, como arreglo JSON de rutas públicas.
+  fotos            String?
+
+  prestamo Prestamo   @relation(fields: [prestamoId], references: [id], onDelete: Cascade)
+  item     ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([prestamoId])
   @@index([itemId])
 }
 

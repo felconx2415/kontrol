@@ -185,7 +185,9 @@ export async function actaDePrestamo(
   const prestamo = await db.prestamo.findUnique({
     where: { id: prestamoId },
     include: {
-      item: { select: { codigo: true, nombre: true, unidad: true } },
+      items: {
+        include: { item: { select: { codigo: true, nombre: true, unidad: true } } },
+      },
       prestadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
     },
   });
@@ -232,8 +234,37 @@ export async function actaDePrestamo(
       : null,
   ].filter((n): n is { rotulo: string; texto: string } => n !== null);
 
+  const ETIQUETA_VUELTA: Record<string, string> = {
+    BUENO: "Devuelto OK",
+    DANADO: "Devuelto dañado",
+    PERDIDO: "No devuelto",
+  };
+
+  const items: ItemActa[] = prestamo.items.map((linea) => ({
+    articulo: linea.item.nombre,
+    codigo: linea.item.codigo,
+    serie: linea.numeroSerie,
+    cantidad: `${linea.cantidad} ${linea.item.unidad}`,
+    // La columna «Estado» dice cómo volvió cada cosa, que es justo lo que se
+    // revisa al recibir un préstamo.
+    estado: linea.estadoDevolucion
+      ? ETIQUETA_VUELTA[linea.estadoDevolucion]
+      : "En préstamo",
+    vence: null,
+    // Lo que no volvió bien se destaca, igual que un vencimiento próximo.
+    alerta: linea.estadoDevolucion === "DANADO" || linea.estadoDevolucion === "PERDIDO",
+  }));
+
+  // Las novedades de cada línea van al detalle: en la tabla no cabe el relato.
+  const novedades = prestamo.items
+    .filter((l) => l.observacion)
+    .map((l) => ({
+      rotulo: `Novedad · ${l.item.nombre}`,
+      texto: l.observacion!,
+    }));
+
   const html = await construirActaHtml({
-    titulo: `Acta de préstamo ${prestamo.item.codigo} · Kontrol`,
+    titulo: `Acta de préstamo ${prestamo.id.slice(-6).toUpperCase()} · Kontrol`,
     subtitulo: "Acta de préstamo de bodega",
     folioRotulo: "Préstamo N°",
     folio: prestamo.id.slice(-6).toUpperCase(),
@@ -260,17 +291,8 @@ export async function actaDePrestamo(
       ],
     },
     itemsTitulo: "Material prestado",
-    items: [
-      {
-        articulo: prestamo.item.nombre,
-        codigo: prestamo.item.codigo,
-        serie: prestamo.numeroSerie,
-        cantidad: `${prestamo.cantidad} ${prestamo.item.unidad}`,
-        estado: null,
-        vence: null,
-      },
-    ],
-    notas,
+    items,
+    notas: [...notas, ...novedades],
     declaracion: DECLARACION_PRESTAMO,
     firmas,
     copias: COPIAS,

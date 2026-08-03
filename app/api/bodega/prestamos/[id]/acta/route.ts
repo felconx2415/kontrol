@@ -17,7 +17,7 @@ export async function GET(
 
   const prestamo = await db.prestamo.findUnique({
     where: { id },
-    select: { item: { select: { codigo: true } } },
+    select: { id: true },
   });
   if (!prestamo) {
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
@@ -28,7 +28,7 @@ export async function GET(
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
   }
 
-  const nombreArchivo = `acta-prestamo-${prestamo.item.codigo}-${id.slice(0, 6)}.pdf`;
+  const nombreArchivo = `acta-prestamo-${id.slice(-6).toUpperCase()}.pdf`;
 
   return new NextResponse(pdf as unknown as BodyInit, {
     headers: {
