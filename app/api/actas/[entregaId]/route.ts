@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { origenPublico } from "@/lib/origen";
 import { actaDeEntrega } from "@/lib/actas/generar";
 import { formatearFolio } from "@/lib/folio";
 
@@ -29,7 +30,7 @@ export async function GET(
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
   }
 
-  const pdf = await actaDeEntrega(entregaId, new URL(request.url).origin);
+  const pdf = await actaDeEntrega(entregaId, origenPublico(request));
   if (!pdf) {
     return NextResponse.json({ error: "Acta no encontrada." }, { status: 404 });
   }

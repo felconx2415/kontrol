@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { origenPublico } from "@/lib/origen";
 import { esGestion } from "@/lib/solicitud-estado";
 import { actaDeAsignacion } from "@/lib/actas/generar";
 
@@ -15,7 +16,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const acta = await actaDeAsignacion(id, new URL(request.url).origin);
+  const acta = await actaDeAsignacion(id, origenPublico(request));
   if (!acta) {
     return NextResponse.json({ error: "La asignación no existe." }, { status: 404 });
   }

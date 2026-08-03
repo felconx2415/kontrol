@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { origenPublico } from "@/lib/origen";
 import { esGestion } from "@/lib/solicitud-estado";
 import { actaDePrestamo } from "@/lib/actas/generar";
 
@@ -23,7 +24,7 @@ export async function GET(
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
   }
 
-  const pdf = await actaDePrestamo(id, new URL(request.url).origin);
+  const pdf = await actaDePrestamo(id, origenPublico(request));
   if (!pdf) {
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
   }

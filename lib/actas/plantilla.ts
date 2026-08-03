@@ -418,12 +418,19 @@ td.c-n{ font-family:var(--mono); font-size:8pt; color:var(--gris) }
 
 .pie-qr{ display:flex; align-items:center; gap:2.5mm }
 .pie-qr img{ width:15mm; height:15mm; border:.5pt solid var(--linea) }
+.pie-qr .qr-url{
+  font-family:var(--mono);
+  font-size:5.6pt;
+  letter-spacing:0;
+  text-transform:none;
+  word-break:break-all;
+}
 .pie-qr span{
   font-size:6.6pt;
   letter-spacing:.06em;
   text-transform:uppercase;
   color:var(--gris);
-  max-width:24mm;
+  max-width:34mm;
   line-height:1.35;
 }
 </style>
@@ -497,7 +504,9 @@ td.c-n{ font-family:var(--mono); font-size:8pt; color:var(--gris) }
       datos.qr
         ? `<div class="pie-qr">
       <img src="${datos.qr.imagen}" alt="Verificar documento">
-      <span>Verificar documento</span>
+      <span>Verificar documento<br><span class="qr-url">${esc(
+        datos.qr.url.replace(/^https?:\/\//, ""),
+      )}</span></span>
     </div>`
         : ""
     }
