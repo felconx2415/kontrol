@@ -252,6 +252,7 @@ export async function registrarPrestamo(
   const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
   const persona = String(formData.get("persona") ?? "").trim();
   const notas = String(formData.get("notas") ?? "").trim() || null;
+  const numeroSerie = String(formData.get("numeroSerie") ?? "").trim() || null;
   const firma = bufferDesdeDataUrl(String(formData.get("firmaSalida") ?? ""));
 
   if (cantidad === null) {
@@ -281,6 +282,7 @@ export async function registrarPrestamo(
       data: {
         itemId: item.id,
         cantidad,
+        numeroSerie,
         persona,
         notas,
         prestadoPorId: usuario.id,
@@ -419,6 +421,7 @@ export async function asignarItemBodega(
   const usuarioId = String(formData.get("usuarioId") ?? "");
   const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
   const notas = String(formData.get("notas") ?? "").trim() || null;
+  const numeroSerie = String(formData.get("numeroSerie") ?? "").trim() || null;
   const firma = bufferDesdeDataUrl(String(formData.get("firma") ?? ""));
 
   if (cantidad === null) {
@@ -455,6 +458,7 @@ export async function asignarItemBodega(
         itemId: item.id,
         usuarioId: usuario.id,
         cantidad,
+        numeroSerie,
         notas,
         asignadoPorId: usuarioActual.id,
         firmaPngUrl,

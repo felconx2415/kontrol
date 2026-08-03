@@ -39,10 +39,8 @@ export default function FormularioEntrega({
         </h2>
         <ul className="divide-y divide-borde">
           {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            >
+            <li key={item.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">{item.nombre}</p>
                 <p className="text-xs text-tinta-tenue">
@@ -65,6 +63,21 @@ export default function FormularioEntrega({
                   max={item.cantidadRecibida}
                   defaultValue={item.cantidadRecibida}
                   className="w-20 tabular-nums"
+                />
+              </label>
+              </div>
+
+              {/* La serie se pide siempre pero no se exige: solo parte del
+                  equipamiento la trae grabada, y forzarla llenaría el acta de
+                  datos inventados. */}
+              <label className="mt-2 flex items-center gap-2">
+                <span className="shrink-0 text-xs text-tinta-suave">
+                  N° de serie / lote
+                </span>
+                <Entrada
+                  name={`serie_${item.id}`}
+                  placeholder="Opcional"
+                  className="max-w-xs"
                 />
               </label>
             </li>

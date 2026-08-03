@@ -7,6 +7,7 @@ import { cerrarSesion } from "@/actions/sesion";
 import NavPrincipal, { type EnlaceNav } from "@/components/nav-principal";
 import MenuMovil from "@/components/menu-movil";
 import AvisoFlotante from "@/components/aviso-flotante";
+import PieSitio from "@/components/pie-sitio";
 import { COOKIE_AVISO } from "@/lib/avisos";
 
 export default async function LayoutApp({
@@ -20,10 +21,14 @@ export default async function LayoutApp({
   // no en la URL para no ensuciar el enlace que el usuario puede compartir.
   const aviso = (await cookies()).get(COOKIE_AVISO)?.value ?? null;
 
+  // Solo gestión tiene perfil: es quien firma los documentos que emite.
+  const puedeEditarPerfil = esGestion(usuario.rol);
+
   const enlaces: EnlaceNav[] = [
     { href: "/escritorio", texto: "Escritorio", icono: "escritorio" },
     { href: "/solicitudes", texto: "Solicitudes", icono: "solicitudes" },
     { href: `/historial/${usuario.id}`, texto: "Mi equipamiento", icono: "equipamiento" },
+    { href: "/documentos", texto: "Mis documentos", icono: "documentos" },
   ];
 
   if (esGestion(usuario.rol)) {
@@ -59,6 +64,7 @@ export default async function LayoutApp({
               usuarioRol={`${ETIQUETA_ROL[usuario.rol]}${
                 usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""
               }`}
+              hrefPerfil={puedeEditarPerfil ? "/perfil" : null}
             />
             <Link
               href="/escritorio"
@@ -83,15 +89,34 @@ export default async function LayoutApp({
           {/* `min-w-0` + `truncate`: un nombre largo se recorta en vez de
               empujar los destinos y solaparse con ellos. */}
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <div className="hidden min-w-0 text-right sm:block">
-              <p className="truncate text-sm font-medium leading-tight">
-                {usuario.nombre}
-              </p>
-              <p className="truncate text-xs leading-tight text-marca-200">
-                {ETIQUETA_ROL[usuario.rol]}
-                {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
-              </p>
-            </div>
+            {/* Gestión firma los documentos que emite, así que su nombre lleva
+                al perfil donde registra la firma. Va aquí y no como otro
+                destino de la barra: nueve ya son muchos, y el perfil se visita
+                una vez, no a diario. */}
+            {puedeEditarPerfil ? (
+              <Link
+                href="/perfil"
+                className="foco-anillo-claro hidden min-w-0 rounded text-right transition-opacity duration-150 hover:opacity-80 sm:block"
+              >
+                <p className="truncate text-sm font-medium leading-tight">
+                  {usuario.nombre}
+                </p>
+                <p className="truncate text-xs leading-tight text-marca-200">
+                  {ETIQUETA_ROL[usuario.rol]}
+                  {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
+                </p>
+              </Link>
+            ) : (
+              <div className="hidden min-w-0 text-right sm:block">
+                <p className="truncate text-sm font-medium leading-tight">
+                  {usuario.nombre}
+                </p>
+                <p className="truncate text-xs leading-tight text-marca-200">
+                  {ETIQUETA_ROL[usuario.rol]}
+                  {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
+                </p>
+              </div>
+            )}
             <form action={cerrarSesion} className="shrink-0">
               <button
                 type="submit"
@@ -118,6 +143,8 @@ export default async function LayoutApp({
       </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+
+      <PieSitio />
 
       {aviso && <AvisoFlotante mensaje={aviso} />}
     </div>

@@ -68,6 +68,8 @@ export type DatosActa = {
   declaracion: string;
   firmas: FirmaActa[];
   copias: string;
+  /** QR de verificación como data URI, con la URL a la que apunta. */
+  qr?: { imagen: string; url: string } | null;
 };
 
 /** Escapa el contenido dinámico: los nombres y notas los escribe el usuario. */
@@ -405,6 +407,17 @@ td.c-n{ font-family:var(--mono); font-size:8pt; color:var(--gris) }
 }
 .pie-texto{ font-size:7pt; color:var(--gris); line-height:1.5 }
 .pie-texto .dato{ font-size:7pt; color:var(--gris) }
+
+.pie-qr{ display:flex; align-items:center; gap:2.5mm }
+.pie-qr img{ width:15mm; height:15mm; border:.5pt solid var(--linea) }
+.pie-qr span{
+  font-size:6.6pt;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--gris);
+  max-width:24mm;
+  line-height:1.35;
+}
 </style>
 </head>
 <body>
@@ -472,6 +485,14 @@ td.c-n{ font-family:var(--mono); font-size:8pt; color:var(--gris) }
       <span class="dato">${esc(datos.emitidoEn)}</span><br>
       ${esc(datos.copias)}
     </div>
+    ${
+      datos.qr
+        ? `<div class="pie-qr">
+      <img src="${datos.qr.imagen}" alt="Verificar documento">
+      <span>Verificar documento</span>
+    </div>`
+        : ""
+    }
   </footer>
 
 </article>

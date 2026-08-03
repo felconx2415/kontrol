@@ -25,10 +25,13 @@ export default function MenuMovil({
   enlaces,
   usuarioNombre,
   usuarioRol,
+  hrefPerfil = null,
 }: {
   enlaces: EnlaceNav[];
   usuarioNombre: string;
   usuarioRol: string;
+  /** Ruta al perfil, o null si este rol no tiene uno. */
+  hrefPerfil?: string | null;
 }) {
   const [montado, setMontado] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -156,6 +159,15 @@ export default function MenuMovil({
                   <p className="truncate text-xs text-marca-200">
                     {usuarioRol}
                   </p>
+                  {hrefPerfil && (
+                    <Link
+                      href={hrefPerfil}
+                      onClick={cerrar}
+                      className="foco-anillo-claro mt-1 inline-flex min-h-9 items-center rounded text-xs text-marca-200 underline underline-offset-2 transition-colors duration-150 hover:text-white"
+                    >
+                      Mi perfil y firma
+                    </Link>
+                  )}
                 </div>
               </div>
 

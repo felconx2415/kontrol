@@ -3,8 +3,10 @@ import "server-only";
 import { db } from "@/lib/db";
 import { ETIQUETA_ROL } from "@/lib/solicitud-estado";
 import { formatearFolio } from "@/lib/folio";
+import QRCode from "qrcode";
 import { htmlAPdf, subidaComoDataUri } from "@/lib/render-pdf";
 import { construirActaHtml, type FirmaActa, type ItemActa } from "@/lib/actas/plantilla";
+import { codigoVerificacion, type TipoDocumento } from "@/lib/verificacion";
 
 /**
  * Las tres actas del sistema, sobre el formato A4 único de la organización.
@@ -21,6 +23,27 @@ const COPIAS = "Original: bodega · Copia: trabajador · Copia: prevención de r
 
 /** Un vencimiento a menos de 90 días se destaca en el acta. */
 const DIAS_ALERTA = 90;
+
+/**
+ * QR que lleva a la verificación pública del documento. `origen` viene de la
+ * petición, así que el código apunta al dominio por el que realmente se está
+ * usando la app y no a uno fijado en configuración.
+ */
+async function qrDe(
+  origen: string | null,
+  tipo: TipoDocumento,
+  id: string,
+): Promise<{ imagen: string; url: string } | null> {
+  if (!origen) return null;
+  const url = `${origen}/v/${codigoVerificacion(tipo, id)}`;
+  const imagen = await QRCode.toDataURL(url, {
+    margin: 0,
+    width: 240,
+    errorCorrectionLevel: "M",
+    color: { dark: "#0F172A", light: "#FFFFFF" },
+  });
+  return { imagen, url };
+}
 
 const fechaHora = (d: Date) =>
   d.toLocaleString("es-CL", {
@@ -49,14 +72,17 @@ const DECLARACION_ENTREGA =
   "pérdida o vencimiento, y restituirlo al término de la faena o de la relación laboral, " +
   "conforme a la Ley N° 16.744 y a la normativa vigente de seguridad y salud en el trabajo.";
 
-export async function actaDeEntrega(entregaId: string): Promise<Uint8Array | null> {
+export async function actaDeEntrega(
+  entregaId: string,
+  origen: string | null = null,
+): Promise<Uint8Array | null> {
   const entrega = await db.entrega.findUnique({
     where: { id: entregaId },
     include: {
       receptor: {
         select: { nombre: true, rut: true, rol: true, brigada: { select: { nombre: true } } },
       },
-      entregadoPor: { select: { nombre: true, rut: true } },
+      entregadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
       solicitud: { include: { brigada: { select: { nombre: true } } } },
       items: { include: { solicitudItem: { include: { articulo: true } } } },
     },
@@ -68,8 +94,7 @@ export async function actaDeEntrega(entregaId: string): Promise<Uint8Array | nul
     return {
       articulo: i.solicitudItem.articulo.nombre,
       codigo: i.solicitudItem.articulo.codigo,
-      // El modelo no guarda número de serie por unidad entregada.
-      serie: null,
+      serie: i.numeroSerie,
       cantidad: `${i.cantidadEntregada} ${i.solicitudItem.articulo.unidad}`,
       // Lo que sale por una solicitud es siempre material nuevo del almacén.
       estado: "Nuevo",
@@ -78,7 +103,12 @@ export async function actaDeEntrega(entregaId: string): Promise<Uint8Array | nul
     };
   });
 
-  const firma = await subidaComoDataUri(entrega.firmaPngUrl);
+  // La del receptor se captura en el momento; la de quien entrega sale de su
+  // perfil, porque nadie puede firmar a mano cada acta que emite.
+  const [firma, firmaEntrega] = await Promise.all([
+    subidaComoDataUri(entrega.firmaPngUrl),
+    subidaComoDataUri(entrega.entregadoPor.firmaPngUrl),
+  ]);
   const fecha = fechaCorta(entrega.entregadaEn);
 
   const firmas: FirmaActa[] = [
@@ -90,7 +120,7 @@ export async function actaDeEntrega(entregaId: string): Promise<Uint8Array | nul
       rol: "Firma del receptor",
     },
     {
-      imagen: null,
+      imagen: firmaEntrega,
       nombre: entrega.entregadoPor.nombre,
       rut: entrega.entregadoPor.rut,
       fecha,
@@ -133,6 +163,7 @@ export async function actaDeEntrega(entregaId: string): Promise<Uint8Array | nul
     declaracion: DECLARACION_ENTREGA,
     firmas,
     copias: COPIAS,
+    qr: await qrDe(origen, "entrega", entrega.id),
   });
 
   return htmlAPdf(html);
@@ -147,19 +178,23 @@ const DECLARACION_PRESTAMO =
   "de su uso, conforme a la Ley N° 16.744 y a la normativa vigente de seguridad y salud en el " +
   "trabajo.";
 
-export async function actaDePrestamo(prestamoId: string): Promise<Uint8Array | null> {
+export async function actaDePrestamo(
+  prestamoId: string,
+  origen: string | null = null,
+): Promise<Uint8Array | null> {
   const prestamo = await db.prestamo.findUnique({
     where: { id: prestamoId },
     include: {
       item: { select: { codigo: true, nombre: true, unidad: true } },
-      prestadoPor: { select: { nombre: true, rut: true } },
+      prestadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
     },
   });
   if (!prestamo) return null;
 
-  const [firmaSalida, firmaDevolucion] = await Promise.all([
+  const [firmaSalida, firmaDevolucion, firmaEntrega] = await Promise.all([
     subidaComoDataUri(prestamo.firmaSalidaUrl),
     subidaComoDataUri(prestamo.firmaDevolucionUrl),
+    subidaComoDataUri(prestamo.prestadoPor.firmaPngUrl),
   ]);
 
   const devuelto = prestamo.devueltoEn !== null;
@@ -173,7 +208,7 @@ export async function actaDePrestamo(prestamoId: string): Promise<Uint8Array | n
       rol: "Firma de salida (recibe)",
     },
     {
-      imagen: null,
+      imagen: firmaEntrega,
       nombre: prestamo.prestadoPor.nombre,
       rut: prestamo.prestadoPor.rut,
       fecha: fechaCorta(prestamo.prestadoEn),
@@ -229,7 +264,7 @@ export async function actaDePrestamo(prestamoId: string): Promise<Uint8Array | n
       {
         articulo: prestamo.item.nombre,
         codigo: prestamo.item.codigo,
-        serie: null,
+        serie: prestamo.numeroSerie,
         cantidad: `${prestamo.cantidad} ${prestamo.item.unidad}`,
         estado: null,
         vence: null,
@@ -239,6 +274,7 @@ export async function actaDePrestamo(prestamoId: string): Promise<Uint8Array | n
     declaracion: DECLARACION_PRESTAMO,
     firmas,
     copias: COPIAS,
+    qr: await qrDe(origen, "prestamo", prestamo.id),
   });
 
   return htmlAPdf(html);
@@ -255,6 +291,7 @@ const DECLARACION_ASIGNACION =
 
 export async function actaDeAsignacion(
   asignacionId: string,
+  origen: string | null = null,
 ): Promise<{ pdf: Uint8Array; usuarioId: string } | null> {
   const asignacion = await db.asignacionBodega.findUnique({
     where: { id: asignacionId },
@@ -269,7 +306,7 @@ export async function actaDeAsignacion(
           brigada: { select: { nombre: true } },
         },
       },
-      asignadoPor: { select: { nombre: true, rut: true } },
+      asignadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
     },
   });
   if (!asignacion) return null;
@@ -304,7 +341,7 @@ export async function actaDeAsignacion(
       {
         articulo: asignacion.item.nombre,
         codigo: asignacion.item.codigo,
-        serie: null,
+        serie: asignacion.numeroSerie,
         cantidad: `${asignacion.cantidad} ${asignacion.item.unidad}`,
         estado: null,
         vence: null,
@@ -323,7 +360,7 @@ export async function actaDeAsignacion(
         rol: "Firma del receptor",
       },
       {
-        imagen: null,
+        imagen: await subidaComoDataUri(asignacion.asignadoPor.firmaPngUrl),
         nombre: asignacion.asignadoPor.nombre,
         rut: asignacion.asignadoPor.rut,
         fecha,
@@ -331,6 +368,7 @@ export async function actaDeAsignacion(
       },
     ],
     copias: COPIAS,
+    qr: await qrDe(origen, "asignacion", asignacion.id),
   });
 
   return { pdf: await htmlAPdf(html), usuarioId: asignacion.usuario.id };

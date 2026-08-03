@@ -5,7 +5,7 @@ import { esGestion } from "@/lib/solicitud-estado";
 import { actaDeAsignacion } from "@/lib/actas/generar";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const usuario = await usuarioActual();
@@ -15,7 +15,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const acta = await actaDeAsignacion(id);
+  const acta = await actaDeAsignacion(id, new URL(request.url).origin);
   if (!acta) {
     return NextResponse.json({ error: "La asignación no existe." }, { status: 404 });
   }

@@ -71,6 +71,18 @@ export default function FormularioAsignar({
           <Entrada id="cantidad" name="cantidad" type="number" min={1} defaultValue={1} required />
         </Campo>
 
+        <Campo
+          etiqueta="N° de serie / lote (opcional)"
+          htmlFor="numeroSerie"
+          className="sm:col-span-2"
+        >
+          <Entrada
+            id="numeroSerie"
+            name="numeroSerie"
+            placeholder="Solo si el equipo lo trae grabado"
+          />
+        </Campo>
+
         <Campo etiqueta="Nota (opcional)" htmlFor="notas" className="sm:col-span-2">
           <AreaTexto id="notas" name="notas" rows={2} placeholder="Detalle de la asignación" />
         </Campo>

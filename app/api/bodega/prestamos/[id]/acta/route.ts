@@ -5,7 +5,7 @@ import { esGestion } from "@/lib/solicitud-estado";
 import { actaDePrestamo } from "@/lib/actas/generar";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const usuario = await usuarioActual();
@@ -23,7 +23,7 @@ export async function GET(
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
   }
 
-  const pdf = await actaDePrestamo(id);
+  const pdf = await actaDePrestamo(id, new URL(request.url).origin);
   if (!pdf) {
     return NextResponse.json({ error: "El préstamo no existe." }, { status: 404 });
   }

@@ -5,7 +5,7 @@ import { actaDeEntrega } from "@/lib/actas/generar";
 import { formatearFolio } from "@/lib/folio";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ entregaId: string }> },
 ) {
   const usuario = await usuarioActual();
@@ -29,7 +29,7 @@ export async function GET(
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
   }
 
-  const pdf = await actaDeEntrega(entregaId);
+  const pdf = await actaDeEntrega(entregaId, new URL(request.url).origin);
   if (!pdf) {
     return NextResponse.json({ error: "Acta no encontrada." }, { status: 404 });
   }

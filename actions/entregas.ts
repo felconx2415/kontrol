@@ -43,6 +43,7 @@ export async function registrarEntrega(
   // Cantidades realmente entregadas. El tope es lo recibido del almacén (que
   // puede ser menor a lo pedido); si no se registró recepción, se cae a lo pedido.
   const cantidades = new Map<string, number>();
+  const series = new Map<string, string | null>();
   for (const item of solicitud.items) {
     const tope = item.cantidadRecibida ?? item.cantidad;
     const bruto = formData.get(`cantidad_${item.id}`);
@@ -53,6 +54,7 @@ export async function registrarEntrega(
       };
     }
     cantidades.set(item.id, cantidad);
+    series.set(item.id, String(formData.get(`serie_${item.id}`) ?? "").trim() || null);
   }
 
   if ([...cantidades.values()].every((c) => c === 0)) {
@@ -83,6 +85,7 @@ export async function registrarEntrega(
           entregaId: entrega.id,
           solicitudItemId: item.id,
           cantidadEntregada: cantidad,
+          numeroSerie: series.get(item.id) ?? null,
           venceEn: calcularVenceEn(ahora, item.articulo.vidaUtilDias),
         },
       });

@@ -86,6 +86,10 @@ model Usuario {
   nombre       String
   rut          String?
   rol          Rol      @default(SOLICITANTE)
+  // Firma registrada en el perfil, como PNG en /uploads. Quien entrega
+  // material no puede firmar a mano cada acta que emite, así que deja su firma
+  // una vez y el sistema la estampa en los documentos que genera.
+  firmaPngUrl  String?
   brigadaId    String?
   activo       Boolean  @default(true)
   creadoEn     DateTime @default(now())
@@ -242,6 +246,9 @@ model EntregaItem {
   entregaId         String
   solicitudItemId   String    @unique
   cantidadEntregada Int
+  // Número de serie o lote del equipo entregado, para el que lo tenga. Texto
+  // libre: en una entrega de varias unidades puede venir más de uno.
+  numeroSerie       String?
   // Fecha de vencimiento calculada desde Articulo.vidaUtilDias al entregar.
   venceEn           DateTime?
   // Se marca cuando un reemplazo posterior deja este ítem fuera de uso.
@@ -331,6 +338,8 @@ model Prestamo {
   id            String         @id @default(cuid())
   itemId        String
   cantidad      Int
+  // Serie o lote del material prestado, para el que lo tenga.
+  numeroSerie   String?
   persona       String
   estado        EstadoPrestamo @default(ACTIVO)
   notas         String?
@@ -364,6 +373,8 @@ model AsignacionBodega {
   itemId        String
   usuarioId     String
   cantidad      Int
+  // Serie o lote del equipo entregado, para el que lo tenga.
+  numeroSerie   String?
   notas         String?
   asignadoPorId String
   asignadoEn    DateTime @default(now())
