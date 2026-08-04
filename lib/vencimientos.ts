@@ -42,10 +42,23 @@ export const COLOR_VENCIMIENTO: Record<EstadoVencimiento, string> = {
   SIN_VENCIMIENTO: "bg-lienzo text-tinta-suave ring-borde-fuerte",
 };
 
+/**
+ * Zona horaria de la operación. Toda fecha que se muestre o se imprima se
+ * formatea aquí, sin excepción.
+ *
+ * Sin fijarla, cada fecha se renderiza en la zona de quien la formatea: el
+ * servidor —en producción, UTC— para las páginas y los PDF, y el equipo de cada
+ * persona para lo que se arma en el navegador. Un acta emitida a las 21:00 en
+ * Chile salía fechada a las 01:00 del día siguiente, y ese documento es un
+ * respaldo firmado: la hora tiene que ser la de acá.
+ */
+export const ZONA_HORARIA = "America/Santiago";
+
 export function formatearFecha(fecha: Date | string | null | undefined): string {
   if (!fecha) return "—";
   const d = typeof fecha === "string" ? new Date(fecha) : fecha;
   return d.toLocaleDateString("es-CL", {
+    timeZone: ZONA_HORARIA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -56,10 +69,25 @@ export function formatearFechaHora(fecha: Date | string | null | undefined): str
   if (!fecha) return "—";
   const d = typeof fecha === "string" ? new Date(fecha) : fecha;
   return d.toLocaleString("es-CL", {
+    timeZone: ZONA_HORARIA,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/**
+ * Fecha lista para escribirse como fecha (no texto) en una planilla Excel.
+ *
+ * Excel guarda un número sin zona horaria y ExcelJS lo calcula desde el UTC del
+ * Date, así que un pedido del 3 de agosto a las 22:00 en Chile —4 de agosto en
+ * UTC— aparecía fechado un día después. Se traslada el día chileno al mediodía
+ * UTC: la celda sigue siendo una fecha ordenable y muestra el día correcto.
+ */
+export function fechaParaExcel(fecha: Date | string): Date {
+  const d = typeof fecha === "string" ? new Date(fecha) : fecha;
+  const [dia, mes, anio] = formatearFecha(d).split("-").map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia, 12));
 }

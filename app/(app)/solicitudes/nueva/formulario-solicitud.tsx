@@ -8,6 +8,7 @@ import {
   MOTIVOS_NUEVO,
   MOTIVOS_REEMPLAZO,
 } from "@/lib/solicitud-estado";
+import { formatearFecha } from "@/lib/vencimientos";
 import SubirFoto from "@/components/subir-foto";
 import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Etiqueta, Seleccion } from "@/components/ui/campo";
@@ -119,7 +120,7 @@ function CargaPersona({
       disponiblesParaReemplazo.map((a) => ({
         id: a.entregaItemId,
         principal: a.articuloNombre,
-        secundario: new Date(a.entregadoEn).toLocaleDateString("es-CL"),
+        secundario: formatearFecha(a.entregadoEn),
         buscable: normalizar(a.articuloNombre),
       })),
     [disponiblesParaReemplazo],

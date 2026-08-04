@@ -5,7 +5,17 @@ import { requerirUsuario } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatearFolio } from "@/lib/folio";
 import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
-import { accionesDisponibles, esGestion, ETIQUETA_ESTADO } from "@/lib/solicitud-estado";
+import {
+  accionesDisponibles,
+  CECO_ALMACEN,
+  CECO_RESERVA_PROPIA,
+  esGestion,
+  ETIQUETA_ESTADO,
+  lineasConReserva,
+  puedeActuarSobre,
+  puedeTransicionar,
+  reservasPorCeco,
+} from "@/lib/solicitud-estado";
 import EstadoBadge from "@/components/estado-badge";
 import TimelineSolicitud, { type HitoTimeline } from "@/components/timeline-solicitud";
 import ProgresoSolicitud from "@/components/progreso-solicitud";
@@ -73,14 +83,52 @@ export default async function DetalleSolicitud({
   // Envío al almacén: solo gestión, desde que la solicitud está aprobada, y solo
   // si tiene ítems del CECO que va a ese almacén.
   const hayItemsAlmacen = solicitud.items.some(
-    (i) => i.articulo.ceco === "FD1400D082",
+    (i) => i.articulo.ceco === CECO_ALMACEN,
   );
   const puedeEnviarAlmacen =
     esGestion(usuario.rol) &&
     hayItemsAlmacen &&
-    ["APROBADA", "EN_GESTION", "RECIBIDA", "ENTREGADA"].includes(
-      solicitud.estado,
+    [
+      "APROBADA",
+      "RESERVA_SOLICITADA",
+      "EN_GESTION",
+      "RECIBIDA",
+      "ENTREGADA",
+    ].includes(solicitud.estado);
+
+  // Firmar la salida: gestión sobre cualquiera, el beneficiario sobre la suya
+  // cuando la retira él mismo.
+  const puedeEntregar =
+    solicitud.estado === "RECIBIDA" &&
+    puedeTransicionar(solicitud.estado, "ENTREGADA", usuario.rol) &&
+    puedeActuarSobre(usuario, solicitud);
+
+  // La planilla de reserva propia solo tiene sentido con la reserva ya cargada:
+  // lo que el almacén necesita de esas líneas es con qué reserva y posición
+  // retirarlas, y antes de eso no hay nada que pedir.
+  const puedeDescargarReservas =
+    esGestion(usuario.rol) &&
+    solicitud.items.some(
+      (i) => i.articulo.ceco === CECO_RESERVA_PROPIA && i.numeroReserva,
     );
+
+  // Pedir la reserva y esperarla solo pasa con la del almacén: si la crea el
+  // gestor, esa etapa no existe. Se muestra si la solicitud pasó por ahí o
+  // todavía puede pasar.
+  const esperaReserva =
+    solicitud.reservaSolicitadaEn !== null ||
+    (solicitud.estado === "APROBADA" && hayItemsAlmacen);
+
+  // Las reservas en juego, por CECO: una solicitud que mezcla ambos orígenes se
+  // gestiona con dos reservas por separado.
+  const reservas = reservasPorCeco(
+    solicitud.items.map((i) => ({
+      id: i.id,
+      ceco: i.articulo.ceco,
+      numeroReserva: i.numeroReserva,
+      posicionReserva: i.posicionReserva,
+    })),
+  );
 
   // Ajustes hechos por quien aprueba. Se leen de la auditoría, que ya guarda
   // el detalle exacto de cada cambio.
@@ -131,14 +179,36 @@ export default async function DetalleSolicitud({
       fecha: solicitud.estado === "RECHAZADA" ? null : solicitud.aprobadaEn,
       responsable: solicitud.aprobador?.nombre ?? null,
     },
+    // Solo aparece si la solicitud pasó por ahí o todavía puede pasar. Un
+    // pedido de puro equipamiento se salta esta etapa —la reserva la crea el
+    // gestor— y dejarla en «Pendiente» para siempre anunciaría un paso que no
+    // va a ocurrir.
+    ...(esperaReserva
+      ? [
+          {
+            clave: "RESERVA_SOLICITADA",
+            titulo: ETIQUETA_ESTADO.RESERVA_SOLICITADA,
+            fecha: solicitud.reservaSolicitadaEn,
+            responsable: solicitud.gestor?.nombre ?? null,
+            nota: "A la espera de que el almacén entregue el número de reserva.",
+          },
+        ]
+      : []),
     {
       clave: "EN_GESTION",
       titulo: ETIQUETA_ESTADO.EN_GESTION,
       fecha: solicitud.enGestionEn,
       responsable: solicitud.gestor?.nombre ?? null,
-      nota: solicitud.pedidoExternoRef
-        ? `Pedido al almacén: ${solicitud.pedidoExternoRef}`
-        : null,
+      // Las reservas salen de los ítems; pedidoExternoRef solo alimenta esto en
+      // las solicitudes anteriores a que la reserva bajara a cada línea.
+      nota:
+        reservas.length > 0
+          ? reservas
+              .map((r) => `Reserva ${r.ceco}: ${r.numeros.join(", ")}`)
+              .join(" · ")
+          : solicitud.pedidoExternoRef
+            ? `Pedido al almacén: ${solicitud.pedidoExternoRef}`
+            : null,
     },
     {
       clave: "RECIBIDA",
@@ -237,6 +307,8 @@ export default async function DetalleSolicitud({
               unidad: item.articulo.unidad,
               cantidad: item.cantidad,
               cantidadRecibida: item.cantidadRecibida,
+              numeroReserva: item.numeroReserva,
+              posicionReserva: item.posicionReserva,
               motivo: item.motivo,
               detalleReemplazo: item.detalleReemplazo,
               fotoEvidenciaUrl: item.fotoEvidenciaUrl,
@@ -297,6 +369,22 @@ export default async function DetalleSolicitud({
             </section>
           )}
 
+          {puedeDescargarReservas && (
+            <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
+              <h2 className="titulo-seccion">Reservas propias</h2>
+              <p className="text-sm text-tinta-suave">
+                Descarga las líneas del CECO {CECO_RESERVA_PROPIA} con su reserva
+                y posición, para pedirlas al almacén.
+              </p>
+              <a
+                href={`/api/solicitudes/reservas?ids=${solicitud.id}`}
+                className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+              >
+                Descargar planilla de reservas (Excel)
+              </a>
+            </section>
+          )}
+
           <Tarjeta>
             <h2 className="titulo-seccion">Seguimiento</h2>
             {/* El progreso arriba responde «¿en qué va?» de un vistazo; la
@@ -311,7 +399,8 @@ export default async function DetalleSolicitud({
             <AccionesSolicitud
               solicitudId={solicitud.id}
               acciones={acciones.map((a) => ({ hacia: a.hacia, texto: a.accion }))}
-              puedeEntregar={solicitud.estado === "RECIBIDA" && esGestion(usuario.rol)}
+              puedeEntregar={puedeEntregar}
+              retiroPropio={!esGestion(usuario.rol)}
               items={solicitud.items.map((item) => ({
                 id: item.id,
                 nombre: item.articulo.nombre,
@@ -319,6 +408,17 @@ export default async function DetalleSolicitud({
                 unidad: item.articulo.unidad,
                 cantidad: item.cantidad,
               }))}
+              lineasReserva={lineasConReserva(
+                solicitud.items.map((item) => ({
+                  id: item.id,
+                  nombre: item.articulo.nombre,
+                  codigo: item.articulo.codigo,
+                  ceco: item.articulo.ceco,
+                  cantidad: item.cantidad,
+                  numeroReserva: item.numeroReserva,
+                  posicionReserva: item.posicionReserva,
+                })),
+              ).map((linea) => ({ ...linea, ceco: linea.ceco! }))}
             />
           )}
         </div>

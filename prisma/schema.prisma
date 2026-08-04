@@ -37,6 +37,10 @@ enum EstadoSolicitud {
   PENDIENTE
   APROBADA
   RECHAZADA
+  // Se pidió el número de reserva al almacén y todavía no llega. Es la espera
+  // propia del EPP: ahí la reserva la entrega un tercero. En equipamiento el
+  // gestor crea la reserva él mismo y esta etapa se salta.
+  RESERVA_SOLICITADA
   EN_GESTION
   RECIBIDA
   ENTREGADA
@@ -182,8 +186,13 @@ model Solicitud {
   editadaPorId String?
 
   gestorId         String?
-  // Referencia manual del pedido hecho al almacén externo.
+  // Referencia manual del pedido hecho al almacén externo. Heredado: el número
+  // de reserva vive ahora por línea (SolicitudItem.numeroReserva), porque una
+  // solicitud mixta lleva una reserva de EPP y otra de equipamiento. Se
+  // conserva para no perder lo registrado antes de ese cambio.
   pedidoExternoRef String?
+  // Cuándo se pidió el número de reserva (estado RESERVA_SOLICITADA).
+  reservaSolicitadaEn DateTime?
   enGestionEn      DateTime?
   recibidaEn       DateTime?
 
@@ -212,6 +221,13 @@ model SolicitudItem {
   // recibida. Puede ser menor a la pedida (a veces no llega todo). Null
   // mientras no se ha recibido; al marcar recibida se fija por ítem.
   cantidadRecibida Int?
+
+  // Reserva del almacén externo con la que se pide esta línea. Va por ítem y no
+  // por solicitud porque una solicitud mixta se gestiona con dos reservas: la
+  // del EPP y la del equipamiento. La posición es la línea dentro de esa
+  // reserva («0010», «0020»…) y es el dato clave del equipamiento.
+  numeroReserva    String?
+  posicionReserva  String?
 
   // Motivo del ítem (todas las solicitudes lo llevan; ver enum Motivo).
   motivo           Motivo?

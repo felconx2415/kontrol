@@ -3,12 +3,18 @@ import { redirect } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { ZONA_HORARIA } from "@/lib/vencimientos";
 import FormularioDevolucion from "./formulario-devolucion";
 
 export const metadata = { title: "Devolver préstamo · Kontrol" };
 
 const fecha = (d: Date) =>
-  d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+  d.toLocaleDateString("es-CL", {
+    timeZone: ZONA_HORARIA,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
 export default async function PaginaDevolver({
   params,

@@ -16,6 +16,9 @@ export type ItemEditable = {
   unidad: string;
   cantidad: number;
   cantidadRecibida: number | null;
+  /** Reserva del almacén con que se pide esta línea, cuando ya se registró. */
+  numeroReserva: string | null;
+  posicionReserva: string | null;
   motivo: string | null;
   detalleReemplazo: string | null;
   fotoEvidenciaUrl: string | null;
@@ -100,6 +103,14 @@ export default function EditorItems({
                     {item.articuloCodigo} ·{" "}
                     {item.categoria === "EPP" ? "EPP" : "Equipamiento"}
                   </p>
+                  {item.numeroReserva && (
+                    <p className="text-xs tabular-nums text-tinta-suave">
+                      Reserva {item.numeroReserva}
+                      {item.posicionReserva
+                        ? ` · pos. ${item.posicionReserva}`
+                        : ""}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm tabular-nums text-tinta-suave">

@@ -19,9 +19,12 @@ type Item = {
 export default function FormularioEntrega({
   solicitudId,
   items,
+  retiroPropio = false,
 }: {
   solicitudId: string;
   items: Item[];
+  /** Firma el propio beneficiario porque retiró el material él mismo. */
+  retiroPropio?: boolean;
 }) {
   const [estado, accion] = useActionState<EstadoEntrega, FormData>(
     registrarEntrega,
@@ -35,7 +38,7 @@ export default function FormularioEntrega({
 
       <section className="rounded-xl border border-borde bg-panel">
         <h2 className="titulo-seccion border-b border-borde px-4 py-3">
-          Cantidades a entregar
+          {retiroPropio ? "Cantidades que retiras" : "Cantidades a entregar"}
         </h2>
         <ul className="divide-y divide-borde">
           {items.map((item) => (
@@ -97,7 +100,7 @@ export default function FormularioEntrega({
 
       <Tarjeta>
         <h2 className="titulo-seccion mb-3">
-          Firma del receptor{" "}
+          {retiroPropio ? "Tu firma" : "Firma del receptor"}{" "}
           <span className="text-fallo" aria-hidden="true">
             *
           </span>
@@ -111,9 +114,9 @@ export default function FormularioEntrega({
         type="submit"
         bloque
         disabled={!tieneFirma}
-        textoPendiente="Registrando entrega…"
+        textoPendiente="Registrando…"
       >
-        Confirmar entrega
+        {retiroPropio ? "Confirmar recepción" : "Confirmar entrega"}
       </Boton>
     </form>
   );

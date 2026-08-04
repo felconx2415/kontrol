@@ -8,11 +8,12 @@
 services:
   kontrol:
     build: .
-    image: kontrol:0.5.3-beta
+    image: kontrol:0.6.1-beta
     container_name: kontrol
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      TZ: "${TZ:-America/Santiago}"
       DATABASE_URL: "file:/data/kontrol.db"
       SESSION_SECRET: "${SESSION_SECRET:?Define SESSION_SECRET en .env (openssl rand -base64 32)}"
       ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"

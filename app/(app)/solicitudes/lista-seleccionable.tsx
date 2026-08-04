@@ -2,7 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { aprobarVarias, enviarVariasAlAlmacen } from "@/actions/solicitudes";
+import {
+  aprobarVarias,
+  enviarVariasAlAlmacen,
+  solicitarReservaVarias,
+} from "@/actions/solicitudes";
 import EstadoBadge from "@/components/estado-badge";
 import { clasesBoton } from "@/components/ui/boton";
 import { Entrada } from "@/components/ui/campo";
@@ -44,7 +48,7 @@ export default function ListaSeleccionable({
   const seleccionable = puedeAprobar || puedeGestionar;
 
   const [marcadas, setMarcadas] = useState<string[]>([]);
-  const [referencia, setReferencia] = useState("");
+  const [reserva, setReserva] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [enVuelo, iniciar] = useTransition();
 
@@ -58,6 +62,11 @@ export default function ListaSeleccionable({
   const elegidas = solicitudes.filter((s) => presentes.includes(s.id));
   const pendientes = elegidas.filter((s) => s.estado === "PENDIENTE");
   const aprobadas = elegidas.filter((s) => s.estado === "APROBADA");
+  // Se puede gestionar con el almacén tanto lo recién aprobado —cuando la
+  // reserva la crea el gestor— como lo que estaba esperando el número.
+  const gestionables = elegidas.filter(
+    (s) => s.estado === "APROBADA" || s.estado === "RESERVA_SOLICITADA",
+  );
 
   const todasMarcadas =
     solicitudes.length > 0 && presentes.length === solicitudes.length;
@@ -85,7 +94,7 @@ export default function ListaSeleccionable({
       // El aviso de éxito lo muestra el layout; aquí solo queda soltar la
       // selección para no repetir la acción sobre lo mismo.
       setMarcadas([]);
-      setReferencia("");
+      setReserva("");
     });
   }
 
@@ -204,24 +213,44 @@ export default function ListaSeleccionable({
 
           {puedeGestionar && aprobadas.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-borde pt-3">
-              <label htmlFor="ref-pedido" className="text-sm text-tinta-suave">
-                N.º de pedido al almacén (opcional)
+              <button
+                type="button"
+                disabled={enVuelo}
+                onClick={() =>
+                  ejecutar(() => solicitarReservaVarias(aprobadas.map((s) => s.id)))
+                }
+                className={clasesBoton("secundario", "sm")}
+              >
+                {enVuelo
+                  ? "Pidiendo…"
+                  : `Solicitar reserva de ${
+                      aprobadas.length === 1 ? "la aprobada" : `las ${aprobadas.length} aprobadas`
+                    }`}
+              </button>
+            </div>
+          )}
+
+          {puedeGestionar && gestionables.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-borde pt-3">
+              {/* Una sola reserva cubre todo el lote: es la que el almacén
+                  entrega para la planilla combinada, y viene sin posición. */}
+              <label className="flex flex-col gap-1 text-sm text-tinta-suave">
+                N.º de reserva del almacén
+                <Entrada
+                  value={reserva}
+                  onChange={(e) => setReserva(e.target.value)}
+                  placeholder="Ej: 4500912345"
+                  className="w-44"
+                />
               </label>
-              <Entrada
-                id="ref-pedido"
-                value={referencia}
-                onChange={(e) => setReferencia(e.target.value)}
-                placeholder="Ej: 4500123456"
-                className="w-44"
-              />
               <button
                 type="button"
                 disabled={enVuelo}
                 onClick={() =>
                   ejecutar(() =>
                     enviarVariasAlAlmacen(
-                      aprobadas.map((s) => s.id),
-                      referencia,
+                      gestionables.map((s) => s.id),
+                      reserva,
                     ),
                   )
                 }
@@ -229,9 +258,11 @@ export default function ListaSeleccionable({
               >
                 {enVuelo
                   ? "Registrando…"
-                  : `Marcar ${aprobadas.length === 1 ? "la aprobada" : `las ${aprobadas.length} aprobadas`} como pedida${
-                      aprobadas.length === 1 ? "" : "s"
-                    }`}
+                  : `Gestionar ${
+                      gestionables.length === 1
+                        ? "la seleccionada"
+                        : `las ${gestionables.length} seleccionadas`
+                    } con el almacén`}
               </button>
             </div>
           )}

@@ -14,6 +14,7 @@ const ESTADOS_VALIDOS: EstadoSolicitud[] = [
   "PENDIENTE",
   "APROBADA",
   "RECHAZADA",
+  "RESERVA_SOLICITADA",
   "EN_GESTION",
   "RECIBIDA",
   "ENTREGADA",

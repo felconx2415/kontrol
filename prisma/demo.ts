@@ -14,6 +14,11 @@
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import bcrypt from "bcryptjs";
+import {
+  CECO_ALMACEN,
+  CECO_RESERVA_PROPIA,
+  llevaPosicion,
+} from "../lib/solicitud-estado";
 
 const db = new PrismaClient({
   adapter: new PrismaBetterSqlite3({
@@ -24,7 +29,9 @@ const db = new PrismaClient({
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000);
 
 // Artículos de ejemplo que usan las solicitudes de demostración. Sus códigos
-// (EPP-00x / EQ-00x) no chocan con el codigario real, que es numérico.
+// (EPP-00x / EQ-00x) no chocan con el codigario real, que es numérico. El CECO
+// decide cómo se consigue la reserva, así que la demo reparte equipamiento
+// entre los dos: unos se piden al almacén y otros llevan reserva propia.
 const ARTICULOS_DEMO = [
   { codigo: "EPP-001", nombre: "Casco de seguridad", categoria: "EPP", vidaUtilDias: 1825 },
   { codigo: "EPP-002", nombre: "Guantes de cuero", categoria: "EPP", vidaUtilDias: 180 },
@@ -79,10 +86,15 @@ async function prepararBase() {
   await db.brigada.update({ where: { id: brigadaNorte.id }, data: { supervisorId: aprobador.id } });
 
   for (const a of ARTICULOS_DEMO) {
+    // EQ-005 y EQ-007 quedan con reserva propia para que la demo muestre
+    // también ese trámite —el que sí lleva posición—; el resto va al almacén.
+    const ceco = ["EQ-005", "EQ-007"].includes(a.codigo)
+      ? CECO_RESERVA_PROPIA
+      : CECO_ALMACEN;
     await db.articulo.upsert({
       where: { codigo: a.codigo },
-      create: a,
-      update: { nombre: a.nombre, vidaUtilDias: a.vidaUtilDias },
+      create: { ...a, ceco },
+      update: { nombre: a.nombre, vidaUtilDias: a.vidaUtilDias, ceco },
     });
   }
 }
@@ -165,7 +177,7 @@ async function entregaHistorica(params: {
 async function solicitudEnEtapa(params: {
   username: string;
   codigoArticulo: string;
-  estado: "PENDIENTE" | "APROBADA" | "EN_GESTION" | "RECIBIDA";
+  estado: "PENDIENTE" | "APROBADA" | "RESERVA_SOLICITADA" | "EN_GESTION" | "RECIBIDA";
   diasAtras: number;
 }) {
   const [solicitante, aprobador, gestor, articulo] = await Promise.all([
@@ -189,19 +201,34 @@ async function solicitudEnEtapa(params: {
       enviadaEn: hace(params.diasAtras),
       aprobadorId: avanzada ? aprobador.id : null,
       aprobadaEn: avanzada ? hace(params.diasAtras - 1) : null,
-      gestorId: ["EN_GESTION", "RECIBIDA"].includes(params.estado) ? gestor.id : null,
-      pedidoExternoRef:
-        params.estado === "EN_GESTION" || params.estado === "RECIBIDA"
-          ? `OC-2026-0${400 + params.diasAtras}`
-          : null,
-      enGestionEn: ["EN_GESTION", "RECIBIDA"].includes(params.estado)
+      gestorId: ["RESERVA_SOLICITADA", "EN_GESTION", "RECIBIDA"].includes(
+        params.estado,
+      )
+        ? gestor.id
+        : null,
+      // La reserva se pide antes de gestionar, así que las etapas posteriores
+      // también llevan esta fecha.
+      reservaSolicitadaEn: ["RESERVA_SOLICITADA", "EN_GESTION", "RECIBIDA"].includes(
+        params.estado,
+      )
         ? hace(params.diasAtras - 2)
+        : null,
+      enGestionEn: ["EN_GESTION", "RECIBIDA"].includes(params.estado)
+        ? hace(params.diasAtras - 3)
         : null,
       recibidaEn: params.estado === "RECIBIDA" ? hace(1) : null,
       items: {
         create: {
           articuloId: articulo.id,
           cantidad: 1,
+          // La reserva baja a la línea recién al gestionar con el almacén, y
+          // solo la reserva propia lleva posición.
+          ...(["EN_GESTION", "RECIBIDA"].includes(params.estado)
+            ? {
+                numeroReserva: `45009${10000 + params.diasAtras}`,
+                posicionReserva: llevaPosicion(articulo.ceco) ? "0010" : null,
+              }
+            : {}),
         },
       },
     },
@@ -237,7 +264,7 @@ async function main() {
   const enEtapa: {
     username: string;
     codigoArticulo: string;
-    estado: "PENDIENTE" | "APROBADA" | "EN_GESTION" | "RECIBIDA";
+    estado: "PENDIENTE" | "APROBADA" | "RESERVA_SOLICITADA" | "EN_GESTION" | "RECIBIDA";
     diasAtras: number;
   }[] = [
     { username: "msoto", codigoArticulo: "EPP-006", estado: "PENDIENTE", diasAtras: 9 },
@@ -245,6 +272,8 @@ async function main() {
     { username: "jperez", codigoArticulo: "EPP-004", estado: "PENDIENTE", diasAtras: 1 },
     { username: "msoto", codigoArticulo: "EQ-001", estado: "APROBADA", diasAtras: 6 },
     { username: "pmunoz", codigoArticulo: "EQ-005", estado: "APROBADA", diasAtras: 3 },
+    // EPP a la espera del número de reserva: la etapa propia de esa categoría.
+    { username: "jperez", codigoArticulo: "EPP-003", estado: "RESERVA_SOLICITADA", diasAtras: 7 },
     { username: "jperez", codigoArticulo: "EQ-003", estado: "EN_GESTION", diasAtras: 12 },
     { username: "msoto", codigoArticulo: "EPP-007", estado: "EN_GESTION", diasAtras: 5 },
     { username: "pmunoz", codigoArticulo: "EPP-008", estado: "RECIBIDA", diasAtras: 8 },

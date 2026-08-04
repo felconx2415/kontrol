@@ -98,10 +98,16 @@ export async function construirBandeja(
   }
 
   if (esGestion(rol)) {
-    const [porPedir, porRecibir, porEntregar] = await Promise.all([
+    const [porPedir, esperandoReserva, porRecibir, porEntregar] = await Promise.all([
       db.solicitud.findMany({
         where: { estado: "APROBADA" },
         orderBy: { aprobadaEn: "asc" },
+        take: 12,
+        ...SELECCION,
+      }),
+      db.solicitud.findMany({
+        where: { estado: "RESERVA_SOLICITADA" },
+        orderBy: { reservaSolicitadaEn: "asc" },
         take: 12,
         ...SELECCION,
       }),
@@ -128,6 +134,14 @@ export async function construirBandeja(
         solicitudes: mapear(porPedir),
       },
       {
+        clave: "reserva",
+        titulo: "Esperando número de reserva",
+        indicacion:
+          "Ya se pidió la reserva al almacén: registra el número cuando llegue.",
+        accion: "Registrar reserva",
+        solicitudes: mapear(esperandoReserva),
+      },
+      {
         clave: "recibir",
         titulo: "En camino desde el almacén",
         indicacion: "Marca la recepción cuando llegue el material a bodega.",
@@ -148,7 +162,16 @@ export async function construirBandeja(
   const mias = await db.solicitud.findMany({
     where: {
       solicitanteId: usuarioId,
-      estado: { in: ["BORRADOR", "PENDIENTE", "APROBADA", "EN_GESTION", "RECIBIDA"] },
+      estado: {
+        in: [
+          "BORRADOR",
+          "PENDIENTE",
+          "APROBADA",
+          "RESERVA_SOLICITADA",
+          "EN_GESTION",
+          "RECIBIDA",
+        ],
+      },
     },
     orderBy: { creadaEn: "desc" },
     take: 12,

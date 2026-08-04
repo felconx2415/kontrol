@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requerirRol } from "@/lib/auth";
+import { requerirUsuario } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatearFolio } from "@/lib/folio";
-import { ROLES_GESTION } from "@/lib/solicitud-estado";
+import {
+  esGestion,
+  puedeActuarSobre,
+  puedeTransicionar,
+} from "@/lib/solicitud-estado";
 import { Tarjeta } from "@/components/ui/superficie";
 import FormularioEntrega from "./formulario-entrega";
 
@@ -14,7 +18,7 @@ export default async function PaginaEntrega({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirUsuario();
   const { id } = await params;
 
   const solicitud = await db.solicitud.findUnique({
@@ -28,10 +32,20 @@ export default async function PaginaEntrega({
 
   if (!solicitud) notFound();
 
+  // El beneficiario firma la suya cuando retira él mismo; gestión, cualquiera.
+  if (
+    !puedeTransicionar(solicitud.estado, "ENTREGADA", usuario.rol) ||
+    !puedeActuarSobre(usuario, solicitud)
+  ) {
+    redirect("/escritorio?error=sin-permiso");
+  }
+
   // Entregar solo tiene sentido sobre una solicitud ya recibida del almacén.
   if (solicitud.estado !== "RECIBIDA") {
     redirect(`/solicitudes/${id}`);
   }
+
+  const retiroPropio = !esGestion(usuario.rol);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -43,10 +57,12 @@ export default async function PaginaEntrega({
           ← Volver a la solicitud
         </Link>
         <h1 className="titulo-pagina mt-2">
-          Entregar {formatearFolio(solicitud.folio)}
+          {retiroPropio ? "Recibir" : "Entregar"} {formatearFolio(solicitud.folio)}
         </h1>
         <p className="text-sm text-tinta-suave">
-          Confirma las cantidades y pide al receptor que firme.
+          {retiroPropio
+            ? "Confirma lo que estás retirando y firma la recepción."
+            : "Confirma las cantidades y pide al receptor que firme."}
         </p>
       </div>
 
@@ -60,6 +76,7 @@ export default async function PaginaEntrega({
       </Tarjeta>
 
       <FormularioEntrega
+        retiroPropio={retiroPropio}
         solicitudId={solicitud.id}
         items={solicitud.items.map((i) => ({
           id: i.id,

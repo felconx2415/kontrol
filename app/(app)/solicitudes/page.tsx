@@ -17,6 +17,7 @@ const POR_PAGINA = 10;
 const ESTADOS: EstadoSolicitud[] = [
   "PENDIENTE",
   "APROBADA",
+  "RESERVA_SOLICITADA",
   "EN_GESTION",
   "RECIBIDA",
   "ENTREGADA",

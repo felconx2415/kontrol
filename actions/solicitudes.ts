@@ -6,9 +6,14 @@ import { db } from "@/lib/db";
 import { registrarAuditoria, requerirUsuario } from "@/lib/auth";
 import { formatearFolio, siguienteFolio } from "@/lib/folio";
 import {
+  CECO_ALMACEN,
   esGestion,
+  faltaReserva,
+  lineasConReserva,
+  lineasDeAlmacen,
   MAXIMO_BENEFICIARIOS,
   motivosDe,
+  puedeActuarSobre,
   puedeTransicionar,
 } from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
@@ -398,11 +403,21 @@ export async function editarSolicitud(
   return { ok: true };
 }
 
+/** Reserva registrada para una línea del pedido. */
+export type ItemReserva = {
+  itemId: string;
+  numeroReserva: string;
+  posicionReserva: string;
+};
+
 /** Aplica una transición de estado validando rol y estado de origen. */
 export async function cambiarEstado(
   solicitudId: string,
   nuevoEstado: EstadoSolicitud,
-  extra?: { motivoRechazo?: string; pedidoExternoRef?: string },
+  extra?: {
+    motivoRechazo?: string;
+    reservas?: ItemReserva[];
+  },
 ): Promise<{ error?: string }> {
   const usuario = await requerirUsuario();
 
@@ -419,16 +434,53 @@ export async function cambiarEstado(
     return { error: "No puedes realizar esa acción sobre esta solicitud." };
   }
 
-  // El solicitante solo puede cancelar lo suyo.
-  if (
-    usuario.rol === "SOLICITANTE" &&
-    solicitud.solicitanteId !== usuario.id
-  ) {
+  if (!puedeActuarSobre(usuario, solicitud)) {
     return { error: "Solo puedes modificar tus propias solicitudes." };
   }
 
   if (nuevoEstado === "RECHAZADA" && !extra?.motivoRechazo?.trim()) {
     return { error: "Indica el motivo del rechazo." };
+  }
+
+  // Gestionar con el almacén exige que cada línea lleve su reserva: es el dato
+  // con que el almacén identifica el pedido. Se valida sobre la mezcla de lo
+  // ya guardado con lo que llega del formulario, para no perder lo registrado
+  // en un paso anterior.
+  let reservasAEscribir: ItemReserva[] = [];
+  if (nuevoEstado === "EN_GESTION") {
+    const items = await db.solicitudItem.findMany({
+      where: { solicitudId },
+      select: {
+        id: true,
+        numeroReserva: true,
+        posicionReserva: true,
+        articulo: { select: { ceco: true } },
+      },
+    });
+
+    const entrantes = new Map(
+      (extra?.reservas ?? []).map((r) => [r.itemId, r]),
+    );
+
+    const fusionadas = items.map((item) => {
+      const entrante = entrantes.get(item.id);
+      return {
+        id: item.id,
+        ceco: item.articulo.ceco,
+        numeroReserva: entrante?.numeroReserva?.trim() || item.numeroReserva,
+        posicionReserva:
+          entrante?.posicionReserva?.trim() || item.posicionReserva,
+      };
+    });
+
+    const problema = faltaReserva(fusionadas);
+    if (problema) return { error: problema };
+
+    reservasAEscribir = lineasConReserva(fusionadas).map((i) => ({
+      itemId: i.id,
+      numeroReserva: i.numeroReserva ?? "",
+      posicionReserva: i.posicionReserva ?? "",
+    }));
   }
 
   const ahora = new Date();
@@ -444,13 +496,17 @@ export async function cambiarEstado(
       datos.aprobadaEn = ahora;
       datos.motivoRechazo = extra?.motivoRechazo?.trim();
       break;
+    case "RESERVA_SOLICITADA":
+      datos.gestorId = usuario.id;
+      datos.reservaSolicitadaEn = ahora;
+      break;
     case "EN_GESTION":
       datos.gestorId = usuario.id;
       datos.enGestionEn = ahora;
-      datos.pedidoExternoRef = extra?.pedidoExternoRef?.trim() || null;
       break;
     case "RECIBIDA":
-      datos.gestorId = usuario.id;
+      // Ver marcarRecibida(): recibir no reasigna el gestor del pedido.
+      if (esGestion(usuario.rol)) datos.gestorId = usuario.id;
       datos.recibidaEn = ahora;
       break;
     case "CANCELADA":
@@ -458,7 +514,20 @@ export async function cambiarEstado(
       break;
   }
 
-  await db.solicitud.update({ where: { id: solicitudId }, data: datos });
+  // Las reservas y el cambio de estado son un solo hecho: una solicitud en
+  // gestión sin reservas escritas, o al revés, dejaría el pedido a medias.
+  await db.$transaction(async (tx) => {
+    for (const reserva of reservasAEscribir) {
+      await tx.solicitudItem.update({
+        where: { id: reserva.itemId },
+        data: {
+          numeroReserva: reserva.numeroReserva,
+          posicionReserva: reserva.posicionReserva || null,
+        },
+      });
+    }
+    await tx.solicitud.update({ where: { id: solicitudId }, data: datos });
+  });
 
   await registrarAuditoria({
     usuarioId: usuario.id,
@@ -471,6 +540,7 @@ export async function cambiarEstado(
   const CONFIRMACION: Partial<Record<EstadoSolicitud, string>> = {
     APROBADA: "Solicitud aprobada.",
     RECHAZADA: "Solicitud rechazada.",
+    RESERVA_SOLICITADA: "Reserva solicitada al almacén.",
     EN_GESTION: "Pedido registrado con el almacén.",
     RECIBIDA: "Marcada como recibida en bodega.",
     CANCELADA: "Solicitud cancelada.",
@@ -509,6 +579,10 @@ export async function marcarRecibida(
 
   if (!puedeTransicionar(solicitud.estado, "RECIBIDA", usuario.rol)) {
     return { error: "No puedes marcar como recibida esta solicitud." };
+  }
+
+  if (!puedeActuarSobre(usuario, solicitud)) {
+    return { error: "Solo puedes recibir tus propias solicitudes." };
   }
 
   const porId = new Map(solicitud.items.map((i) => [i.id, i]));
@@ -556,7 +630,14 @@ export async function marcarRecibida(
     }
     await tx.solicitud.update({
       where: { id: solicitudId },
-      data: { estado: "RECIBIDA", gestorId: usuario.id, recibidaEn: new Date() },
+      data: {
+        estado: "RECIBIDA",
+        // Si recibe el propio beneficiario no hay gestor nuevo que anotar:
+        // sigue siendo quien gestionó el pedido con el almacén, y pisarlo
+        // borraría el único rastro de quién lo hizo.
+        ...(esGestion(usuario.rol) ? { gestorId: usuario.id } : {}),
+        recibidaEn: new Date(),
+      },
     });
   });
 
@@ -605,11 +686,19 @@ export async function accionCambiarEstado(formData: FormData) {
   const solicitudId = String(formData.get("solicitudId") ?? "");
   const nuevoEstado = String(formData.get("nuevoEstado") ?? "") as EstadoSolicitud;
   const motivoRechazo = String(formData.get("motivoRechazo") ?? "");
-  const pedidoExternoRef = String(formData.get("pedidoExternoRef") ?? "");
+
+  let reservas: ItemReserva[] = [];
+  try {
+    reservas = JSON.parse(String(formData.get("reservas") ?? "[]"));
+  } catch {
+    redirect(
+      `/solicitudes/${solicitudId}?error=${encodeURIComponent("No se pudieron leer las reservas.")}`,
+    );
+  }
 
   const resultado = await cambiarEstado(solicitudId, nuevoEstado, {
     motivoRechazo,
-    pedidoExternoRef,
+    reservas,
   });
 
   if (resultado.error) {
@@ -689,15 +778,15 @@ export async function aprobarVarias(
 }
 
 /**
- * Marca varias solicitudes como pedidas al almacén, con una misma referencia.
+ * Pide el número de reserva de varias solicitudes de una vez.
  *
- * Va de la mano del formato combinado: se descarga un único documento con
- * todas las seleccionadas y se envía una sola vez, así que registrarlas por
- * separado obligaría a repetir el mismo número de pedido una y otra vez.
+ * Es el paso propio del EPP: la reserva la entrega el almacén y hasta que
+ * llegue no hay nada que registrar, así que el lote no necesita datos. Se valida
+ * cada una igual que en la vía individual y las que no correspondan se dejan
+ * intactas y se informan.
  */
-export async function enviarVariasAlAlmacen(
+export async function solicitarReservaVarias(
   ids: string[],
-  pedidoExternoRef?: string,
 ): Promise<{ error?: string; mensaje?: string }> {
   const usuario = await requerirUsuario();
 
@@ -710,28 +799,144 @@ export async function enviarVariasAlAlmacen(
     select: { id: true, estado: true },
   });
 
-  const enviables = solicitudes.filter((s) =>
-    puedeTransicionar(s.estado, "EN_GESTION", usuario.rol),
+  const pedibles = solicitudes.filter((s) =>
+    puedeTransicionar(s.estado, "RESERVA_SOLICITADA", usuario.rol),
   );
+
+  if (pedibles.length === 0) {
+    return {
+      error:
+        "Ninguna de las solicitudes seleccionadas puede pasar a reserva solicitada: deben estar aprobadas.",
+    };
+  }
+
+  const ahora = new Date();
+  await db.solicitud.updateMany({
+    where: { id: { in: pedibles.map((s) => s.id) } },
+    data: {
+      estado: "RESERVA_SOLICITADA",
+      gestorId: usuario.id,
+      reservaSolicitadaEn: ahora,
+    },
+  });
+
+  for (const s of pedibles) {
+    await registrarAuditoria({
+      usuarioId: usuario.id,
+      entidad: "Solicitud",
+      entidadId: s.id,
+      accion: "RESERVA_SOLICITADA",
+      detalle: pedibles.length > 1 ? { enLoteDe: pedibles.length } : undefined,
+    });
+  }
+
+  const omitidas = solicitudes.length - pedibles.length;
+  const mensaje =
+    pedibles.length === 1
+      ? "Reserva solicitada al almacén."
+      : `Se pidió la reserva de ${pedibles.length} solicitudes.`;
+
+  await dejarAviso(
+    omitidas > 0
+      ? `${mensaje} ${omitidas} no estaba${omitidas === 1 ? "" : "n"} aprobada${
+          omitidas === 1 ? "" : "s"
+        } y quedó${omitidas === 1 ? "" : "aron"} sin cambios.`
+      : mensaje,
+  );
+
+  revalidatePath("/solicitudes");
+  revalidatePath("/escritorio");
+  return { mensaje };
+}
+
+/**
+ * Marca varias solicitudes como pedidas al almacén, bajo un mismo número de
+ * reserva.
+ *
+ * Va de la mano del formato combinado: se descarga un único documento con
+ * todas las seleccionadas y se envía una sola vez, así que registrarlas por
+ * separado obligaría a repetir la misma reserva una y otra vez.
+ *
+ * Cubre solo la reserva del almacén, que es la que se pide con esa planilla y
+ * viene sin posición. Una solicitud que además tenga líneas con reserva propia
+ * no avanza por aquí: esas se registran una a una, con su posición.
+ */
+export async function enviarVariasAlAlmacen(
+  ids: string[],
+  numeroReserva?: string,
+): Promise<{ error?: string; mensaje?: string }> {
+  const usuario = await requerirUsuario();
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { error: "No seleccionaste ninguna solicitud." };
+  }
+
+  const reserva = numeroReserva?.trim();
+  if (!reserva) {
+    return { error: "Indica el número de reserva del almacén." };
+  }
+
+  const solicitudes = await db.solicitud.findMany({
+    where: { id: { in: ids } },
+    orderBy: { folio: "asc" },
+    select: {
+      id: true,
+      estado: true,
+      items: {
+        select: {
+          id: true,
+          numeroReserva: true,
+          posicionReserva: true,
+          articulo: { select: { ceco: true } },
+        },
+      },
+    },
+  });
+
+  const enviables = solicitudes.filter((s) => {
+    if (!puedeTransicionar(s.estado, "EN_GESTION", usuario.rol)) return false;
+
+    // Con la reserva del almacén ya puesta, ¿queda algo sin resolver? Si sí, es
+    // una línea de reserva propia, que necesita su posición y no se puede
+    // completar a ciegas desde el lote.
+    const conReservaDelLote = s.items.map((i) => ({
+      id: i.id,
+      ceco: i.articulo.ceco,
+      numeroReserva:
+        i.articulo.ceco === CECO_ALMACEN ? reserva : i.numeroReserva,
+      posicionReserva: i.posicionReserva,
+    }));
+    return faltaReserva(conReservaDelLote) === null;
+  });
 
   if (enviables.length === 0) {
     return {
       error:
-        "Ninguna de las solicitudes seleccionadas se puede pedir al almacén: deben estar aprobadas.",
+        "Ninguna de las solicitudes seleccionadas se puede pedir al almacén: deben estar aprobadas o con la reserva ya pedida, y sin líneas de reserva propia pendientes.",
     };
   }
 
-  const referencia = pedidoExternoRef?.trim() || null;
+  const lineas = enviables.flatMap((s) =>
+    lineasDeAlmacen(s.items.map((i) => ({ id: i.id, ceco: i.articulo.ceco }))),
+  );
+
   const ahora = new Date();
 
-  await db.solicitud.updateMany({
-    where: { id: { in: enviables.map((s) => s.id) } },
-    data: {
-      estado: "EN_GESTION",
-      gestorId: usuario.id,
-      enGestionEn: ahora,
-      pedidoExternoRef: referencia,
-    },
+  await db.$transaction(async (tx) => {
+    for (const linea of lineas) {
+      await tx.solicitudItem.update({
+        where: { id: linea.id },
+        data: { numeroReserva: reserva },
+      });
+    }
+    await tx.solicitud.updateMany({
+      where: { id: { in: enviables.map((s) => s.id) } },
+      data: {
+        estado: "EN_GESTION",
+        gestorId: usuario.id,
+        enGestionEn: ahora,
+      },
+    });
   });
 
   for (const s of enviables) {
@@ -741,7 +946,7 @@ export async function enviarVariasAlAlmacen(
       entidadId: s.id,
       accion: "EN_GESTION",
       detalle: {
-        ...(referencia ? { pedidoExternoRef: referencia } : {}),
+        numeroReserva: reserva,
         ...(enviables.length > 1 ? { enLoteDe: enviables.length } : {}),
       },
     });
@@ -755,9 +960,11 @@ export async function enviarVariasAlAlmacen(
 
   await dejarAviso(
     omitidas > 0
-      ? `${mensaje} ${omitidas} no estaba${omitidas === 1 ? "" : "n"} aprobada${
-          omitidas === 1 ? "" : "s"
-        } y quedó${omitidas === 1 ? "" : "aron"} sin cambios.`
+      ? `${mensaje} ${omitidas} no estaba${
+          omitidas === 1 ? "" : "n"
+        } en condiciones de pedirse y quedó${
+          omitidas === 1 ? "" : "aron"
+        } sin cambios.`
       : mensaje,
   );
 

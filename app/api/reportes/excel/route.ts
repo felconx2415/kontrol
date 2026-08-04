@@ -10,7 +10,7 @@ import {
 } from "@/lib/reportes";
 import { esGestion, ETIQUETA_ESTADO, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 import { LOGO_ALTO, LOGO_ANCHO, LOGO_PNG_BASE64 } from "@/lib/logo";
-import { formatearFechaHora } from "@/lib/vencimientos";
+import { fechaParaExcel, formatearFechaHora } from "@/lib/vencimientos";
 
 export async function GET(request: Request) {
   const usuario = await usuarioActual();
@@ -180,10 +180,12 @@ export async function GET(request: Request) {
         pedida: item.cantidad,
         entregada: item.entregaItem?.cantidadEntregada ?? 0,
         motivo: item.motivo ? ETIQUETA_MOTIVO[item.motivo] : "",
-        creada: s.creadaEn,
+        creada: fechaParaExcel(s.creadaEn),
         aprobador: s.aprobador?.nombre ?? "",
-        entregadaEn: s.entrega?.entregadaEn ?? "",
-        vence: item.entregaItem?.venceEn ?? "",
+        entregadaEn: s.entrega ? fechaParaExcel(s.entrega.entregadaEn) : "",
+        vence: item.entregaItem?.venceEn
+          ? fechaParaExcel(item.entregaItem.venceEn)
+          : "",
       });
     }
   }
@@ -235,8 +237,8 @@ export async function GET(request: Request) {
           ? ETIQUETA_VUELTA[linea.estadoDevolucion]
           : "En préstamo",
         registro: p.prestadoPor.nombre,
-        salida: p.prestadoEn,
-        devuelto: linea.devueltoEn ?? "",
+        salida: fechaParaExcel(p.prestadoEn),
+        devuelto: linea.devueltoEn ? fechaParaExcel(linea.devueltoEn) : "",
         nota: [p.notas, linea.observacion].filter(Boolean).join(" · "),
       });
     }
@@ -268,7 +270,7 @@ export async function GET(request: Request) {
       usuario: t.usuario.nombre,
       brigada: t.usuario.brigada?.nombre ?? "",
       asigno: t.asignadoPor.nombre,
-      fecha: t.asignadoEn,
+      fecha: fechaParaExcel(t.asignadoEn),
       nota: t.notas ?? "",
     });
   }

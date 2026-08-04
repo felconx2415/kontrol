@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { ZONA_HORARIA } from "@/lib/vencimientos";
 import Boton, { BotonEnlace } from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
@@ -32,10 +33,16 @@ const TABS: { id: Tab; texto: string }[] = [
 ];
 
 const fecha = (d: Date) =>
-  d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+  d.toLocaleDateString("es-CL", {
+    timeZone: ZONA_HORARIA,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
 const fechaHora = (d: Date) =>
   d.toLocaleString("es-CL", {
+    timeZone: ZONA_HORARIA,
     day: "2-digit",
     month: "short",
     year: "numeric",

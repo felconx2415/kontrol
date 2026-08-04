@@ -3,11 +3,9 @@ import ExcelJS from "exceljs";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { formatearFolio } from "@/lib/folio";
-import { esGestion, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { CECO_ALMACEN, esGestion, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { fechaParaExcel } from "@/lib/vencimientos";
 
-// Solo se envían al almacén interno los ítems de este centro de costo. El resto
-// (otro CECO) va por otro canal y no entra en esta planilla.
-const CECO_ALMACEN = "FD1400D082";
 // Almacén de destino; por ahora es fijo.
 const ALMACEN = "FLA1";
 
@@ -75,7 +73,7 @@ export async function GET(request: Request) {
     { header: "DESCRIPCIÓN", key: "descripcion", width: 42 },
     { header: "CANTIDAD", key: "cantidad", width: 10 },
     { header: "Estado", key: "estado", width: 22 },
-    { header: "Reserva", key: "reserva", width: 12 },
+    { header: "Reserva", key: "reserva", width: 14 },
     { header: "Fecha Solicitud", key: "fecha", width: 14 },
   ];
 
@@ -112,8 +110,11 @@ export async function GET(request: Request) {
         descripcion: item.articulo.nombre,
         cantidad: item.cantidad,
         estado: item.motivo ? ETIQUETA_MOTIVO[item.motivo] : "",
-        reserva: "",
-        fecha: fechaSolicitud,
+        // Va vacía mientras no haya reserva: esta planilla es justamente lo
+        // que se manda para pedirla, y recién en el segundo envío —ya con el
+        // número— sale llena. La reserva del almacén no lleva posición.
+        reserva: item.numeroReserva ?? "",
+        fecha: fechaParaExcel(fechaSolicitud),
       });
     }
 

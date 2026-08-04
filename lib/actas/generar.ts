@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { ETIQUETA_ROL } from "@/lib/solicitud-estado";
 import { formatearFolio } from "@/lib/folio";
+import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
 import QRCode from "qrcode";
 import { htmlAPdf, subidaComoDataUri } from "@/lib/render-pdf";
 import { construirActaHtml, type FirmaActa, type ItemActa } from "@/lib/actas/plantilla";
@@ -45,17 +46,8 @@ async function qrDe(
   return { imagen, url };
 }
 
-const fechaHora = (d: Date) =>
-  d.toLocaleString("es-CL", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-const fechaCorta = (d: Date) =>
-  d.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" });
+const fechaHora = (d: Date) => formatearFechaHora(d);
+const fechaCorta = (d: Date) => formatearFecha(d);
 
 function venceComoTexto(venceEn: Date | null): { texto: string | null; alerta: boolean } {
   if (!venceEn) return { texto: null, alerta: false };

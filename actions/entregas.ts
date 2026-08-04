@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { registrarAuditoria, requerirRol } from "@/lib/auth";
+import { registrarAuditoria, requerirUsuario } from "@/lib/auth";
 import { bufferDesdeDataUrl, guardarImagen } from "@/lib/archivos";
 import { calcularVenceEn } from "@/lib/vencimientos";
-import { ROLES_GESTION } from "@/lib/solicitud-estado";
+import {
+  esGestion,
+  puedeActuarSobre,
+  puedeTransicionar,
+} from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
 
 export type EstadoEntrega = { error?: string };
@@ -15,7 +19,7 @@ export async function registrarEntrega(
   _estado: EstadoEntrega,
   formData: FormData,
 ): Promise<EstadoEntrega> {
-  const usuario = await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirUsuario();
 
   const solicitudId = String(formData.get("solicitudId") ?? "");
   const observaciones = String(formData.get("observaciones") ?? "").trim() || null;
@@ -32,6 +36,14 @@ export async function registrarEntrega(
   });
 
   if (!solicitud) return { error: "La solicitud no existe." };
+
+  if (!puedeTransicionar(solicitud.estado, "ENTREGADA", usuario.rol)) {
+    return { error: "No puedes registrar la entrega de esta solicitud." };
+  }
+
+  if (!puedeActuarSobre(usuario, solicitud)) {
+    return { error: "Solo puedes firmar la recepción de tus propias solicitudes." };
+  }
 
   // Solo se entrega lo que ya llegó desde el almacén externo.
   if (solicitud.estado !== "RECIBIDA") {
@@ -64,12 +76,21 @@ export async function registrarEntrega(
   const firmaPngUrl = await guardarImagen(firma, "image/png", "firmas");
   const ahora = new Date();
 
+  // Cuando el beneficiario retira y firma él mismo, el acta no puede llevarlo a
+  // él en los dos lados: entrega quien gestionó el pedido con el almacén, que es
+  // de donde salió el material. Solo si no consta —solicitudes anteriores a que
+  // se registrara el gestor— se cae al propio firmante.
+  const retiroPropio = !esGestion(usuario.rol);
+  const entregadoPorId = retiroPropio
+    ? (solicitud.gestorId ?? usuario.id)
+    : usuario.id;
+
   await db.$transaction(async (tx) => {
     const entrega = await tx.entrega.create({
       data: {
         solicitudId: solicitud.id,
         receptorId: solicitud.solicitanteId,
-        entregadoPorId: usuario.id,
+        entregadoPorId,
         entregadaEn: ahora,
         firmaPngUrl,
         observaciones,
@@ -110,10 +131,17 @@ export async function registrarEntrega(
     entidad: "Solicitud",
     entidadId: solicitud.id,
     accion: "ENTREGADA",
-    detalle: { items: [...cantidades.entries()] },
+    detalle: {
+      items: [...cantidades.entries()],
+      ...(retiroPropio ? { retiradoPorElBeneficiario: true } : {}),
+    },
   });
 
-  await dejarAviso("Entrega registrada. El acta ya está disponible.");
+  await dejarAviso(
+    retiroPropio
+      ? "Recepción firmada. El acta ya está disponible."
+      : "Entrega registrada. El acta ya está disponible.",
+  );
 
   revalidatePath(`/solicitudes/${solicitud.id}`);
   revalidatePath("/solicitudes");

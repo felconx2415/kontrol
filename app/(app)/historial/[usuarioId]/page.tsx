@@ -45,7 +45,15 @@ export default async function Historial({
   const enCurso = await db.solicitud.findMany({
     where: {
       solicitanteId: usuarioId,
-      estado: { in: ["PENDIENTE", "APROBADA", "EN_GESTION", "RECIBIDA"] },
+      estado: {
+        in: [
+          "PENDIENTE",
+          "APROBADA",
+          "RESERVA_SOLICITADA",
+          "EN_GESTION",
+          "RECIBIDA",
+        ],
+      },
     },
     orderBy: { creadaEn: "desc" },
     select: {

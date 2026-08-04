@@ -19,6 +19,12 @@ ENV SESSION_SECRET="build-time-placeholder-override-en-runtime-32c"
 ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Zona horaria del contenedor. Sin esto Node corre en UTC y toda cuenta hecha
+# en hora local —cuándo vence un EPP, en qué mes cae— se corre unas horas. El
+# formato de lo que se muestra ya fija America/Santiago por su cuenta
+# (ZONA_HORARIA en lib/vencimientos.ts); esto alinea además los cálculos.
+ENV TZ=America/Santiago
+
 # Dependencias (capa cacheable): solo cambia si cambian los manifiestos.
 COPY package.json package-lock.json ./
 RUN npm ci

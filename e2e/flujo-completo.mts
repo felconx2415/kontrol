@@ -19,6 +19,43 @@ async function verTexto(pagina: Page, texto: string | RegExp, ms = 10000) {
   }
 }
 
+/**
+ * Estado según la insignia del encabezado.
+ *
+ * Buscar el texto suelto no sirve para comprobar en qué estado quedó una
+ * solicitud: la línea de tiempo escribe el nombre de todas las etapas, también
+ * las pendientes, así que verTexto daba por bueno un estado al que nunca llegó.
+ */
+async function verEstado(pagina: Page, estado: string, ms = 10000) {
+  try {
+    await pagina
+      .locator("h1 + span")
+      .filter({ hasText: estado })
+      .first()
+      .waitFor({ state: "visible", timeout: ms });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Si el guard de rol echó a la página al escritorio.
+ *
+ * No sirve mirar la URL: ante un `redirect()` de servidor, Next entrega el
+ * contenido del destino dejando la barra de direcciones en la ruta pedida, así
+ * que la URL sigue diciendo /admin/usuarios aunque no se haya renderizado nada
+ * de ahí. Lo que importa —y lo que se comprueba— es qué página se ve.
+ */
+async function fueRechazado(pagina: Page) {
+  const titulo = await pagina
+    .locator("h1")
+    .first()
+    .innerText()
+    .catch(() => "");
+  return titulo.trim() === "Escritorio";
+}
+
 /** Espera a que la página quede quieta tras una navegación o acción. */
 async function asentar(pagina: Page) {
   await pagina.waitForLoadState("networkidle");
@@ -85,35 +122,41 @@ try {
   await solicitante.goto(`${BASE}/admin/usuarios`);
   check(
     "El solicitante es rechazado de /admin/usuarios",
-    solicitante.url().includes("/escritorio"),
-    solicitante.url(),
+    await fueRechazado(solicitante),
   );
 
   // Administrar cuentas es exclusivo de ADMIN: el gestor llega al grupo /admin
   // (ve el catálogo) pero no a la gestión de usuarios.
   await gestor.goto(`${BASE}/admin/usuarios`);
-  check(
-    "El gestor es rechazado de /admin/usuarios",
-    gestor.url().includes("/escritorio"),
-    gestor.url(),
-  );
+  check("El gestor es rechazado de /admin/usuarios", await fueRechazado(gestor));
 
   await solicitante.goto(`${BASE}/reportes`);
   check(
     "El solicitante es rechazado de /reportes",
-    solicitante.url().includes("/escritorio"),
+    await fueRechazado(solicitante),
   );
 
   // ---------- 2. Solicitud de equipamiento nuevo ----------
   console.log("\n2. Flujo de equipamiento nuevo");
   await solicitante.goto(`${BASE}/solicitudes/nueva`);
-  const valorBotas = await solicitante
-    .locator('select option', { hasText: "Botas de seguridad" })
+  await asentar(solicitante);
+
+  // El catálogo dejó de ser un <select> —con 200+ artículos era inmanejable— y
+  // pasó a un buscador: se teclea y se elige de la lista de resultados. Al
+  // elegir, el ítem se agrega solo, con su motivo por defecto.
+  const catalogo = solicitante.getByRole("combobox", {
+    name: /Artículo del catálogo/,
+  });
+  await catalogo.fill("Botas de seguridad");
+  await solicitante
+    .getByRole("option", { name: /Botas de seguridad/ })
     .first()
-    .getAttribute("value");
-  await solicitante.selectOption("select", valorBotas!);
-  await solicitante.click('button:has-text("Agregar")');
-  await solicitante.fill('input[placeholder="Ej: 42, M, L"]', "42");
+    .click();
+  check(
+    "El buscador agrega el artículo elegido",
+    await verTexto(solicitante, "Botas de seguridad"),
+  );
+
   await solicitante.fill(
     'textarea[name="justificacion"]',
     "Ingreso a brigada, requiere equipamiento base.",
@@ -124,7 +167,7 @@ try {
   const urlSolicitud = solicitante.url();
   check(
     "La solicitud queda pendiente de aprobación",
-    await verTexto(solicitante, "Pendiente de aprobación"),
+    await verEstado(solicitante, "Pendiente de aprobación"),
   );
 
   // El solicitante no debe poder aprobar su propia solicitud.
@@ -160,25 +203,38 @@ try {
 
   await aprobador.click('button:has-text("Aprobar")');
   await aprobador.waitForURL(urlSolicitud, { timeout: 15000 });
-  check("El aprobador aprueba la solicitud", await verTexto(aprobador, "Aprobada"));
+  check("El aprobador aprueba la solicitud", await verEstado(aprobador, "Aprobada"));
 
   // ---------- 4. Gestión y recepción ----------
   console.log("\n4. Gestión con el almacén externo");
   await gestor.goto(urlSolicitud);
   await asentar(gestor);
-  await gestor.fill('input[name="pedidoExternoRef"]', "OC-2026-0431");
-  await gestor.click('button:has-text("Pedir al almacén")');
+  // Sale del CECO del almacén: la reserva la entrega el almacén, así que
+  // primero se pide y recién con el número en mano se gestiona.
+  await gestor.click('button:has-text("Solicitar reserva")');
   await gestor.waitForURL(urlSolicitud, { timeout: 15000 });
   check(
-    "Queda registrada la referencia del pedido externo",
-    await verTexto(gestor, "OC-2026-0431"),
+    "La solicitud queda esperando el número de reserva",
+    await verEstado(gestor, "Reserva solicitada"),
   );
 
+  await gestor.click('button:has-text("Registrar reserva y gestionar")');
+  await gestor.fill("#reserva-FD1400D082", "4500912345");
+  await gestor.click('button:has-text("Registrar reserva y gestionar")');
+  await gestor.waitForURL(urlSolicitud, { timeout: 15000 });
+  check(
+    "Queda registrado el número de reserva del almacén",
+    await verTexto(gestor, "4500912345"),
+  );
+
+  // Recibir despliega un formulario para decir cuánto llegó de cada ítem: el
+  // botón abre, y la recepción se cierra confirmándola.
   await gestor.click('button:has-text("Marcar recibida")');
+  await gestor.click('button:has-text("Confirmar recepción")');
   await gestor.waitForURL(urlSolicitud, { timeout: 15000 });
   check(
     "La solicitud queda recibida en bodega",
-    await verTexto(gestor, "Recibida en bodega"),
+    await verEstado(gestor, "Recibida en bodega"),
   );
 
   // ---------- 5. Entrega con firma ----------
@@ -231,13 +287,21 @@ try {
   await asentar(solicitante);
   await solicitante.getByText("Reemplazo", { exact: true }).first().click();
   await solicitante.waitForTimeout(300);
-  const disponiblesAntes = await solicitante.locator("select option").count();
-  await solicitante.selectOption("select", { index: 1 });
-  await solicitante.click('button:has-text("Agregar")');
 
-  const selectMotivo = solicitante.locator("select").last();
-  await selectMotivo.selectOption("DANO");
-  await solicitante.fill("textarea", "Suela desprendida en terreno.");
+  // Lo que se puede reemplazar también se elige con el buscador: se abre sin
+  // teclear nada para ver todo lo asignado y contar cuánto hay.
+  const reemplazables = solicitante.getByRole("combobox", {
+    name: /se va a reemplazar/,
+  });
+  await reemplazables.click();
+  const disponiblesAntes = await solicitante.getByRole("option").count();
+  await solicitante.getByRole("option").first().click();
+
+  await solicitante.locator('select[id^="motivo-"]').selectOption("DESGASTE");
+  await solicitante.fill(
+    'textarea[id^="detalle-"]',
+    "Suela desprendida en terreno.",
+  );
   await solicitante.click('button:has-text("Enviar solicitud")');
   await solicitante.waitForURL(/\/solicitudes\/c[a-z0-9]{20,}$/, { timeout: 15000 });
 
@@ -245,7 +309,7 @@ try {
   check("El reemplazo se crea", urlReemplazo !== urlSolicitud);
   check(
     "El motivo del reemplazo queda registrado",
-    await verTexto(solicitante, "Motivo: Daño"),
+    await verTexto(solicitante, "Motivo: Desgaste por uso"),
   );
   check(
     "Se enlaza con la entrega anterior",
@@ -258,11 +322,14 @@ try {
   await asentar(solicitante);
   await solicitante.getByText("Reemplazo", { exact: true }).first().click();
   await solicitante.waitForTimeout(300);
-  const despues = await solicitante.locator("select option").count();
+  await solicitante
+    .getByRole("combobox", { name: /se va a reemplazar/ })
+    .click();
+  const despues = await solicitante.getByRole("option").count();
   check(
     "El ítem ya en reemplazo no vuelve a ofrecerse",
     despues === disponiblesAntes - 1,
-    `antes ${disponiblesAntes - 1}, ahora ${despues - 1}`,
+    `antes ${disponiblesAntes}, ahora ${despues}`,
   );
 
   // ---------- 9. Rechazo ----------
@@ -311,14 +378,17 @@ try {
   // ---------- 11. Administración ----------
   console.log("\n11. Administración");
   await gestor.goto(`${BASE}/admin/articulos`);
-  await gestor.fill('input[name="codigo"]', `EPP-TEST-${Date.now() % 10000}`);
+  const codigoArticulo = `EPP-TEST-${Date.now() % 10000}`;
+  await gestor.fill('input[name="codigo"]', codigoArticulo);
   await gestor.fill('input[name="nombre"]', "Guantes anticorte");
   await gestor.fill('input[name="vidaUtilDias"]', "120");
   await gestor.click('button:has-text("Agregar artículo")');
-  await gestor.waitForTimeout(1500);
+  // El catálogo pasa de 200 artículos y se pagina de a 10 por nombre, así que
+  // uno recién creado casi nunca cae en la primera página: lo que confirma el
+  // alta es el aviso del formulario, no verlo en la tabla.
   check(
     "Se agrega un artículo al catálogo",
-    await verTexto(gestor, "Guantes anticorte"),
+    await verTexto(gestor, `Artículo ${codigoArticulo} agregado.`),
   );
 
   // ---------- 12. Ciclo de vida de una cuenta ----------

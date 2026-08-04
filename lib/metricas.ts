@@ -9,6 +9,7 @@ import { esGestion } from "@/lib/solicitud-estado";
 export const ETAPAS_ACTIVAS: EstadoSolicitud[] = [
   "PENDIENTE",
   "APROBADA",
+  "RESERVA_SOLICITADA",
   "EN_GESTION",
   "RECIBIDA",
 ];
@@ -60,14 +61,19 @@ export async function embudoEtapas(): Promise<BarraEtapa[]> {
   const ETIQUETAS: Record<string, string> = {
     PENDIENTE: "Por aprobar",
     APROBADA: "Por pedir",
+    RESERVA_SOLICITADA: "Esperando reserva",
     EN_GESTION: "En camino",
     RECIBIDA: "Por entregar",
   };
 
   // La fecha que marca cuándo entró a la etapa cambia según la etapa.
-  const CAMPO_ENTRADA: Record<string, "enviadaEn" | "aprobadaEn" | "enGestionEn" | "recibidaEn"> = {
+  const CAMPO_ENTRADA: Record<
+    string,
+    "enviadaEn" | "aprobadaEn" | "reservaSolicitadaEn" | "enGestionEn" | "recibidaEn"
+  > = {
     PENDIENTE: "enviadaEn",
     APROBADA: "aprobadaEn",
+    RESERVA_SOLICITADA: "reservaSolicitadaEn",
     EN_GESTION: "enGestionEn",
     RECIBIDA: "recibidaEn",
   };
@@ -129,7 +135,11 @@ export async function vencimientosPorMes(): Promise<BarraMes[]> {
     const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     cubos.set(clave, {
       clave,
-      etiqueta: d.toLocaleDateString("es-CL", { month: "short" }).replace(".", ""),
+      // El cubo se arma con el mes local, así que la etiqueta se saca del mismo
+      // mes en UTC: formatearla en otra zona la correría al mes anterior.
+      etiqueta: new Date(Date.UTC(d.getFullYear(), d.getMonth(), 1))
+        .toLocaleDateString("es-CL", { timeZone: "UTC", month: "short" })
+        .replace(".", ""),
       valor: 0,
       vencido: false,
     });
@@ -196,7 +206,11 @@ export async function kpis(usuarioId: string, rol: Rol): Promise<Kpi[]> {
         orderBy: { enviadaEn: "asc" },
         select: { enviadaEn: true },
       }),
-      db.solicitud.count({ where: { estado: { in: ["APROBADA", "EN_GESTION"] } } }),
+      db.solicitud.count({
+        where: {
+          estado: { in: ["APROBADA", "RESERVA_SOLICITADA", "EN_GESTION"] },
+        },
+      }),
       db.solicitud.count({ where: { estado: "RECIBIDA" } }),
       db.entregaItem.count({
         where: { reemplazadoEn: null, venceEn: { not: null, lt: hoy } },

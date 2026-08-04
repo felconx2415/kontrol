@@ -4,6 +4,7 @@ import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
 import { cantidadConSigno, COLOR_MOVIMIENTO, ETIQUETA_MOVIMIENTO } from "@/lib/bodega";
+import { ZONA_HORARIA } from "@/lib/vencimientos";
 import Insignia from "@/components/ui/insignia";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
 import { Seccion, Vacio } from "@/components/ui/superficie";
@@ -15,6 +16,7 @@ const POR_PAGINA = 10;
 
 const fechaHora = (d: Date) =>
   d.toLocaleString("es-CL", {
+    timeZone: ZONA_HORARIA,
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -23,7 +25,12 @@ const fechaHora = (d: Date) =>
   });
 
 const fecha = (d: Date) =>
-  d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+  d.toLocaleDateString("es-CL", {
+    timeZone: ZONA_HORARIA,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
 export default async function DetalleItem({
   params,
