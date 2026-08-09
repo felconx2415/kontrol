@@ -122,6 +122,7 @@ app/(app)/documentos      Actas firmadas de cada persona
 app/(app)/notificaciones  Avisos de cada persona
 app/(app)/reportes        Filtros y exportación a Excel
 app/(app)/configuracion   Catálogo, usuarios, brigadas y empresas
+app/api/v1                API de consulta (solo lectura, con token)
 app/api                   Actas PDF, subida de imágenes, exportación Excel
 actions/                  Server Actions
 lib/                      Estado, alcance por empresa, navegación, auth,
@@ -144,6 +145,41 @@ ADMIN alcanza cuatro áreas y ve el índice de `/configuracion`.
 
 En el teléfono no se esconde nada: el cajón lista todos los destinos en
 vertical, agrupados bajo «Mi trabajo», «Lo mío» y «Configuración».
+
+## API de consulta
+
+Para que otro sistema —un tablero, un ERP, un script— lea datos de Kontrol.
+Es de **solo lectura**: todas las rutas son `GET` y cualquier otro método
+responde `405`. Un token no puede crear, editar ni borrar nada.
+
+Los tokens se emiten en `/configuracion/api` (solo ADMIN). Del token se guarda
+únicamente su hash, así que el valor se muestra **una sola vez** al crearlo; si
+se pierde, se revoca y se emite otro. Cada token lleva su alcance: uno de una
+empresa solo ve lo de esa empresa, con las mismas reglas de `lib/alcance.ts`
+que aplica la interfaz.
+
+```bash
+curl -H "Authorization: Bearer kt_…" https://epp.rmsgestion.cl/api/v1
+```
+
+Esa primera llamada devuelve el catálogo de recursos y el alcance del token, así
+que sirve además para comprobar que funciona.
+
+| Recurso | Qué devuelve | Filtros |
+| --- | --- | --- |
+| `GET /api/v1/solicitudes` | Solicitudes con su estado y las fechas de cada etapa | `estado`, `tipo`, `brigadaId`, `desde`, `hasta`, `q` |
+| `GET /api/v1/solicitudes/{id}` | Detalle con ítems, reserva por línea y entrega | — |
+| `GET /api/v1/equipamiento` | Qué tiene asignado cada persona, con serie y vencimiento | `usuarioId`, `brigadaId`, `vigente` |
+| `GET /api/v1/vencimientos` | EPP vencido o por vencer | `dias` (30 por defecto) |
+| `GET /api/v1/bodega` | Inventario con stock y lo prestado | `q`, `activo` |
+| `GET /api/v1/bodega/prestamos` | Préstamos y sus líneas | `estado` |
+
+Los listados aceptan `?pagina=` y `?porPagina=` (máximo 200) y responden
+`{ datos, pagina, porPagina, total, totalPaginas }`. Las fechas van en ISO 8601.
+
+> La API no modifica datos del sistema. La única escritura que hace es sellar el
+> `ultimoUsoEn` del propio token —como mucho una vez por hora— para poder saber
+> cuáles siguen en uso y cuáles conviene retirar.
 
 ## Trazabilidad de reemplazos
 
@@ -171,6 +207,7 @@ npm run e2e            # flujo completo: requiere el servidor en localhost:3000
 npm run db:escenario   # siembra (o reinicia) una segunda empresa de prueba
 npm run e2e:empresas   # separación por empresa, avisos, reservas y receptor
 npm run e2e:lote       # acciones en lote sobre las cuentas
+npm run e2e:api        # API de consulta: token, aislamiento y solo lectura
 ```
 
 `e2e:lote` reparte gente entre las dos empresas, así que hay que volver a

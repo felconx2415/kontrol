@@ -17,7 +17,8 @@ export type IconoNav =
   | "empresas"
   | "notificaciones"
   | "perfil"
-  | "configuracion";
+  | "configuracion"
+  | "api";
 
 export type EnlaceNav = { href: string; texto: string; icono: IconoNav };
 
@@ -124,6 +125,13 @@ const TRAZOS: Record<IconoNav, ReactNode> = {
       <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" />
       <circle cx="12" cy="10" r="3" />
       <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />
+    </>
+  ),
+  api: (
+    <>
+      <path d="m18 16 4-4-4-4" />
+      <path d="m6 8-4 4 4 4" />
+      <path d="m14.5 4-5 16" />
     </>
   ),
   configuracion: (

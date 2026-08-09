@@ -11,6 +11,7 @@ import {
 } from "@/lib/solicitud-estado";
 import { notificar } from "@/lib/notificaciones";
 import { dejarAviso } from "@/lib/avisos";
+import { generarToken } from "@/lib/api-token";
 import type { Categoria, Rol, TipoBrigada } from "@/generated/prisma/enums";
 
 export type EstadoAdmin = { error?: string; ok?: string };
@@ -1075,4 +1076,92 @@ export async function alternarVariosUsuarios(
   await dejarAviso(mensaje);
   revalidatePath("/configuracion/usuarios");
   return { mensaje };
+}
+
+// ── Tokens de la API de consulta ──────────────────────────────────────────
+
+export type EstadoToken = EstadoAdmin & {
+  /** El token recién creado. Es la única vez que existe fuera del hash. */
+  token?: string;
+};
+
+/**
+ * Emite un token para la API de consulta.
+ *
+ * Devuelve el valor **una sola vez**: de ahí en adelante solo queda su hash, así
+ * que ni nosotros podemos volver a mostrarlo. Si se pierde, se revoca y se emite
+ * otro; es más seguro que poder recuperarlo.
+ */
+export async function crearTokenApi(
+  _estado: EstadoToken,
+  formData: FormData,
+): Promise<EstadoToken> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+
+  const nombre = String(formData.get("nombre") ?? "").trim();
+  const empresaId = String(formData.get("empresaId") ?? "") || null;
+
+  if (nombre.length < 3) {
+    return { error: "Ponle un nombre que diga para qué es, de al menos 3 caracteres." };
+  }
+
+  if (empresaId) {
+    const empresa = await db.empresa.findUnique({ where: { id: empresaId } });
+    if (!empresa) return { error: "Esa empresa ya no existe." };
+  }
+
+  const nuevo = generarToken();
+
+  const token = await db.tokenApi.create({
+    data: {
+      nombre,
+      prefijo: nuevo.prefijo,
+      hash: nuevo.hash,
+      empresaId,
+      creadoPorId: admin.id,
+    },
+  });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "TokenApi",
+    entidadId: token.id,
+    accion: "CREADO",
+    // Ni el valor ni el hash entran en la auditoría: es un registro que se
+    // consulta, y un secreto deja de serlo en cuanto se copia a otra tabla.
+    detalle: { nombre, prefijo: nuevo.prefijo, empresaId },
+  });
+
+  revalidatePath("/configuracion/api");
+  return {
+    ok: `Token «${nombre}» creado. Cópialo ahora: no vuelve a mostrarse.`,
+    token: nuevo.valor,
+  };
+}
+
+/**
+ * Revoca un token. No se elimina: queda con su fecha para poder responder
+ * después quién lo emitió, cuándo y hasta cuándo sirvió.
+ */
+export async function revocarTokenApi(formData: FormData) {
+  const admin = await requerirRol(...ROLES_ADMIN);
+  const id = String(formData.get("tokenId") ?? "");
+
+  const token = await db.tokenApi.findUnique({ where: { id } });
+  if (!token || token.revocadoEn) return;
+
+  await db.tokenApi.update({
+    where: { id },
+    data: { revocadoEn: new Date() },
+  });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "TokenApi",
+    entidadId: id,
+    accion: "REVOCADO",
+    detalle: { nombre: token.nombre, prefijo: token.prefijo },
+  });
+
+  revalidatePath("/configuracion/api");
 }

@@ -134,6 +134,43 @@ model Empresa {
   brigadas    Brigada[]
   solicitudes Solicitud[]
   itemsBodega ItemBodega[]
+  tokensApi   TokenApi[]
+}
+
+/**
+ * Credencial para consultar la API desde fuera de Kontrol (un tablero, un ERP,
+ * un script). La API es de **solo lectura**, así que un token no puede cambiar
+ * nada: lo único que decide es qué se alcanza a leer.
+ *
+ * Del token solo se guarda su `hash`; el valor completo se muestra una vez al
+ * crearlo y no vuelve a existir en ninguna parte. Si se pierde, se revoca y se
+ * emite otro. `prefijo` son los primeros caracteres, que sí se guardan en claro
+ * para poder reconocerlo en pantalla («¿cuál de los tres es el de Power BI?»).
+ */
+model TokenApi {
+  id     String @id @default(cuid())
+  /** Para qué es, escrito por quien lo crea: «Tablero de gerencia». */
+  nombre String
+  /** Primeros caracteres del token, para identificarlo sin revelarlo. */
+  prefijo String @unique
+  /** SHA-256 del token completo. Ver lib/api-token.ts. */
+  hash    String @unique
+
+  // A qué empresa alcanza. Null = todas, y solo un ADMIN puede emitirlo así:
+  // es el equivalente de su propio alcance.
+  empresaId String?
+
+  creadoPorId String
+  creadoEn    DateTime  @default(now())
+  /** Última vez que se usó, para poder retirar los que ya nadie llama. */
+  ultimoUsoEn DateTime?
+  /** Revocado: deja de servir sin borrarse, para no perder el rastro. */
+  revocadoEn  DateTime?
+
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+  creadoPor Usuario  @relation("TokensApiCreados", fields: [creadoPorId], references: [id])
+
+  @@index([empresaId])
 }
 
 /**
@@ -200,6 +237,7 @@ model Usuario {
 
   auditorias     Auditoria[]
   notificaciones Notificacion[]
+  tokensApi      TokenApi[]     @relation("TokensApiCreados")
 
   // Bodega local
   movimientosBodega        MovimientoBodega[]

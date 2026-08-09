@@ -65,6 +65,7 @@ const DESTINOS: Destino[] = [
   { id: "usuarios", href: "/configuracion/usuarios", texto: "Usuarios", icono: "usuarios", grupo: "configuracion", roles: SOLO_ADMIN },
   { id: "brigadas", href: "/configuracion/brigadas", texto: "Brigadas", icono: "brigadas", grupo: "configuracion", roles: SOLO_ADMIN },
   { id: "empresas", href: "/configuracion/empresas", texto: "Empresas", icono: "empresas", grupo: "configuracion", roles: SOLO_ADMIN },
+  { id: "api", href: "/configuracion/api", texto: "API", icono: "api", grupo: "configuracion", roles: SOLO_ADMIN },
 ];
 
 /** Lo mínimo que hace falta saber de quien mira para armarle la navegación. */
@@ -182,6 +183,7 @@ export const DESCRIPCION_AREA: Record<string, string> = {
   usuarios: "Cuentas, roles, empresa y brigada de cada persona.",
   brigadas: "Cuadrillas de cada empresa y quién las supervisa.",
   empresas: "Las organizaciones que separan los datos del sistema.",
+  api: "Tokens para que otro sistema consulte los datos, solo lectura.",
 };
 
 /**
