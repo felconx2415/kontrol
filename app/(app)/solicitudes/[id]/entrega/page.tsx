@@ -8,6 +8,7 @@ import {
   puedeActuarSobre,
   puedeTransicionar,
 } from "@/lib/solicitud-estado";
+import { filtroEmpresa } from "@/lib/alcance";
 import { Tarjeta } from "@/components/ui/superficie";
 import FormularioEntrega from "./formulario-entrega";
 
@@ -47,6 +48,25 @@ export default async function PaginaEntrega({
 
   const retiroPropio = !esGestion(usuario.rol);
 
+  // Candidatos a retirar en nombre del destinatario. Solo tiene sentido
+  // ofrecerlos a gestión, y solo de las empresas que alcanza.
+  const personas = retiroPropio
+    ? []
+    : await db.usuario.findMany({
+        where: {
+          ...filtroEmpresa(usuario.alcance),
+          activo: true,
+          id: { not: solicitud.solicitanteId },
+        },
+        orderBy: { nombre: "asc" },
+        select: {
+          id: true,
+          nombre: true,
+          rut: true,
+          brigada: { select: { nombre: true } },
+        },
+      });
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -67,7 +87,7 @@ export default async function PaginaEntrega({
       </div>
 
       <Tarjeta>
-        <p className="text-sm text-tinta-suave">Receptor</p>
+        <p className="text-sm text-tinta-suave">Destinatario</p>
         <p className="text-base font-medium">{solicitud.solicitante.nombre}</p>
         <p className="text-sm text-tinta-tenue">
           {solicitud.solicitante.rut ?? "Sin RUT registrado"}
@@ -78,6 +98,13 @@ export default async function PaginaEntrega({
       <FormularioEntrega
         retiroPropio={retiroPropio}
         solicitudId={solicitud.id}
+        destinatarioNombre={solicitud.solicitante.nombre}
+        personas={personas.map((p) => ({
+          id: p.id,
+          nombre: p.nombre,
+          detalle:
+            [p.brigada?.nombre, p.rut].filter(Boolean).join(" · ") || "",
+        }))}
         items={solicitud.items.map((i) => ({
           id: i.id,
           nombre: i.articulo.nombre,

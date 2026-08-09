@@ -16,8 +16,9 @@ export default function PieSitio() {
     <footer className="no-print mt-auto flex w-full flex-col items-center justify-around gap-3 bg-marca-950 px-4 py-4 text-center text-sm text-white/70 md:flex-row">
       <p>
         Kontrol{" "}
-        {/* package.json exige semver («0.6.1-beta»), pero el guion no aporta
-            nada al leerlo: en pantalla se separa la etiqueta con un espacio. */}
+        {/* Una versión estable («0.7.0») se muestra tal cual. Si vuelve a haber
+            una preliminar, semver la escribe con guion («0.8.0-beta») y aquí se
+            separa con un espacio: el guion no aporta nada al leerla. */}
         <span className="font-mono tabular-nums text-white/50">
           v{version.replace("-", " ")}
         </span>

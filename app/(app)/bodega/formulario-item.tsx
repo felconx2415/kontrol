@@ -5,8 +5,13 @@ import { crearItemBodega, type EstadoBodega } from "@/actions/bodega";
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import CampoEmpresa, { type EmpresaBodega } from "./campo-empresa";
 
-export default function FormularioItem() {
+export default function FormularioItem({
+  empresas,
+}: {
+  empresas: EmpresaBodega[];
+}) {
   const [estado, accion] = useActionState<EstadoBodega, FormData>(
     crearItemBodega,
     {},
@@ -20,6 +25,8 @@ export default function FormularioItem() {
       <p className="text-sm font-semibold text-tinta sm:col-span-2 lg:col-span-3">
         Nuevo ítem de bodega
       </p>
+
+      <CampoEmpresa empresas={empresas} idPrefijo="nuevo-item" />
 
       <Campo etiqueta="Código" htmlFor="codigoItem">
         <Entrada id="codigoItem" name="codigo" required placeholder="HER-001" />

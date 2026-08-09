@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { filtroEmpresa } from "@/lib/alcance";
 import { ZONA_HORARIA } from "@/lib/vencimientos";
 import FormularioDevolucion from "./formulario-devolucion";
 
@@ -21,11 +22,13 @@ export default async function PaginaDevolver({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const { id } = await params;
 
-  const prestamo = await db.prestamo.findUnique({
-    where: { id },
+  // findFirst y no findUnique: el préstamo tiene que ser además de una bodega
+  // que este gestor alcance, y eso se resuelve por sus líneas.
+  const prestamo = await db.prestamo.findFirst({
+    where: { id, items: { some: { item: filtroEmpresa(usuario.alcance) } } },
     include: {
       items: {
         where: { devueltoEn: null },

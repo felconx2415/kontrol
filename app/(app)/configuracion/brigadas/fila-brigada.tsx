@@ -11,11 +11,17 @@ import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
 import { ETIQUETA_TIPO_BRIGADA } from "@/lib/solicitud-estado";
 import { etiquetaSupervisor, type SupervisorOpcion } from "./formulario-brigada";
+import {
+  etiquetaEmpresa,
+  type EmpresaOpcion,
+} from "../empresas/formulario-empresa";
 
 export type BrigadaFila = {
   id: string;
   nombre: string;
   tipo: "EMPRESA" | "CONTRATISTA";
+  empresaId: string;
+  empresaNombre: string;
   supervisorId: string | null;
   supervisorNombre: string | null;
   miembros: number;
@@ -32,9 +38,11 @@ type Panel = "editar" | "eliminar" | null;
 export default function FilaBrigada({
   brigada,
   supervisores,
+  empresas,
 }: {
   brigada: BrigadaFila;
   supervisores: SupervisorOpcion[];
+  empresas: EmpresaOpcion[];
 }) {
   const [panel, setPanel] = useState<Panel>(null);
   const cerrar = () => setPanel(null);
@@ -47,6 +55,9 @@ export default function FilaBrigada({
       <tr className="transition-colors duration-150 hover:bg-panel-suave">
         <td data-label="Brigada" className="px-4 py-2.5 font-medium">
           {brigada.nombre}
+        </td>
+        <td data-label="Empresa" className="px-4 py-2.5 text-tinta-suave">
+          {brigada.empresaNombre}
         </td>
         <td data-label="Tipo" className="px-4 py-2.5 text-tinta-suave">
           {ETIQUETA_TIPO_BRIGADA[brigada.tipo]}
@@ -87,11 +98,12 @@ export default function FilaBrigada({
 
       {panel && (
         <tr className="bg-panel-suave">
-          <td colSpan={6} className="celda-completa panel-expandible px-4 py-4">
+          <td colSpan={7} className="celda-completa panel-expandible px-4 py-4">
             {panel === "editar" && (
               <PanelEditar
                 brigada={brigada}
                 supervisores={supervisores}
+                empresas={empresas}
                 onCerrar={cerrar}
               />
             )}
@@ -136,10 +148,12 @@ function BotonAccion({
 function PanelEditar({
   brigada,
   supervisores,
+  empresas,
   onCerrar,
 }: {
   brigada: BrigadaFila;
   supervisores: SupervisorOpcion[];
+  empresas: EmpresaOpcion[];
   onCerrar: () => void;
 }) {
   const [estado, accion] = useActionState<EstadoAdmin, FormData>(editarBrigada, {});
@@ -158,6 +172,34 @@ function PanelEditar({
           required
           defaultValue={brigada.nombre}
         />
+      </Campo>
+
+      <Campo
+        etiqueta="Empresa"
+        htmlFor={`empresa-${brigada.id}`}
+        requerido
+        pista={
+          brigada.miembros > 0
+            ? "No se puede cambiar mientras tenga miembros."
+            : undefined
+        }
+      >
+        <Seleccion
+          id={`empresa-${brigada.id}`}
+          name="empresaId"
+          required
+          defaultValue={brigada.empresaId}
+        >
+          {/* La empresa actual se ofrece siempre, aunque esté inactiva: si
+              faltara, guardar un cambio de nombre la mudaría sin querer. */}
+          {empresas
+            .filter((e) => e.activa || e.id === brigada.empresaId)
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {etiquetaEmpresa(e)}
+              </option>
+            ))}
+        </Seleccion>
       </Campo>
 
       <Campo etiqueta="Tipo" htmlFor={`tipo-${brigada.id}`}>

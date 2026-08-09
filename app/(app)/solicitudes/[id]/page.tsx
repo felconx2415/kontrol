@@ -16,6 +16,8 @@ import {
   puedeTransicionar,
   reservasPorCeco,
 } from "@/lib/solicitud-estado";
+import { alcanza } from "@/lib/alcance";
+import { reservasRecientes } from "@/lib/reservas";
 import EstadoBadge from "@/components/estado-badge";
 import TimelineSolicitud, { type HitoTimeline } from "@/components/timeline-solicitud";
 import ProgresoSolicitud from "@/components/progreso-solicitud";
@@ -57,6 +59,7 @@ export default async function DetalleSolicitud({
         include: {
           receptor: { select: { nombre: true } },
           entregadoPor: { select: { nombre: true } },
+          recibidoPor: { select: { nombre: true, rut: true } },
           items: true,
         },
       },
@@ -67,6 +70,17 @@ export default async function DetalleSolicitud({
 
   // Un solicitante solo puede ver lo suyo.
   if (usuario.rol === "SOLICITANTE" && solicitud.solicitanteId !== usuario.id) {
+    redirect("/escritorio?error=sin-permiso");
+  }
+
+  // Fuera de la propia empresa no se entra ni con el enlace directo: el listado
+  // ya no la muestra, pero el id sigue siendo adivinable. La única excepción es
+  // el dueño del pedido, que siempre puede ver el suyo aunque su cuenta haya
+  // cambiado de empresa después.
+  if (
+    solicitud.solicitanteId !== usuario.id &&
+    !alcanza(usuario.alcance, solicitud.empresaId)
+  ) {
     redirect("/escritorio?error=sin-permiso");
   }
 
@@ -155,6 +169,28 @@ export default async function DetalleSolicitud({
       evento: true,
     };
   });
+
+  // Quien retiró en la práctica, si no fue el destinatario. Con cuenta sale de
+  // la relación; sin cuenta, del nombre anotado a mano.
+  const retiradoPor = solicitud.entrega?.recibidoPor
+    ? {
+        nombre: solicitud.entrega.recibidoPor.nombre,
+        rut: solicitud.entrega.recibidoPor.rut,
+      }
+    : solicitud.entrega?.recibidoPorNombre
+      ? {
+          nombre: solicitud.entrega.recibidoPorNombre,
+          rut: solicitud.entrega.recibidoPorRut,
+        }
+      : null;
+
+  // Solo se consultan si hay una reserva que registrar: en el resto de los
+  // estados serían una consulta para nada.
+  const recientes =
+    esGestion(usuario.rol) &&
+    ["APROBADA", "RESERVA_SOLICITADA"].includes(solicitud.estado)
+      ? await reservasRecientes(usuario.alcance)
+      : [];
 
   const interrumpido =
     solicitud.estado === "RECHAZADA" || solicitud.estado === "CANCELADA";
@@ -324,10 +360,19 @@ export default async function DetalleSolicitud({
                 Entrega registrada
               </h2>
               <p className="mt-1 text-sm text-tinta">
-                Recibido por {solicitud.entrega.receptor.nombre} el{" "}
+                A nombre de {solicitud.entrega.receptor.nombre}, el{" "}
                 {formatearFechaHora(solicitud.entrega.entregadaEn)}, entregado por{" "}
                 {solicitud.entrega.entregadoPor.nombre}.
               </p>
+              {/* Que retirara un tercero es el dato que hay que poder ver sin
+                  abrir el PDF: es de lo primero que se pregunta si el
+                  destinatario dice que nunca recibió nada. */}
+              {retiradoPor && (
+                <p className="mt-1 text-sm font-medium text-tinta">
+                  Retirado y firmado por {retiradoPor.nombre}
+                  {retiradoPor.rut ? ` (${retiradoPor.rut})` : ""}.
+                </p>
+              )}
               {solicitud.entrega.observaciones && (
                 <p className="mt-1 text-sm text-tinta-suave">
                   {solicitud.entrega.observaciones}
@@ -336,7 +381,11 @@ export default async function DetalleSolicitud({
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Image
                   src={solicitud.entrega.firmaPngUrl}
-                  alt="Firma del receptor"
+                  alt={
+                    retiradoPor
+                      ? `Firma de ${retiradoPor.nombre}`
+                      : "Firma del receptor"
+                  }
                   width={160}
                   height={64}
                   className="h-16 w-auto rounded-lg border border-exito-borde bg-panel"
@@ -419,6 +468,11 @@ export default async function DetalleSolicitud({
                   posicionReserva: item.posicionReserva,
                 })),
               ).map((linea) => ({ ...linea, ceco: linea.ceco! }))}
+              reservasRecientes={recientes.map((r) => ({
+                numero: r.numero,
+                ceco: r.ceco,
+                ultimaPosicion: r.ultimaPosicion,
+              }))}
             />
           )}
         </div>

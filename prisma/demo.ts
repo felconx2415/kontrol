@@ -56,14 +56,24 @@ const ARTICULOS_DEMO = [
 async function prepararBase() {
   const pass = await bcrypt.hash("kontrol123", 10);
 
+  // Toda la demo transcurre en una empresa: la separación se ve con dos, pero
+  // sembrar dos obligaría a duplicar solicitudes, entregas y bodega para
+  // mostrar lo mismo. Para probar el aislamiento se crea la segunda a mano
+  // desde /admin/empresas.
+  const empresa = await db.empresa.upsert({
+    where: { nombre: "Empresa Demo" },
+    create: { nombre: "Empresa Demo" },
+    update: {},
+  });
+
   const brigadaNorte = await db.brigada.upsert({
-    where: { nombre: "Brigada Norte" },
-    create: { nombre: "Brigada Norte" },
+    where: { empresaId_nombre: { empresaId: empresa.id, nombre: "Brigada Norte" } },
+    create: { nombre: "Brigada Norte", empresaId: empresa.id },
     update: {},
   });
   const brigadaSur = await db.brigada.upsert({
-    where: { nombre: "Brigada Sur" },
-    create: { nombre: "Brigada Sur" },
+    where: { empresaId_nombre: { empresaId: empresa.id, nombre: "Brigada Sur" } },
+    create: { nombre: "Brigada Sur", empresaId: empresa.id },
     update: {},
   });
 
@@ -77,10 +87,22 @@ async function prepararBase() {
   for (const u of usuarios) {
     await db.usuario.upsert({
       where: { username: u.username },
-      create: { ...u, passwordHash: pass },
-      update: { nombre: u.nombre, rol: u.rol, brigadaId: u.brigadaId },
+      create: { ...u, passwordHash: pass, empresaId: empresa.id },
+      update: {
+        nombre: u.nombre,
+        rol: u.rol,
+        brigadaId: u.brigadaId,
+        empresaId: empresa.id,
+      },
     });
   }
+
+  // El gestor de la demo atiende esa empresa; sin esto su alcance quedaría
+  // apoyado solo en su empresa de origen.
+  await db.usuario.update({
+    where: { username: "gestor" },
+    data: { empresasGestionadas: { set: [{ id: empresa.id }] } },
+  });
 
   const aprobador = await db.usuario.findUniqueOrThrow({ where: { username: "aprobador" } });
   await db.brigada.update({ where: { id: brigadaNorte.id }, data: { supervisorId: aprobador.id } });
@@ -134,6 +156,7 @@ async function entregaHistorica(params: {
       folio: await siguienteFolio(),
       solicitanteId: solicitante.id,
       brigadaId: solicitante.brigadaId,
+      empresaId: solicitante.empresaId,
       tipo: "NUEVO",
       estado: "ENTREGADA",
       justificacion: "Entrega de temporada.",
@@ -194,6 +217,7 @@ async function solicitudEnEtapa(params: {
       folio: await siguienteFolio(),
       solicitanteId: solicitante.id,
       brigadaId: solicitante.brigadaId,
+      empresaId: solicitante.empresaId,
       tipo: "NUEVO",
       estado: params.estado,
       justificacion: "Reposición solicitada por el jefe de cuadrilla.",

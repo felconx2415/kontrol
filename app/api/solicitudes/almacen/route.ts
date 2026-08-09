@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { filtroEmpresa } from "@/lib/alcance";
 import { formatearFolio } from "@/lib/folio";
 import { CECO_ALMACEN, esGestion, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 import { fechaParaExcel } from "@/lib/vencimientos";
@@ -40,7 +41,8 @@ export async function GET(request: Request) {
   }
 
   const solicitudes = await db.solicitud.findMany({
-    where: { id: { in: ids } },
+    // Los ids llegan por la URL: el alcance los acota antes de volcarlos.
+    where: { ...filtroEmpresa(usuario.alcance), id: { in: ids } },
     orderBy: { folio: "asc" },
     include: {
       solicitante: { select: { nombre: true } },

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { formatearFecha } from "@/lib/vencimientos";
 import { formatearFolio } from "@/lib/folio";
 import { esGestion, ETIQUETA_ESTADO } from "@/lib/solicitud-estado";
+import { filtroEmpresa } from "@/lib/alcance";
 import Boton, { BotonEnlace } from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Tarjeta, Vacio } from "@/components/ui/superficie";
@@ -34,7 +35,9 @@ export default async function ListaSolicitudes({
   const { estado, mias, q, page } = await searchParams;
   const pagina = Math.max(1, Number(page) || 1);
 
-  const where: Prisma.SolicitudWhereInput = {};
+  // La empresa es el primer filtro y no depende de lo que se pida por la URL:
+  // fuera de ella no hay nada que listar.
+  const where: Prisma.SolicitudWhereInput = { ...filtroEmpresa(usuario.alcance) };
 
   // El solicitante nunca ve solicitudes ajenas.
   if (usuario.rol === "SOLICITANTE" || mias === "1") {

@@ -90,6 +90,77 @@ enum EstadoDevolucion {
   PERDIDO // no vuelve: no se repone stock
 }
 
+/**
+ * De qué avisa cada notificación. El tipo no es decorativo: agrupa el mismo
+ * hecho para todos sus destinatarios y permite filtrar sin leer el texto.
+ */
+enum TipoNotificacion {
+  SOLICITUD_CREADA // llegó una solicitud que aprobar
+  SOLICITUD_APROBADA
+  SOLICITUD_RECHAZADA
+  SOLICITUD_RESERVA_SOLICITADA
+  SOLICITUD_EN_GESTION
+  SOLICITUD_RECIBIDA
+  SOLICITUD_ENTREGADA
+  SOLICITUD_CANCELADA
+  SOLICITUD_EDITADA
+  PRESTAMO_REGISTRADO
+  PRESTAMO_DEVUELTO
+  BODEGA_ASIGNACION
+  CUENTA_CREADA
+}
+
+/**
+ * Empresa a la que pertenece la gente y sus datos. Es la unidad de separación:
+ * un usuario ve lo de su empresa y nada más.
+ *
+ * La excepción es el gestor, que puede atender **una o varias** —una misma
+ * persona lleva la logística de dos contratistas— y por eso su alcance vive en
+ * la relación `gestores` en vez de en `Usuario.empresaId`. El ADMIN no se
+ * limita: administra el sistema entero.
+ */
+model Empresa {
+  id       String   @id @default(cuid())
+  nombre   String   @unique
+  rut      String?
+  activa   Boolean  @default(true)
+  creadaEn DateTime @default(now())
+
+  miembros Usuario[] @relation("MiembrosEmpresa")
+  // Gestores que la atienden. Muchos a muchos: un gestor puede llevar varias
+  // empresas y una empresa puede tener varios gestores.
+  gestores Usuario[] @relation("GestoresEmpresa")
+
+  brigadas    Brigada[]
+  solicitudes Solicitud[]
+  itemsBodega ItemBodega[]
+}
+
+/**
+ * Aviso dirigido a una persona concreta. Se guarda en base y no se manda por
+ * ningún canal externo: la campana de la barra es el único destino.
+ *
+ * Cada destinatario tiene su propia fila aunque el hecho sea el mismo, porque
+ * «leída» es de cada uno.
+ */
+model Notificacion {
+  id        String           @id @default(cuid())
+  usuarioId String
+  tipo      TipoNotificacion
+  titulo    String
+  cuerpo    String
+  /** A dónde lleva al tocarla; normalmente el detalle de la solicitud. */
+  url       String?
+  leidaEn   DateTime?
+  creadaEn  DateTime         @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // El listado y el contador siempre consultan por usuario y por si está leída.
+  @@index([usuarioId, leidaEn])
+  @@index([usuarioId, creadaEn])
+}
+
 model Usuario {
   id           String   @id @default(cuid())
   username     String   @unique
@@ -102,8 +173,17 @@ model Usuario {
   // una vez y el sistema la estampa en los documentos que genera.
   firmaPngUrl  String?
   brigadaId    String?
+  // Empresa a la que pertenece. Null solo en el ADMIN del sistema, que no se
+  // circunscribe a ninguna. El gestor la tiene por su cuenta de origen, pero su
+  // alcance real lo dan `empresasGestionadas`.
+  empresaId    String?
   activo       Boolean  @default(true)
   creadoEn     DateTime @default(now())
+
+  empresa Empresa? @relation("MiembrosEmpresa", fields: [empresaId], references: [id])
+  // Las empresas que este gestor atiende: una, varias o ninguna. Solo tiene
+  // sentido en cuentas GESTOR; en el resto queda vacía.
+  empresasGestionadas Empresa[] @relation("GestoresEmpresa")
 
   brigada              Brigada?  @relation("MiembrosBrigada", fields: [brigadaId], references: [id])
   brigadasSupervisadas Brigada[] @relation("SupervisorBrigada")
@@ -116,8 +196,10 @@ model Usuario {
 
   entregasRecibidas Entrega[] @relation("Receptor")
   entregasHechas    Entrega[] @relation("EntregadoPor")
+  entregasRetiradas Entrega[] @relation("RecibidoPor")
 
-  auditorias Auditoria[]
+  auditorias     Auditoria[]
+  notificaciones Notificacion[]
 
   // Bodega local
   movimientosBodega        MovimientoBodega[]
@@ -126,19 +208,26 @@ model Usuario {
   asignacionesBodegaHechas AsignacionBodega[] @relation("AsignacionesHechas")
 
   @@index([rol])
+  @@index([empresaId])
 }
 
 model Brigada {
   id           String      @id @default(cuid())
-  nombre       String      @unique
+  nombre       String
   // Empresa o contratista: define en qué columna del formato de almacén va el
   // nombre de la brigada (la otra queda en «-»).
   tipo         TipoBrigada @default(EMPRESA)
+  empresaId    String
   supervisorId String?
 
+  empresa     Empresa     @relation(fields: [empresaId], references: [id])
   supervisor  Usuario?    @relation("SupervisorBrigada", fields: [supervisorId], references: [id])
   miembros    Usuario[]   @relation("MiembrosBrigada")
   solicitudes Solicitud[]
+
+  // El nombre es único dentro de la empresa, no en todo el sistema: dos
+  // empresas pueden tener cada una su «Brigada Norte».
+  @@unique([empresaId, nombre])
 }
 
 model Articulo {
@@ -166,6 +255,11 @@ model Solicitud {
   // solicitud (ver creadaPorId).
   solicitanteId String
   brigadaId     String?
+  // Empresa del beneficiario, copiada al crear. Se guarda aquí en vez de
+  // resolverse por el solicitante porque es el filtro de toda consulta del
+  // listado, y porque el pedido pertenece a la empresa en que se hizo aunque
+  // después la persona cambie de empresa.
+  empresaId     String?
   tipo          TipoSolicitud
   estado        EstadoSolicitud @default(BORRADOR)
   justificacion String?
@@ -204,12 +298,15 @@ model Solicitud {
   gestor      Usuario? @relation("Gestor", fields: [gestorId], references: [id])
   editadaPor  Usuario? @relation("EditorSolicitud", fields: [editadaPorId], references: [id])
   brigada     Brigada? @relation(fields: [brigadaId], references: [id])
+  empresa     Empresa? @relation(fields: [empresaId], references: [id])
 
   items   SolicitudItem[]
   entrega Entrega?
 
   @@index([estado])
   @@index([solicitanteId])
+  // El listado filtra por empresa y ordena por estado dentro de ella.
+  @@index([empresaId, estado])
 }
 
 model SolicitudItem {
@@ -248,6 +345,9 @@ model SolicitudItem {
 model Entrega {
   id             String   @id @default(cuid())
   solicitudId    String   @unique
+  // Destinatario: a nombre de quién queda el equipamiento. No cambia aunque lo
+  // retire otro, porque es de quien pasa a ser el material y en cuyo historial
+  // vive.
   receptorId     String
   entregadoPorId String
   entregadaEn    DateTime @default(now())
@@ -255,9 +355,21 @@ model Entrega {
   observaciones  String?
   actaPdfUrl     String?
 
+  // Quién retiró en la práctica, cuando no fue el destinatario: el material va
+  // dirigido a alguien pero lo recibe un compañero o el supervisor. Es quien
+  // firma, así que el acta tiene que nombrarlo o la firma no correspondería a
+  // nadie. Los tres campos van juntos y solo se llenan en ese caso.
+  //
+  // Si tiene cuenta se guarda el id y su nombre sale de ella; si no la tiene
+  // —un externo, alguien de otra faena— se anota a mano. Nunca los dos.
+  recibidoPorId     String?
+  recibidoPorNombre String?
+  recibidoPorRut    String?
+
   solicitud    Solicitud @relation(fields: [solicitudId], references: [id])
   receptor     Usuario   @relation("Receptor", fields: [receptorId], references: [id])
   entregadoPor Usuario   @relation("EntregadoPor", fields: [entregadoPorId], references: [id])
+  recibidoPor  Usuario?  @relation("RecibidoPor", fields: [recibidoPorId], references: [id])
 
   items EntregaItem[]
 
@@ -314,7 +426,7 @@ model Contador {
 
 model ItemBodega {
   id        String   @id @default(cuid())
-  codigo    String   @unique
+  codigo    String
   nombre    String
   categoria String   @default("General")
   unidad    String   @default("unidad")
@@ -322,13 +434,22 @@ model ItemBodega {
   stock     Int      @default(0)
   notas     String?
   activo    Boolean  @default(true)
+  // Bodega de qué empresa. Cada una tiene la suya: el stock es material físico
+  // que no se comparte entre empresas.
+  empresaId String?
   creadoEn  DateTime @default(now())
 
+  empresa        Empresa?           @relation(fields: [empresaId], references: [id])
   movimientos    MovimientoBodega[]
   lineasPrestamo PrestamoItem[]
   asignaciones   AsignacionBodega[]
 
+  // El código identifica el ítem dentro de su bodega. Deja de ser único en todo
+  // el sistema porque cada empresa numera la suya y el mismo código de artículo
+  // existe en varias a la vez.
+  @@unique([empresaId, codigo])
   @@index([activo])
+  @@index([empresaId])
 }
 
 model MovimientoBodega {

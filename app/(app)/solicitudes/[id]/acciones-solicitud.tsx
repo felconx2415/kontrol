@@ -117,26 +117,47 @@ export type LineaReservaUI = {
   posicionReserva: string | null;
 };
 
-type DatosReserva = { numeroReserva: string; posicionReserva: string };
+/** Una reserva ya usada, ofrecida como atajo. Ver lib/reservas.ts. */
+export type ReservaRecienteUI = {
+  numero: string;
+  ceco: string | null;
+  ultimaPosicion: string | null;
+};
+
+type DatosReserva = {
+  numeroReserva: string;
+  posicionReserva: string;
+  /**
+   * La línea se editó a mano y deja de seguir al campo del grupo.
+   *
+   * Es lo que permite que una solicitud lleve números distintos: antes, teclear
+   * arriba pisaba **todas** las líneas en cada pulsación, así que corregir una
+   * suelta y luego tocar el campo común borraba la corrección sin avisar.
+   */
+  propio: boolean;
+};
 
 /**
  * Registro de la reserva, línea por línea.
  *
  * Va por línea y no por solicitud porque una solicitud puede mezclar los dos
- * orígenes de reserva, y cada uno tiene su número. Por eso el número se pide
- * una vez por CECO y baja a todas sus líneas: es lo que se teclea de verdad, y
- * corregir una línea suelta sigue siendo posible. La posición solo aparece en
- * el CECO que la usa.
+ * orígenes de reserva, y cada uno tiene su número. El campo de arriba es el
+ * atajo del caso habitual —todas las líneas del CECO con la misma reserva— y
+ * baja a las líneas que no se hayan tocado a mano; la que se toca queda fija y
+ * se marca como tal. La posición solo aparece en el CECO que la usa.
  */
 function FormularioReserva({
   solicitudId,
   lineas,
   texto,
+  recientes,
   variante = "primario",
 }: {
   solicitudId: string;
   lineas: LineaReservaUI[];
   texto: string;
+  /** Últimas reservas usadas, como atajo para no volver a teclearlas. */
+  recientes: ReservaRecienteUI[];
   variante?: "primario" | "secundario";
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -161,23 +182,79 @@ function FormularioReserva({
           posicionReserva: grupo.conPosicion
             ? (linea.posicionReserva ?? posiciones[i])
             : "",
+          // Lo ya guardado nació de una edición anterior: se respeta.
+          propio: Boolean(linea.numeroReserva),
         };
       });
     }
     return inicial;
   });
 
-  function fijar(id: string, campo: keyof DatosReserva, valor: string) {
-    setDatos((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
+  function fijar(id: string, campo: "numeroReserva" | "posicionReserva", valor: string) {
+    setDatos((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [campo]: valor,
+        // Tocar el número de una línea la independiza del campo del grupo. La
+        // posición no: siempre fue de cada línea.
+        propio: campo === "numeroReserva" ? true : prev[id].propio,
+      },
+    }));
   }
 
-  /** El número de reserva es uno por CECO: se teclea arriba y baja a todas. */
+  /** El campo de arriba baja solo a las líneas que nadie ha tocado. */
   function fijarGrupo(grupo: (typeof grupos)[number], valor: string) {
     setDatos((prev) => {
       const siguiente = { ...prev };
       for (const linea of grupo.lineas) {
+        if (prev[linea.id].propio) continue;
         siguiente[linea.id] = { ...prev[linea.id], numeroReserva: valor };
       }
+      return siguiente;
+    });
+  }
+
+  /** Iguala el grupo entero, incluidas las líneas ya editadas a mano. */
+  function igualarGrupo(grupo: (typeof grupos)[number], valor: string) {
+    setDatos((prev) => {
+      const siguiente = { ...prev };
+      for (const linea of grupo.lineas) {
+        siguiente[linea.id] = {
+          ...prev[linea.id],
+          numeroReserva: valor,
+          propio: false,
+        };
+      }
+      return siguiente;
+    });
+  }
+
+  /**
+   * Reutiliza una reserva ya usada: baja su número a todo el grupo y continúa
+   * el correlativo de posiciones desde la última ocupada. Si volviera a empezar
+   * en 0010 chocaría con las líneas que ya se pidieron con esa misma reserva.
+   */
+  function aplicarReciente(
+    grupo: (typeof grupos)[number],
+    reserva: ReservaRecienteUI,
+  ) {
+    const desde = reserva.ultimaPosicion
+      ? Number(reserva.ultimaPosicion) + 10
+      : 10;
+    const posiciones = posicionesSecuenciales(grupo.lineas.length, desde);
+
+    setDatos((prev) => {
+      const siguiente = { ...prev };
+      grupo.lineas.forEach((linea, i) => {
+        siguiente[linea.id] = {
+          numeroReserva: reserva.numero,
+          posicionReserva: grupo.conPosicion
+            ? posiciones[i]
+            : prev[linea.id].posicionReserva,
+          propio: false,
+        };
+      });
       return siguiente;
     });
   }
@@ -214,11 +291,20 @@ function FormularioReserva({
       </p>
 
       {grupos.map((grupo) => {
-        // Todas las líneas del grupo comparten número, salvo que se edite una.
+        // Las líneas del grupo comparten número mientras nadie edite una. Si
+        // hay más de uno, el campo común queda vacío y se avisa: es un caso
+        // legítimo, no un error, pero conviene que se vea.
         const numeros = new Set(
           grupo.lineas.map((l) => datos[l.id]?.numeroReserva ?? ""),
         );
         const comun = numeros.size === 1 ? [...numeros][0] : "";
+        const mezcladas = numeros.size > 1;
+
+        // Solo las del mismo origen: la reserva del almacén y la propia no se
+        // intercambian, y ofrecerlas juntas invitaría a cruzarlas.
+        const sugeridas = recientes.filter(
+          (r) => r.ceco === null || r.ceco === grupo.ceco,
+        );
 
         return (
           <div
@@ -228,17 +314,63 @@ function FormularioReserva({
             <Campo
               etiqueta={`N.º de reserva · CECO ${grupo.ceco}`}
               htmlFor={`reserva-${grupo.ceco}`}
-              requerido
+              requerido={!mezcladas}
+              pista={
+                mezcladas
+                  ? "Las líneas llevan reservas distintas. Escribe aquí para cambiar solo las que no tocaste, o usa «Igualar todas»."
+                  : "Se aplica a todas las líneas que no hayas cambiado a mano."
+              }
             >
               <Entrada
                 id={`reserva-${grupo.ceco}`}
                 type="text"
                 value={comun}
                 onChange={(e) => fijarGrupo(grupo, e.target.value)}
-                placeholder="Ej: 4500912345"
-                required
+                placeholder={mezcladas ? "Reservas distintas" : "Ej: 4500912345"}
+                required={!mezcladas}
               />
             </Campo>
+
+            {mezcladas && comun === "" && (
+              <Boton
+                type="button"
+                variante="secundario"
+                tamano="sm"
+                onClick={() => {
+                  // Iguala a la primera línea, que es la de referencia visible.
+                  const primera = datos[grupo.lineas[0].id]?.numeroReserva ?? "";
+                  igualarGrupo(grupo, primera);
+                }}
+              >
+                Igualar todas a {datos[grupo.lineas[0].id]?.numeroReserva || "—"}
+              </Boton>
+            )}
+
+            {/* Las últimas usadas: una misma reserva cubre varias solicitudes
+                seguidas, y volver a teclear diez dígitos es donde se cuelan los
+                errores que dejan la línea imposible de retirar. */}
+            {sugeridas.length > 0 && (
+              <div>
+                <p className="text-xs text-tinta-suave">Últimas reservas usadas</p>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {sugeridas.map((r) => (
+                    <button
+                      key={r.numero}
+                      type="button"
+                      onClick={() => aplicarReciente(grupo, r)}
+                      className="foco-anillo inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-borde-fuerte bg-panel px-3 text-sm tabular-nums text-tinta transition-colors duration-150 hover:bg-panel-suave"
+                    >
+                      {r.numero}
+                      {grupo.conPosicion && r.ultimaPosicion && (
+                        <span className="ml-1.5 text-xs text-tinta-tenue">
+                          desde {String(Number(r.ultimaPosicion) + 10).padStart(4, "0")}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <ul className="divide-y divide-borde">
               {grupo.lineas.map((linea) => (
@@ -247,6 +379,12 @@ function FormularioReserva({
                     <p className="text-sm font-medium">{linea.nombre}</p>
                     <p className="text-xs text-tinta-tenue">
                       {linea.codigo} · {linea.cantidad}
+                      {/* Que esta línea ya no siga al campo de arriba tiene que
+                          verse, o el siguiente que lo teclee creerá que no
+                          funciona. */}
+                      {datos[linea.id]?.propio && (
+                        <span className="text-espera"> · reserva propia de la línea</span>
+                      )}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -311,6 +449,7 @@ export default function AccionesSolicitud({
   retiroPropio,
   items,
   lineasReserva,
+  reservasRecientes = [],
 }: {
   solicitudId: string;
   acciones: Accion[];
@@ -320,6 +459,8 @@ export default function AccionesSolicitud({
   items: ItemRecepcion[];
   /** Líneas que salen del almacén interno; son las que llevan reserva. */
   lineasReserva: LineaReservaUI[];
+  /** Últimas reservas usadas, como atajo al registrarlas. */
+  reservasRecientes?: ReservaRecienteUI[];
 }) {
   const [rechazando, setRechazando] = useState(false);
 
@@ -434,6 +575,7 @@ export default function AccionesSolicitud({
               solicitudId={solicitudId}
               lineas={lineasReserva}
               texto={accion.texto}
+              recientes={reservasRecientes}
               variante={gestionarEsSecundario ? "secundario" : "primario"}
             />
           );

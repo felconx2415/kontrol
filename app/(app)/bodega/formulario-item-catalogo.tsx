@@ -12,6 +12,7 @@ import BuscadorArticulo, {
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import CampoEmpresa, { type EmpresaBodega } from "./campo-empresa";
 
 export type ArticuloCatalogo = {
   id: string;
@@ -22,8 +23,10 @@ export type ArticuloCatalogo = {
 
 export default function FormularioItemCatalogo({
   articulos,
+  empresas,
 }: {
   articulos: ArticuloCatalogo[];
+  empresas: EmpresaBodega[];
 }) {
   const [seleccionado, setSeleccionado] = useState<ArticuloCatalogo | null>(null);
 
@@ -94,6 +97,8 @@ export default function FormularioItemCatalogo({
           </Campo>
         )}
       </div>
+
+      <CampoEmpresa empresas={empresas} idPrefijo="catalogo" />
 
       <Campo etiqueta="Ubicación (opcional)" htmlFor="ubicacionCat" pista="Estante, repisa o pasillo.">
         <Entrada id="ubicacionCat" name="ubicacion" placeholder="Estante A-3" />

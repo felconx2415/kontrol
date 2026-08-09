@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import type { EstadoSolicitud, Rol } from "@/generated/prisma/enums";
 import { DIAS_AVISO_VENCIMIENTO } from "@/lib/vencimientos";
 import { esGestion } from "@/lib/solicitud-estado";
+import { filtroEmpresa, type Alcance } from "@/lib/alcance";
 
 /**
  * Qué le toca hacer AHORA a quien mira la pantalla.
@@ -78,12 +79,17 @@ function mapear(filas: FilaCruda[]): SolicitudBandeja[] {
 export async function construirBandeja(
   usuarioId: string,
   rol: Rol,
+  alcance: Alcance,
 ): Promise<GrupoBandeja[]> {
   const grupos: GrupoBandeja[] = [];
+  // Los grupos de trabajo son de la empresa de quien mira; el último grupo
+  // («mis solicitudes») no lo lleva porque filtra por persona, que es más
+  // estrecho.
+  const deMiEmpresa = filtroEmpresa(alcance);
 
   if (rol === "APROBADOR" || esGestion(rol)) {
     const porAprobar = await db.solicitud.findMany({
-      where: { estado: "PENDIENTE" },
+      where: { ...deMiEmpresa, estado: "PENDIENTE" },
       orderBy: { enviadaEn: "asc" }, // lo más antiguo primero: no dejar a nadie esperando
       take: 12,
       ...SELECCION,
@@ -100,25 +106,25 @@ export async function construirBandeja(
   if (esGestion(rol)) {
     const [porPedir, esperandoReserva, porRecibir, porEntregar] = await Promise.all([
       db.solicitud.findMany({
-        where: { estado: "APROBADA" },
+        where: { ...deMiEmpresa, estado: "APROBADA" },
         orderBy: { aprobadaEn: "asc" },
         take: 12,
         ...SELECCION,
       }),
       db.solicitud.findMany({
-        where: { estado: "RESERVA_SOLICITADA" },
+        where: { ...deMiEmpresa, estado: "RESERVA_SOLICITADA" },
         orderBy: { reservaSolicitadaEn: "asc" },
         take: 12,
         ...SELECCION,
       }),
       db.solicitud.findMany({
-        where: { estado: "EN_GESTION" },
+        where: { ...deMiEmpresa, estado: "EN_GESTION" },
         orderBy: { enGestionEn: "asc" },
         take: 12,
         ...SELECCION,
       }),
       db.solicitud.findMany({
-        where: { estado: "RECIBIDA" },
+        where: { ...deMiEmpresa, estado: "RECIBIDA" },
         orderBy: { recibidaEn: "asc" },
         take: 12,
         ...SELECCION,
@@ -190,14 +196,20 @@ export async function construirBandeja(
 }
 
 /** EPP vencido o próximo a vencer, para quien gestiona las entregas. */
-export async function alertasVencimiento(rol: Rol) {
+export async function alertasVencimiento(rol: Rol, alcance: Alcance) {
   if (rol === "SOLICITANTE") return [];
 
   const limite = new Date();
   limite.setDate(limite.getDate() + DIAS_AVISO_VENCIMIENTO);
 
   return db.entregaItem.findMany({
-    where: { reemplazadoEn: null, venceEn: { not: null, lte: limite } },
+    where: {
+      reemplazadoEn: null,
+      venceEn: { not: null, lte: limite },
+      // El vencimiento se sigue por la solicitud que lo originó, que es donde
+      // vive la empresa.
+      entrega: { solicitud: filtroEmpresa(alcance) },
+    },
     orderBy: { venceEn: "asc" },
     take: 6,
     include: {

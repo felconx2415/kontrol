@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { registrarAuditoria, requerirRol } from "@/lib/auth";
+import { alcanza, empresaParaCrear } from "@/lib/alcance";
+import { destinatariosPorRol, notificar } from "@/lib/notificaciones";
 import { bufferDesdeDataUrl, guardarImagen } from "@/lib/archivos";
 import { dejarAviso } from "@/lib/avisos";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
@@ -41,11 +43,29 @@ export async function crearItemBodega(
     return { error: "El stock inicial debe ser un número entero de 0 o más." };
   }
 
-  const existente = await db.itemBodega.findUnique({ where: { codigo } });
+  const empresa = empresaParaCrear(
+    usuario.alcance,
+    String(formData.get("empresaId") ?? ""),
+  );
+  if (empresa.error) return { error: empresa.error };
+
+  // El código es único dentro de la bodega de cada empresa, no en todo el
+  // sistema: el mismo artículo existe en varias a la vez.
+  const existente = await db.itemBodega.findFirst({
+    where: { empresaId: empresa.empresaId, codigo },
+  });
   if (existente) return { error: "Ese código ya existe en la bodega." };
 
   const item = await db.itemBodega.create({
-    data: { codigo, nombre, categoria, unidad, ubicacion, stock },
+    data: {
+      codigo,
+      nombre,
+      categoria,
+      unidad,
+      ubicacion,
+      stock,
+      empresaId: empresa.empresaId,
+    },
   });
 
   // El stock inicial queda como primer movimiento, para que la historia del
@@ -102,8 +122,14 @@ export async function crearItemBodegaDesdeCatalogo(
 
   // El código del artículo es la clave del ítem de bodega: si ya está, no se
   // duplica.
-  const existente = await db.itemBodega.findUnique({
-    where: { codigo: articulo.codigo },
+  const empresa = empresaParaCrear(
+    usuario.alcance,
+    String(formData.get("empresaId") ?? ""),
+  );
+  if (empresa.error) return { error: empresa.error };
+
+  const existente = await db.itemBodega.findFirst({
+    where: { empresaId: empresa.empresaId, codigo: articulo.codigo },
   });
   if (existente) {
     return { error: `«${articulo.nombre}» (${articulo.codigo}) ya está en la bodega.` };
@@ -117,6 +143,7 @@ export async function crearItemBodegaDesdeCatalogo(
       unidad: articulo.unidad,
       ubicacion,
       stock,
+      empresaId: empresa.empresaId,
     },
   });
 
@@ -174,6 +201,9 @@ export async function registrarMovimiento(
 
   const item = await db.itemBodega.findUnique({ where: { id: itemId } });
   if (!item) return { error: "Ese ítem ya no existe en la bodega." };
+  if (!alcanza(usuario.alcance, item.empresaId)) {
+    return { error: "Ese ítem pertenece a la bodega de otra empresa." };
+  }
   if (!item.activo) return { error: "Ese ítem está inactivo. Actívalo antes de moverlo." };
 
   // Calcula el stock resultante y valida que no quede negativo.
@@ -285,6 +315,11 @@ export async function registrarPrestamo(
   const items = await db.itemBodega.findMany({ where: { id: { in: ids } } });
   const porId = new Map(items.map((i) => [i.id, i]));
 
+  const ajeno = items.find((i) => !alcanza(usuario.alcance, i.empresaId));
+  if (ajeno) {
+    return { error: `«${ajeno.nombre}» pertenece a la bodega de otra empresa.` };
+  }
+
   // Se valida todo antes de tocar nada: un préstamo a medias dejaría stock
   // descontado sin registro que lo respalde.
   for (const linea of lineas) {
@@ -351,6 +386,20 @@ export async function registrarPrestamo(
     detalle: { persona, lineas: lineas.length },
   });
 
+  // Al resto del equipo de bodega: el stock bajó y hay material afuera que
+  // alguien tiene que ver volver. Quien lo registró no recibe nada.
+  await notificar({
+    destinatarios: await destinatariosPorRol(
+      ["GESTOR", "ADMIN"],
+      items[0]?.empresaId ?? null,
+    ),
+    tipo: "PRESTAMO_REGISTRADO",
+    titulo: `Préstamo a ${persona}`,
+    cuerpo: `${lineas.length} ítem${lineas.length === 1 ? "" : "s"} salieron de bodega y están pendientes de devolución.`,
+    url: "/bodega?tab=prestamos",
+    excluir: usuario.id,
+  });
+
   await dejarAviso(
     lineas.length === 1
       ? `Préstamo a ${persona} registrado con firma.`
@@ -408,6 +457,10 @@ export async function devolverPrestamo(
   });
   if (!prestamo || prestamo.estado !== "ACTIVO") {
     return { error: "Ese préstamo ya no está activo." };
+  }
+  // El préstamo llega a la empresa por los ítems que salieron.
+  if (!prestamo.items.some((l) => alcanza(usuario.alcance, l.item.empresaId))) {
+    return { error: "Ese préstamo es de la bodega de otra empresa." };
   }
 
   const pendientes = prestamo.items.filter((l) => l.devueltoEn === null);
@@ -497,6 +550,23 @@ export async function devolverPrestamo(
     detalle: { persona: prestamo.persona, lineas: pendientes.length, conNovedad },
   });
 
+  // Lo que volvió con daño o no volvió es lo que el resto del equipo necesita
+  // saber: hay que revisarlo antes de volver a prestarlo.
+  await notificar({
+    destinatarios: await destinatariosPorRol(
+      ["GESTOR", "ADMIN"],
+      prestamo.items[0]?.item.empresaId ?? null,
+    ),
+    tipo: "PRESTAMO_DEVUELTO",
+    titulo: `Devolución de ${prestamo.persona}`,
+    cuerpo:
+      conNovedad > 0
+        ? `${conNovedad} ítem${conNovedad === 1 ? "" : "s"} volvió con novedad: revísalo antes de volver a prestarlo.`
+        : "Todo volvió en buen estado y se repuso el stock.",
+    url: "/bodega?tab=prestamos",
+    excluir: usuario.id,
+  });
+
   await dejarAviso(
     conNovedad > 0
       ? `Devolución registrada con firma. ${conNovedad} ítem${
@@ -539,8 +609,16 @@ export async function asignarItemBodega(
   ]);
 
   if (!item) return { error: "Ese ítem ya no existe en la bodega." };
+  if (!alcanza(usuarioActual.alcance, item.empresaId)) {
+    return { error: "Ese ítem pertenece a la bodega de otra empresa." };
+  }
   if (!item.activo) return { error: "Ese ítem está inactivo. Actívalo antes de asignarlo." };
   if (!usuario || !usuario.activo) return { error: "Elige un usuario válido." };
+  // El equipamiento sale de la bodega de una empresa y queda a nombre de
+  // alguien: ese alguien tiene que ser de una empresa que se alcance.
+  if (!alcanza(usuarioActual.alcance, usuario.empresaId)) {
+    return { error: "Esa persona no pertenece a ninguna de las empresas que gestionas." };
+  }
   if (cantidad > item.stock) {
     return {
       error: `No hay stock suficiente: quedan ${item.stock} ${item.unidad}(s) de «${item.nombre}».`,
@@ -588,6 +666,16 @@ export async function asignarItemBodega(
     detalle: { cantidad, usuarioId: usuario.id, usuario: usuario.nombre, stockResultante },
   });
 
+  // A quien recibió: el equipamiento quedó a su nombre y su acta ya existe.
+  await notificar({
+    destinatarios: [usuario.id],
+    tipo: "BODEGA_ASIGNACION",
+    titulo: `Te asignaron ${item.nombre}`,
+    cuerpo: `${cantidad} ${item.unidad}(s) desde bodega. El acta firmada está en tus documentos.`,
+    url: "/documentos",
+    excluir: usuarioActual.id,
+  });
+
   await dejarAviso(
     `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${usuario.nombre} con firma.`,
   );
@@ -611,6 +699,9 @@ export async function editarItemBodega(
 
   const item = await db.itemBodega.findUnique({ where: { id } });
   if (!item) return { error: "Ese ítem ya no existe en la bodega." };
+  if (!alcanza(usuario.alcance, item.empresaId)) {
+    return { error: "Ese ítem pertenece a la bodega de otra empresa." };
+  }
 
   const codigo = String(formData.get("codigo") ?? "").trim().toUpperCase();
   const nombre = String(formData.get("nombre") ?? "").trim();
@@ -623,7 +714,9 @@ export async function editarItemBodega(
   if (!nombre) return { error: "Indica el nombre del ítem." };
 
   if (codigo !== item.codigo) {
-    const existente = await db.itemBodega.findUnique({ where: { codigo } });
+    const existente = await db.itemBodega.findFirst({
+      where: { empresaId: item.empresaId, codigo },
+    });
     if (existente) return { error: "Ese código ya existe en la bodega." };
   }
 
@@ -661,6 +754,7 @@ export async function alternarItemBodega(formData: FormData) {
 
   const item = await db.itemBodega.findUnique({ where: { id } });
   if (!item) return;
+  if (!alcanza(usuario.alcance, item.empresaId)) return;
 
   await db.itemBodega.update({
     where: { id },

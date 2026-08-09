@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { alcanza } from "@/lib/alcance";
 import { cantidadConSigno, COLOR_MOVIMIENTO, ETIQUETA_MOVIMIENTO } from "@/lib/bodega";
 import { ZONA_HORARIA } from "@/lib/vencimientos";
 import Insignia from "@/components/ui/insignia";
@@ -39,7 +40,7 @@ export default async function DetalleItem({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ page?: string }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const { id } = await params;
   const { page } = await searchParams;
   const pagina = Math.max(1, Number(page) || 1);
@@ -67,6 +68,11 @@ export default async function DetalleItem({
   });
 
   if (!item) notFound();
+
+  // El id de un ítem es adivinable: la ficha de una bodega ajena no se abre.
+  if (!alcanza(usuario.alcance, item.empresaId)) {
+    redirect("/escritorio?error=sin-permiso");
+  }
 
   const prestado = item.lineasPrestamo
     .filter((l) => l.devueltoEn === null && l.prestamo.estado === "ACTIVO")

@@ -2,15 +2,18 @@
 
 import { useActionState } from "react";
 import { crearUsuario, type EstadoAdmin } from "@/actions/admin";
-import { ETIQUETA_ROL, ROLES } from "@/lib/solicitud-estado";
 import Boton from "@/components/ui/boton";
-import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
+import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import CamposCuenta, { type BrigadaOpcion } from "./campos-cuenta";
+import type { EmpresaOpcion } from "../empresas/formulario-empresa";
 
 export default function FormularioUsuario({
   brigadas,
+  empresas,
 }: {
-  brigadas: { id: string; nombre: string }[];
+  brigadas: BrigadaOpcion[];
+  empresas: EmpresaOpcion[];
 }) {
   const [estado, accion] = useActionState<EstadoAdmin, FormData>(crearUsuario, {});
 
@@ -41,26 +44,7 @@ export default function FormularioUsuario({
         <Entrada id="rut" name="rut" placeholder="12.345.678-9" />
       </Campo>
 
-      <Campo etiqueta="Rol" htmlFor="rol">
-        <Seleccion id="rol" name="rol" defaultValue="SOLICITANTE">
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {ETIQUETA_ROL[r]}
-            </option>
-          ))}
-        </Seleccion>
-      </Campo>
-
-      <Campo etiqueta="Brigada" htmlFor="brigadaId">
-        <Seleccion id="brigadaId" name="brigadaId" defaultValue="">
-          <option value="">Sin brigada</option>
-          {brigadas.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nombre}
-            </option>
-          ))}
-        </Seleccion>
-      </Campo>
+      <CamposCuenta idPrefijo="nuevo" empresas={empresas} brigadas={brigadas} />
 
       <Campo
         etiqueta="Contraseña inicial"

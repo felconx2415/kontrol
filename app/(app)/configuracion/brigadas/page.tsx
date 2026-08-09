@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ROLES_ADMIN } from "@/lib/solicitud-estado";
 import { Tabla } from "@/components/ui/tabla";
+import { Aviso } from "@/components/ui/superficie";
 import FormularioBrigada from "./formulario-brigada";
 import FilaBrigada from "./fila-brigada";
 
@@ -12,11 +14,12 @@ export default async function AdminBrigadas() {
   // mismo requisito que las cuentas: exclusivo de ADMIN.
   await requerirRol(...ROLES_ADMIN);
 
-  const [brigadas, supervisores] = await Promise.all([
+  const [brigadas, supervisores, empresas] = await Promise.all([
     db.brigada.findMany({
-      orderBy: { nombre: "asc" },
+      orderBy: [{ empresa: { nombre: "asc" } }, { nombre: "asc" }],
       include: {
         supervisor: { select: { nombre: true } },
+        empresa: { select: { nombre: true } },
         _count: { select: { miembros: true, solicitudes: true } },
       },
     }),
@@ -30,7 +33,13 @@ export default async function AdminBrigadas() {
       orderBy: { nombre: "asc" },
       select: { id: true, nombre: true, activo: true },
     }),
+    db.empresa.findMany({
+      orderBy: { nombre: "asc" },
+      select: { id: true, nombre: true, activa: true },
+    }),
   ]);
+
+  const hayEmpresas = empresas.some((e) => e.activa);
 
   return (
     <div className="space-y-6">
@@ -42,18 +51,28 @@ export default async function AdminBrigadas() {
         </p>
       </div>
 
-      <FormularioBrigada supervisores={supervisores} />
+      {/* Sin empresa activa no hay dónde crear una brigada, y un formulario que
+          solo puede fallar no ayuda: se dice qué falta y dónde. */}
+      {hayEmpresas ? (
+        <FormularioBrigada supervisores={supervisores} empresas={empresas} />
+      ) : (
+        <Aviso tono="espera">
+          Antes de crear brigadas necesitas al menos una empresa activa. Crea
+          una en <Link href="/configuracion/empresas" className="underline underline-offset-2">Empresas</Link>.
+        </Aviso>
+      )}
 
       <Tabla
         encabezados={[
           "Brigada",
+          "Empresa",
           "Tipo",
           "Supervisor",
           "Miembros",
           "Solicitudes",
           { texto: "Acciones", alineado: "der" },
         ]}
-        anchoMinimo="48rem"
+        anchoMinimo="56rem"
       >
         {brigadas.map((b) => (
           <FilaBrigada
@@ -62,12 +81,15 @@ export default async function AdminBrigadas() {
               id: b.id,
               nombre: b.nombre,
               tipo: b.tipo,
+              empresaId: b.empresaId,
+              empresaNombre: b.empresa.nombre,
               supervisorId: b.supervisorId,
               supervisorNombre: b.supervisor?.nombre ?? null,
               miembros: b._count.miembros,
               solicitudes: b._count.solicitudes,
             }}
             supervisores={supervisores}
+            empresas={empresas}
           />
         ))}
       </Tabla>

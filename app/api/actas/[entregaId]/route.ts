@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { alcanza } from "@/lib/alcance";
 import { origenPublico } from "@/lib/origen";
 import { actaDeEntrega } from "@/lib/actas/generar";
 import { formatearFolio } from "@/lib/folio";
@@ -18,7 +19,10 @@ export async function GET(
 
   const entrega = await db.entrega.findUnique({
     where: { id: entregaId },
-    select: { receptorId: true, solicitud: { select: { folio: true } } },
+    select: {
+      receptorId: true,
+      solicitud: { select: { folio: true, empresaId: true } },
+    },
   });
 
   if (!entrega) {
@@ -27,6 +31,14 @@ export async function GET(
 
   // Un solicitante solo puede descargar su propia acta.
   if (usuario.rol === "SOLICITANTE" && entrega.receptorId !== usuario.id) {
+    return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
+  }
+
+  // Y nadie descarga el acta de otra empresa, salvo el destinatario la suya.
+  if (
+    entrega.receptorId !== usuario.id &&
+    !alcanza(usuario.alcance, entrega.solicitud.empresaId)
+  ) {
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
   }
 

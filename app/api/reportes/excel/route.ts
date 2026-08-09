@@ -10,6 +10,7 @@ import {
 } from "@/lib/reportes";
 import { esGestion, ETIQUETA_ESTADO, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 import { LOGO_ALTO, LOGO_ANCHO, LOGO_PNG_BASE64 } from "@/lib/logo";
+import { filtroEmpresa } from "@/lib/alcance";
 import { fechaParaExcel, formatearFechaHora } from "@/lib/vencimientos";
 
 export async function GET(request: Request) {
@@ -28,10 +29,11 @@ export async function GET(request: Request) {
   };
 
   const rango = construirRangoFechas(filtros);
+  const deMiEmpresa = filtroEmpresa(usuario.alcance);
 
   const [solicitudes, prestamos, traslados] = await Promise.all([
     db.solicitud.findMany({
-      where: construirFiltro(filtros),
+      where: construirFiltro(filtros, usuario.alcance),
       orderBy: { creadaEn: "desc" },
       include: {
         solicitante: { select: { nombre: true, rut: true } },
@@ -47,7 +49,10 @@ export async function GET(request: Request) {
       },
     }),
     db.prestamo.findMany({
-      where: rango ? { prestadoEn: rango } : {},
+      where: {
+        items: { some: { item: deMiEmpresa } },
+        ...(rango ? { prestadoEn: rango } : {}),
+      },
       orderBy: { prestadoEn: "desc" },
       include: {
         items: {
@@ -58,6 +63,7 @@ export async function GET(request: Request) {
     }),
     db.asignacionBodega.findMany({
       where: {
+        item: deMiEmpresa,
         ...(rango ? { asignadoEn: rango } : {}),
         ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
       },
@@ -71,8 +77,8 @@ export async function GET(request: Request) {
   ]);
 
   const brigada = filtros.brigadaId
-    ? await db.brigada.findUnique({
-        where: { id: filtros.brigadaId },
+    ? await db.brigada.findFirst({
+        where: { ...deMiEmpresa, id: filtros.brigadaId },
         select: { nombre: true },
       })
     : null;

@@ -3,6 +3,7 @@ import { requerirUsuario } from "@/lib/auth";
 import { formatearFolio } from "@/lib/folio";
 import { formatearFecha } from "@/lib/vencimientos";
 import { construirBandeja } from "@/lib/bandeja";
+import { MENSAJE_SIN_EMPRESA, sinEmpresa } from "@/lib/alcance";
 import {
   embudoEtapas,
   kpis,
@@ -58,11 +59,11 @@ export default async function Escritorio({
   const esSolicitante = usuario.rol === "SOLICITANTE";
 
   const [tarjetas, etapas, meses, cambios, grupos] = await Promise.all([
-    kpis(usuario.id, usuario.rol),
-    esSolicitante ? Promise.resolve([]) : embudoEtapas(),
-    esSolicitante ? Promise.resolve([]) : vencimientosPorMes(),
-    esSolicitante ? Promise.resolve([]) : proximosCambios(),
-    construirBandeja(usuario.id, usuario.rol),
+    kpis(usuario.id, usuario.rol, usuario.alcance),
+    esSolicitante ? Promise.resolve([]) : embudoEtapas(usuario.alcance),
+    esSolicitante ? Promise.resolve([]) : vencimientosPorMes(usuario.alcance),
+    esSolicitante ? Promise.resolve([]) : proximosCambios(usuario.alcance),
+    construirBandeja(usuario.id, usuario.rol, usuario.alcance),
   ]);
 
   // Los pedidos pendientes de acción, sin "mis solicitudes" (que no es cola).
@@ -73,6 +74,13 @@ export default async function Escritorio({
     <div className="space-y-5">
       {error === "sin-permiso" && (
         <Aviso tono="error">No tienes permiso para acceder a esa sección.</Aviso>
+      )}
+
+      {/* Una cuenta sin empresa no ve nada de nadie y lo que aparece en
+          pantalla son ceros. Sin este aviso parecería que el sistema está
+          vacío, en vez de que falta configurarla. */}
+      {sinEmpresa(usuario.alcance) && (
+        <Aviso tono="error">{MENSAJE_SIN_EMPRESA}</Aviso>
       )}
 
       <div className="flex flex-wrap items-end justify-between gap-4">

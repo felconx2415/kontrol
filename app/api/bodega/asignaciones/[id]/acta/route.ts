@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { alcanza } from "@/lib/alcance";
 import { origenPublico } from "@/lib/origen";
 import { esGestion } from "@/lib/solicitud-estado";
 import { actaDeAsignacion } from "@/lib/actas/generar";
@@ -28,8 +29,17 @@ export async function GET(
 
   const asignacion = await db.asignacionBodega.findUnique({
     where: { id },
-    select: { item: { select: { codigo: true } } },
+    select: { item: { select: { codigo: true, empresaId: true } } },
   });
+
+  // Gestión tampoco alcanza la bodega de otra empresa; el dueño del
+  // equipamiento sí conserva su acta.
+  if (
+    acta.usuarioId !== usuario.id &&
+    !alcanza(usuario.alcance, asignacion?.item.empresaId ?? null)
+  ) {
+    return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
+  }
 
   const nombreArchivo = `acta-entrega-${asignacion?.item.codigo ?? "bodega"}-${id.slice(0, 6)}.pdf`;
 

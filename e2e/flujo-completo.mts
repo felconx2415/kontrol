@@ -44,7 +44,7 @@ async function verEstado(pagina: Page, estado: string, ms = 10000) {
  *
  * No sirve mirar la URL: ante un `redirect()` de servidor, Next entrega el
  * contenido del destino dejando la barra de direcciones en la ruta pedida, así
- * que la URL sigue diciendo /admin/usuarios aunque no se haya renderizado nada
+ * que la URL sigue diciendo /configuracion/usuarios aunque no se haya renderizado nada
  * de ahí. Lo que importa —y lo que se comprueba— es qué página se ve.
  */
 async function fueRechazado(pagina: Page) {
@@ -103,32 +103,61 @@ try {
   const admin = await login(navegador, "admin");
 
   check(
-    "El solicitante no ve el enlace de administración",
-    !(await solicitante.locator('nav a[href="/admin/usuarios"]').count()),
+    "El solicitante no ve la configuración",
+    !(await solicitante.locator('nav a[href^="/configuracion"]').count()),
   );
   check(
-    "El gestor tampoco ve el enlace de administración de cuentas",
-    !(await gestor.locator('nav a[href="/admin/usuarios"]').count()),
+    "El gestor entra al catálogo directo, sin pasar por el índice",
+    (await gestor.locator('nav a[href="/configuracion/catalogo"]').count()) > 0 &&
+      !(await gestor.locator('nav a[href="/configuracion"]').count()),
   );
   check(
-    "El gestor sí ve el catálogo",
-    (await gestor.locator('nav a[href="/admin/articulos"]').count()) > 0,
-  );
-  check(
-    "El admin ve el enlace de administración de cuentas",
-    (await admin.locator('nav a[href="/admin/usuarios"]').count()) > 0,
+    "El admin ve la entrada de configuración",
+    (await admin.locator('nav a[href="/configuracion"]').count()) > 0,
   );
 
-  await solicitante.goto(`${BASE}/admin/usuarios`);
+  // La barra carga lo que cada rol usa a diario. Si vuelve a crecer sin
+  // agruparse, esto avisa antes de que se desborde otra vez.
+  const destinos = async (p: Page) =>
+    p.locator("header nav a[href^='/']").count();
   check(
-    "El solicitante es rechazado de /admin/usuarios",
+    "La barra no pasa de cinco destinos en ningún rol",
+    (await destinos(solicitante)) <= 5 &&
+      (await destinos(gestor)) <= 5 &&
+      (await destinos(admin)) <= 5,
+    `solicitante ${await destinos(solicitante)} · gestor ${await destinos(
+      gestor,
+    )} · admin ${await destinos(admin)}`,
+  );
+
+  // Las rutas viejas siguen llevando a alguna parte: /admin se renombró y hay
+  // enlaces guardados y pestañas abiertas apuntando ahí.
+  await admin.goto(`${BASE}/admin/usuarios`);
+  check(
+    "/admin/usuarios redirige a la ruta nueva",
+    admin.url().endsWith("/configuracion/usuarios"),
+    admin.url(),
+  );
+  await gestor.goto(`${BASE}/admin/articulos`);
+  check(
+    "/admin/articulos redirige al catálogo",
+    gestor.url().endsWith("/configuracion/catalogo"),
+    gestor.url(),
+  );
+
+  await solicitante.goto(`${BASE}/configuracion/usuarios`);
+  check(
+    "El solicitante es rechazado de /configuracion/usuarios",
     await fueRechazado(solicitante),
   );
 
-  // Administrar cuentas es exclusivo de ADMIN: el gestor llega al grupo /admin
+  // Administrar cuentas es exclusivo de ADMIN: el gestor llega a la sección
   // (ve el catálogo) pero no a la gestión de usuarios.
-  await gestor.goto(`${BASE}/admin/usuarios`);
-  check("El gestor es rechazado de /admin/usuarios", await fueRechazado(gestor));
+  await gestor.goto(`${BASE}/configuracion/usuarios`);
+  check(
+    "El gestor es rechazado de /configuracion/usuarios",
+    await fueRechazado(gestor),
+  );
 
   await solicitante.goto(`${BASE}/reportes`);
   check(
@@ -377,7 +406,7 @@ try {
 
   // ---------- 11. Administración ----------
   console.log("\n11. Administración");
-  await gestor.goto(`${BASE}/admin/articulos`);
+  await gestor.goto(`${BASE}/configuracion/catalogo`);
   const codigoArticulo = `EPP-TEST-${Date.now() % 10000}`;
   await gestor.fill('input[name="codigo"]', codigoArticulo);
   await gestor.fill('input[name="nombre"]', "Guantes anticorte");
@@ -395,10 +424,13 @@ try {
   console.log("\n12. Administración de cuentas");
   const cuenta = `qa${Date.now() % 100000}`;
 
-  await admin.goto(`${BASE}/admin/usuarios`);
+  await admin.goto(`${BASE}/configuracion/usuarios`);
   await admin.fill("#nombre", "Cuenta De Prueba");
   await admin.fill("#username", cuenta);
   await admin.fill("#password", "kontrol123");
+  // Toda cuenta que no sea ADMIN pertenece a una empresa: sin elegirla, el
+  // alta se rechaza.
+  await admin.locator("#empresa-nuevo").selectOption({ index: 1 });
   await admin.click('button:has-text("Crear usuario")');
   await admin.waitForTimeout(1500);
   check("El admin crea una cuenta", await verTexto(admin, cuenta));
@@ -407,6 +439,8 @@ try {
   await admin.locator(`tr:has-text("${cuenta}")`).getByRole("button", { name: "Editar" }).click();
   const panelEditar = admin.locator('form:has-text("Editar a Cuenta De Prueba")');
   await panelEditar.locator('select[name="rol"]').selectOption("APROBADOR");
+  // La brigada se ofrece según la empresa elegida, así que el índice 1 es la
+  // primera brigada de esa empresa (el 0 es «Sin brigada»).
   await panelEditar.locator('select[name="brigadaId"]').selectOption({ index: 1 });
   await panelEditar.getByRole("button", { name: "Guardar cambios" }).click();
   await admin.waitForTimeout(1500);
@@ -439,7 +473,7 @@ try {
   await contextoNuevo.close();
 
   // Eliminar una cuenta con historial debe rechazarse.
-  await admin.goto(`${BASE}/admin/usuarios`);
+  await admin.goto(`${BASE}/configuracion/usuarios`);
   await admin.locator('tr:has-text("jperez")').getByRole("button", { name: "Eliminar" }).click();
   await admin.locator('form:has-text("¿Eliminar la cuenta de")').getByRole("button", { name: "Sí, eliminar" }).click();
   await admin.waitForTimeout(1500);
@@ -453,7 +487,7 @@ try {
   );
 
   // Eliminar la cuenta de prueba, que nunca operó, sí debe funcionar.
-  await admin.goto(`${BASE}/admin/usuarios`);
+  await admin.goto(`${BASE}/configuracion/usuarios`);
   await admin.locator(`tr:has-text("${cuenta}")`).getByRole("button", { name: "Eliminar" }).click();
   await admin.locator('form:has-text("¿Eliminar la cuenta de")').getByRole("button", { name: "Sí, eliminar" }).click();
   await admin.waitForTimeout(1500);

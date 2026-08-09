@@ -36,12 +36,34 @@ También existen `msoto` y `pmunoz` como solicitantes.
 > `kontrol123` es solo para desarrollo. Antes de cualquier despliegue, cambia
 > la contraseña de `admin` y elimina o desactiva el resto de estas cuentas.
 
+### Empresas
+
+La **empresa** es la frontera del sistema: quien pertenece a una ve sus
+solicitudes, su bodega y su gente, y nada de las demás. Cada usuario y cada
+brigada pertenece a una, y toda solicitud nace con la de su beneficiario.
+
+Dos excepciones, que son las que hacen que el alcance no sea un simple
+`empresaId`:
+
+- El **ADMIN** administra el sistema entero y no se circunscribe a ninguna.
+- El **gestor** puede atender **una o varias** a la vez: la misma persona lleva
+  la logística de dos contratistas. Se marcan en su ficha
+  (`/configuracion/usuarios`), y su alcance es la unión de todas.
+
+Un gestor sin empresas marcadas cae en la suya propia, así que una cuenta nunca
+queda a ciegas por olvido. Las reglas viven en `lib/alcance.ts` y toda consulta
+que cruce personas pasa por ahí.
+
+Las empresas se administran en `/configuracion/empresas`. No se eliminan —sus
+solicitudes, actas y bodega apuntan a ellas—, se desactivan: dejan de ofrecerse
+al crear cuentas y brigadas sin tocar el historial.
+
 ### Roles
 
 `ADMIN` es el rol con permiso total: hace todo lo que hace `GESTOR` y además es
-el único que entra a `/admin/usuarios`, donde puede crear, editar (nombre, RUT,
-usuario, rol y brigada), restablecer contraseñas, activar/desactivar y eliminar
-cuentas.
+el único que entra a `/configuracion/usuarios` y `/configuracion/empresas`, donde puede crear,
+editar (nombre, RUT, usuario, rol, empresa y brigada), restablecer contraseñas,
+activar/desactivar y eliminar cuentas.
 
 Eliminar es permanente y solo se permite en cuentas sin historial. Si la persona
 ya registró solicitudes o entregas, la acción se rechaza y hay que desactivarla:
@@ -67,6 +89,16 @@ BORRADOR → PENDIENTE → APROBADA → EN_GESTION → RECIBIDA → ENTREGADA
 | `RECIBIDA`   | Gestor      | El material llegó a bodega                     |
 | `ENTREGADA`  | Gestor      | Captura la firma del receptor y genera el acta |
 
+Cada paso deja una **notificación** a quien tiene que actuar y a quien está
+esperando (`lib/notificaciones.ts`), visible en la campana de la barra y en
+`/notificaciones`. Nunca se notifica a quien provocó el hecho: ya lo sabe.
+
+En la entrega, quien retira **puede no ser el destinatario**: el material va
+dirigido a alguien pero lo recibe un compañero o el supervisor. Se registra
+quién retiró —con cuenta o con nombre y RUT a mano— y el acta lo nombra, porque
+la firma capturada es suya. El destinatario no cambia: el equipamiento sigue
+siendo suyo y en su historial queda.
+
 Las reglas viven en un solo lugar, `lib/solicitud-estado.ts`, y las usan tanto
 la interfaz (para mostrar botones) como las Server Actions (para validar).
 `ENTREGADA` solo puede fijarse desde `registrarEntrega()`, nunca por la vía
@@ -75,17 +107,37 @@ genérica, porque exige firma y registro de entrega.
 ## Estructura
 
 ```
-app/(auth)/login       Ingreso
-app/(app)/escritorio   Panel, distinto según rol
-app/(app)/solicitudes  Listado, wizard de creación, detalle y entrega
-app/(app)/historial    Qué tiene asignado cada trabajador
-app/(app)/reportes     Filtros y exportación a Excel
-app/(app)/admin        Usuarios y catálogo (solo Gestor)
-app/api                Actas PDF, subida de imágenes, exportación Excel
-actions/               Server Actions
-lib/                   Estado, auth, PDF, vencimientos, folio, archivos
-components/            Firma, timeline, badges, subida de fotos
+app/(auth)/login          Ingreso
+app/(app)/escritorio      Panel, distinto según rol
+app/(app)/solicitudes     Listado, wizard de creación, detalle y entrega
+app/(app)/bodega          Inventario propio, préstamos y asignaciones
+app/(app)/historial       Qué tiene asignado cada trabajador
+app/(app)/documentos      Actas firmadas de cada persona
+app/(app)/notificaciones  Avisos de cada persona
+app/(app)/reportes        Filtros y exportación a Excel
+app/(app)/configuracion   Catálogo, usuarios, brigadas y empresas
+app/api                   Actas PDF, subida de imágenes, exportación Excel
+actions/                  Server Actions
+lib/                      Estado, alcance por empresa, navegación, auth,
+                          notificaciones, PDF, vencimientos, folio, archivos
+components/               Barra, menús, firma, timeline, badges, fotos
 ```
+
+## Navegación
+
+Los destinos se declaran una sola vez en `lib/navegacion.ts` —con su rol y su
+grupo— y de ahí derivan las tres superficies: la barra, el menú que cuelga del
+nombre y el cajón del teléfono. Mantenerlas a mano las desincronizaba sola.
+
+La barra lleva **lo que cada rol usa a diario**, nunca más de cinco destinos.
+Por eso lo personal se coloca según el rol: en terreno «Mi equipamiento» es la
+razón de ser de la app y va arriba; para gestión, que casi no tiene EPP a su
+nombre, vive en el menú del nombre. La configuración entra como una sola
+entrada, que se adapta —un gestor alcanza solo el catálogo y va directo ahí; el
+ADMIN alcanza cuatro áreas y ve el índice de `/configuracion`.
+
+En el teléfono no se esconde nada: el cajón lista todos los destinos en
+vertical, agrupados bajo «Mi trabajo», «Lo mío» y «Configuración».
 
 ## Trazabilidad de reemplazos
 
@@ -107,8 +159,18 @@ dentro de 30 días (`lib/vencimientos.ts`).
 
 ```bash
 npm run typecheck
-npm run e2e        # requiere el servidor corriendo en localhost:3000
+npm run lint
+npm run e2e            # flujo completo: requiere el servidor en localhost:3000
+
+npm run db:escenario   # siembra (o reinicia) una segunda empresa de prueba
+npm run e2e:empresas   # separación por empresa, avisos, reservas y receptor
 ```
+
+`e2e:empresas` va aparte porque necesita **dos** empresas: con una sola el
+aislamiento no se puede comprobar, ya que todo el mundo alcanza todo y
+cualquier pantalla parece correcta. `db:escenario` crea «Forestal Sur» con su
+gente, su bodega y solicitudes en distintas etapas, y reinicia esas solicitudes
+en cada corrida para poder repetir la prueba.
 
 `e2e/flujo-completo.mts` recorre con un navegador real el circuito completo:
 login por rol, permisos, solicitud nueva, aprobación, gestión, entrega firmada,

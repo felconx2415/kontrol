@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { filtroEmpresa } from "@/lib/alcance";
 import { Vacio } from "@/components/ui/superficie";
 import FormularioAsignar from "./formulario-asignar";
 
@@ -12,17 +13,18 @@ export default async function PaginaAsignar({
 }: {
   searchParams: Promise<{ item?: string }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const { item: itemPreseleccionado } = await searchParams;
+  const deMiEmpresa = filtroEmpresa(usuario.alcance);
 
   const [items, usuarios] = await Promise.all([
     db.itemBodega.findMany({
-      where: { activo: true, stock: { gt: 0 } },
+      where: { ...deMiEmpresa, activo: true, stock: { gt: 0 } },
       orderBy: { nombre: "asc" },
       select: { id: true, codigo: true, nombre: true, unidad: true, stock: true },
     }),
     db.usuario.findMany({
-      where: { activo: true },
+      where: { ...deMiEmpresa, activo: true },
       orderBy: { nombre: "asc" },
       select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
     }),

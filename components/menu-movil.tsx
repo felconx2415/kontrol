@@ -7,10 +7,18 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Icono, type EnlaceNav } from "./nav-principal";
 
+/** Un bloque de destinos con su rótulo. Ver lib/navegacion.ts. */
+export type GrupoNavUI = { grupo: string; titulo: string; destinos: EnlaceNav[] };
+
 /**
  * Menú de navegación para móvil: un botón hamburguesa que abre un cajón lateral
- * con todos los destinos. Toma el relevo bajo lg, donde los ocho destinos ya
- * no caben en la píldora de la barra.
+ * con todos los destinos. Toma el relevo bajo lg, donde los destinos ya no caben
+ * en la píldora de la barra.
+ *
+ * Aquí no se esconde nada: en vertical caben todos, incluidos los que en
+ * escritorio viven en el menú del nombre. Lo que hacía falta era el rótulo que
+ * separa las tres naturalezas —mi trabajo, lo mío, configuración—, porque una
+ * lista plana de diez destinos obliga a leerlos todos para encontrar uno.
  *
  * Implementado con un overlay controlado por estado (no <dialog>) y animaciones
  * de `transform`/`opacity`: funciona en cualquier navegador de teléfono. Antes
@@ -22,16 +30,13 @@ import { Icono, type EnlaceNav } from "./nav-principal";
  * transición de entrada/salida.
  */
 export default function MenuMovil({
-  enlaces,
+  grupos,
   usuarioNombre,
   usuarioRol,
-  hrefPerfil = null,
 }: {
-  enlaces: EnlaceNav[];
+  grupos: GrupoNavUI[];
   usuarioNombre: string;
   usuarioRol: string;
-  /** Ruta al perfil, o null si este rol no tiene uno. */
-  hrefPerfil?: string | null;
 }) {
   const [montado, setMontado] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -159,42 +164,40 @@ export default function MenuMovil({
                   <p className="truncate text-xs text-marca-200">
                     {usuarioRol}
                   </p>
-                  {hrefPerfil && (
-                    <Link
-                      href={hrefPerfil}
-                      onClick={cerrar}
-                      className="foco-anillo-claro mt-1 inline-flex min-h-9 items-center rounded text-xs text-marca-200 underline underline-offset-2 transition-colors duration-150 hover:text-white"
-                    >
-                      Mi perfil y firma
-                    </Link>
-                  )}
                 </div>
               </div>
 
               <nav className="flex-1 overflow-y-auto p-2">
-                <ul className="flex flex-col gap-1">
-                  {enlaces.map((e) => {
-                    const activo =
-                      ruta === e.href || ruta.startsWith(`${e.href}/`);
-                    return (
-                      <li key={e.href}>
-                        <Link
-                          href={e.href}
-                          onClick={cerrar}
-                          aria-current={activo ? "page" : undefined}
-                          className={`foco-anillo-claro flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 ${
-                            activo
-                              ? "bg-white/10 text-white"
-                              : "text-marca-200 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          <Icono nombre={e.icono} />
-                          {e.texto}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
+                {grupos.map((g) => (
+                  <section key={g.grupo} className="mb-3 last:mb-0">
+                    <h2 className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-marca-200/70">
+                      {g.titulo}
+                    </h2>
+                    <ul className="flex flex-col gap-1">
+                      {g.destinos.map((e) => {
+                        const activo =
+                          ruta === e.href || ruta.startsWith(`${e.href}/`);
+                        return (
+                          <li key={e.href}>
+                            <Link
+                              href={e.href}
+                              onClick={cerrar}
+                              aria-current={activo ? "page" : undefined}
+                              className={`foco-anillo-claro flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 ${
+                                activo
+                                  ? "bg-white/10 text-white"
+                                  : "text-marca-200 hover:bg-white/5 hover:text-white"
+                              }`}
+                            >
+                              <Icono nombre={e.icono} />
+                              {e.texto}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
               </nav>
             </div>
           </div>,

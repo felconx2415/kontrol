@@ -18,6 +18,10 @@ Personal de brigadas y su cadena de gestión, en cuatro roles:
   oficina.
 - **Administrador** — gestiona cuentas, brigadas y catálogo.
 
+Todos trabajan dentro de una **empresa**, que es la frontera de lo que ven. La
+excepción es el gestor: puede atender varias a la vez, porque la misma persona
+lleva la logística de más de un contratista.
+
 **Trabajo a resolver:** llevar una solicitud de EPP desde que se pide hasta que
 se entrega, dejando trazabilidad por trabajador. Kontrol **no controla
 inventario** — el stock vive en otro almacén; aquí se gestiona el ciclo de vida

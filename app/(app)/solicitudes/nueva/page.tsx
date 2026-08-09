@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requerirUsuario } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { esGestion } from "@/lib/solicitud-estado";
+import { filtroEmpresa } from "@/lib/alcance";
 import FormularioSolicitud, { type Asignado } from "./formulario-solicitud";
 
 export const metadata = { title: "Nueva solicitud · Kontrol" };
@@ -19,9 +20,11 @@ export default async function NuevaSolicitud({
   // reemplazar, y eso se consulta aquí, en el servidor.
   const puedeElegirPersona = esGestion(usuario.rol);
 
+  // Solo gente de las empresas que atiende: pedir a nombre de alguien de otra
+  // empresa crearía un pedido que su propia gestión no vería.
   const personas = puedeElegirPersona
     ? await db.usuario.findMany({
-        where: { activo: true },
+        where: { ...filtroEmpresa(usuario.alcance), activo: true },
         orderBy: { nombre: "asc" },
         select: {
           id: true,

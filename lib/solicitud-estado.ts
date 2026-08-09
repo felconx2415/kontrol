@@ -5,6 +5,7 @@ import type {
   Rol,
   TipoBrigada,
 } from "@/generated/prisma/enums";
+import { alcanza, type Alcance } from "@/lib/alcance";
 
 /**
  * Única fuente de verdad del ciclo de vida de una solicitud.
@@ -72,17 +73,25 @@ export function puedeTransicionar(
 /**
  * Si este usuario puede actuar sobre esta solicitud.
  *
- * El rol dice qué acciones existen; esto, sobre cuáles. Un solicitante solo
- * toca lo suyo —ahora que además recibe y firma, esa frontera es lo único que
- * separa cerrar el propio pedido de cerrar el de otro—, y gestión toca
- * cualquiera. Va aquí, junto a las transiciones, para que ninguna Server Action
- * nueva se olvide de comprobarlo.
+ * El rol dice qué acciones existen; esto, sobre cuáles. Son dos fronteras:
+ *
+ * - **La propia**: un solicitante solo toca lo suyo. Ahora que además recibe y
+ *   firma, esa frontera es lo único que separa cerrar el propio pedido de
+ *   cerrar el de otro.
+ * - **La de la empresa**: nadie actúa sobre el pedido de una empresa que no
+ *   alcanza, tenga el rol que tenga. El dueño es la excepción: su solicitud
+ *   sigue siendo suya aunque su cuenta cambie de empresa.
+ *
+ * Va aquí, junto a las transiciones, para que ninguna Server Action nueva se
+ * olvide de comprobarlo.
  */
 export function puedeActuarSobre(
-  usuario: { id: string; rol: Rol },
-  solicitud: { solicitanteId: string },
+  usuario: { id: string; rol: Rol; alcance: Alcance },
+  solicitud: { solicitanteId: string; empresaId: string | null },
 ): boolean {
-  return usuario.rol !== "SOLICITANTE" || solicitud.solicitanteId === usuario.id;
+  if (solicitud.solicitanteId === usuario.id) return true;
+  if (usuario.rol === "SOLICITANTE") return false;
+  return alcanza(usuario.alcance, solicitud.empresaId);
 }
 
 /** Transiciones disponibles para un rol desde el estado actual. */

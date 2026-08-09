@@ -2,13 +2,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
 import { requerirUsuario } from "@/lib/auth";
-import { ETIQUETA_ROL, esAdmin, esGestion } from "@/lib/solicitud-estado";
-import { cerrarSesion } from "@/actions/sesion";
-import NavPrincipal, { type EnlaceNav } from "@/components/nav-principal";
+import { ETIQUETA_ROL } from "@/lib/solicitud-estado";
+import NavPrincipal from "@/components/nav-principal";
 import MenuMovil from "@/components/menu-movil";
+import MenuPersona from "@/components/menu-persona";
 import AvisoFlotante from "@/components/aviso-flotante";
+import CampanaNotificaciones from "@/components/campana-notificaciones";
 import PieSitio from "@/components/pie-sitio";
+import { barraDe, gruposDe, menuPersonaDe } from "@/lib/navegacion";
 import { COOKIE_AVISO } from "@/lib/avisos";
+import {
+  contarNoLeidas,
+  listarNotificaciones,
+  NOTIFICACIONES_EN_CAMPANA,
+} from "@/lib/notificaciones";
+import { haceCuanto } from "@/lib/tiempo-relativo";
 
 export default async function LayoutApp({
   children,
@@ -21,50 +29,40 @@ export default async function LayoutApp({
   // no en la URL para no ensuciar el enlace que el usuario puede compartir.
   const aviso = (await cookies()).get(COOKIE_AVISO)?.value ?? null;
 
-  // Solo gestión tiene perfil: es quien firma los documentos que emite.
-  const puedeEditarPerfil = esGestion(usuario.rol);
+  // La campana viene resuelta desde aquí: abrirla no dispara ninguna consulta,
+  // que en terreno con señal intermitente es la diferencia entre un menú útil
+  // y uno que se queda cargando.
+  const [sinLeer, ultimasNotificaciones] = await Promise.all([
+    contarNoLeidas(usuario.id),
+    listarNotificaciones(usuario.id, NOTIFICACIONES_EN_CAMPANA),
+  ]);
 
-  const enlaces: EnlaceNav[] = [
-    { href: "/escritorio", texto: "Escritorio", icono: "escritorio" },
-    { href: "/solicitudes", texto: "Solicitudes", icono: "solicitudes" },
-    { href: `/historial/${usuario.id}`, texto: "Mi equipamiento", icono: "equipamiento" },
-    { href: "/documentos", texto: "Mis documentos", icono: "documentos" },
-  ];
+  // Los destinos salen de lib/navegacion.ts, no de una lista armada aquí: son
+  // tres superficies (barra, menú del nombre, cajón) y mantenerlas a mano las
+  // desincroniza sola.
+  const barra = barraDe(usuario);
+  const destinosPersona = menuPersonaDe(usuario);
+  const gruposCajon = gruposDe(usuario);
 
-  if (esGestion(usuario.rol)) {
-    enlaces.push(
-      { href: "/bodega", texto: "Bodega", icono: "bodega" },
-      { href: "/reportes", texto: "Reportes", icono: "reportes" },
-      { href: "/admin/articulos", texto: "Catálogo", icono: "catalogo" },
-    );
-  }
-
-  // La administración de cuentas es exclusiva del rol ADMIN.
-  if (esAdmin(usuario.rol)) {
-    enlaces.push(
-      { href: "/admin/usuarios", texto: "Usuarios", icono: "usuarios" },
-      { href: "/admin/brigadas", texto: "Brigadas", icono: "brigadas" },
-    );
-  }
+  const detallePersona = `${ETIQUETA_ROL[usuario.rol]}${
+    usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""
+  }`;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       {/* La barra dejó de ser una franja a sangre con una segunda fila de
           pestañas: ahora es una sola píldora oscura flotando sobre el lienzo.
           Todo cabe en una línea, así que el contenido empieza ~44px más
-          arriba. Bajo lg los ocho destinos no entran, y el cajón toma el
+          arriba. Bajo lg los destinos no entran, y el cajón toma el
           relevo. La píldora es pegajosa: al hacer scroll queda flotando sobre
           el contenido, con el hueco de su padding dejando ver el lienzo. */}
       <header className="no-print sticky top-0 z-[var(--z-pegajoso)] px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4">
         <div className="mx-auto flex max-w-6xl items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
           <div className="flex min-w-0 items-center gap-1">
             <MenuMovil
-              enlaces={enlaces}
+              grupos={gruposCajon}
               usuarioNombre={usuario.nombre}
-              usuarioRol={`${ETIQUETA_ROL[usuario.rol]}${
-                usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""
-              }`}
-              hrefPerfil={puedeEditarPerfil ? "/perfil" : null}
+              usuarioRol={detallePersona}
             />
             <Link
               href="/escritorio"
@@ -84,47 +82,36 @@ export default async function LayoutApp({
             </Link>
           </div>
 
-          <NavPrincipal enlaces={enlaces} />
+          <NavPrincipal enlaces={barra} />
 
           {/* `min-w-0` + `truncate`: un nombre largo se recorta en vez de
               empujar los destinos y solaparse con ellos. */}
-          <div className="ml-auto flex min-w-0 items-center gap-3">
-            {/* Gestión firma los documentos que emite, así que su nombre lleva
-                al perfil donde registra la firma. Va aquí y no como otro
-                destino de la barra: nueve ya son muchos, y el perfil se visita
-                una vez, no a diario. */}
-            {puedeEditarPerfil ? (
-              <Link
-                href="/perfil"
-                className="foco-anillo-claro hidden min-w-0 rounded text-right transition-opacity duration-150 hover:opacity-80 sm:block"
-              >
-                <p className="truncate text-sm font-medium leading-tight">
-                  {usuario.nombre}
-                </p>
-                <p className="truncate text-xs leading-tight text-marca-200">
-                  {ETIQUETA_ROL[usuario.rol]}
-                  {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
-                </p>
-              </Link>
-            ) : (
-              <div className="hidden min-w-0 text-right sm:block">
-                <p className="truncate text-sm font-medium leading-tight">
-                  {usuario.nombre}
-                </p>
-                <p className="truncate text-xs leading-tight text-marca-200">
-                  {ETIQUETA_ROL[usuario.rol]}
-                  {usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""}
-                </p>
-              </div>
-            )}
-            <form action={cerrarSesion} className="shrink-0">
-              <button
-                type="submit"
-                className="foco-anillo-claro inline-flex cursor-pointer items-center rounded-full border border-white/25 px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-white/10"
-              >
-                Salir
-              </button>
-            </form>
+          <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-3">
+            <CampanaNotificaciones
+              sinLeer={sinLeer}
+              notificaciones={ultimasNotificaciones.map((n) => ({
+                id: n.id,
+                titulo: n.titulo,
+                cuerpo: n.cuerpo,
+                url: n.url,
+                leida: n.leidaEn !== null,
+                cuando: haceCuanto(n.creadaEn),
+              }))}
+            />
+
+            {/* El nombre dejó de ser un enlace suelto al perfil: ahora abre el
+                menú con lo de cada uno —equipamiento, documentos, perfil— y con
+                «Salir», que era la acción menos frecuente de todas y ocupaba el
+                sitio más caro de la pantalla. */}
+            <MenuPersona
+              nombre={usuario.nombre}
+              detalle={detallePersona}
+              destinos={destinosPersona.map((d) => ({
+                id: d.id,
+                href: d.href,
+                texto: d.texto,
+              }))}
+            />
           </div>
         </div>
       </header>

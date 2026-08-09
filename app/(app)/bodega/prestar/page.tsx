@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { ROLES_GESTION } from "@/lib/solicitud-estado";
 import { db } from "@/lib/db";
+import { filtroEmpresa } from "@/lib/alcance";
 import { Vacio } from "@/components/ui/superficie";
 import FormularioPrestamo from "./formulario-prestamo";
 
@@ -12,11 +13,11 @@ export default async function PaginaPrestar({
 }: {
   searchParams: Promise<{ item?: string }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const { item: itemPreseleccionado } = await searchParams;
 
   const items = await db.itemBodega.findMany({
-    where: { activo: true, stock: { gt: 0 } },
+    where: { ...filtroEmpresa(usuario.alcance), activo: true, stock: { gt: 0 } },
     orderBy: { nombre: "asc" },
     select: { id: true, codigo: true, nombre: true, unidad: true, stock: true },
   });

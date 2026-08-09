@@ -6,14 +6,101 @@ import { db } from "@/lib/db";
 import { registrarAuditoria, requerirUsuario } from "@/lib/auth";
 import { bufferDesdeDataUrl, guardarImagen } from "@/lib/archivos";
 import { calcularVenceEn } from "@/lib/vencimientos";
+import { formatearFolio } from "@/lib/folio";
 import {
   esGestion,
   puedeActuarSobre,
   puedeTransicionar,
 } from "@/lib/solicitud-estado";
+import type { Rol } from "@/generated/prisma/enums";
+import type { Alcance } from "@/lib/alcance";
 import { dejarAviso } from "@/lib/avisos";
+import { alcanza } from "@/lib/alcance";
+import { notificar } from "@/lib/notificaciones";
 
 export type EstadoEntrega = { error?: string };
+
+/** Quién firma el acta, cuando no es el destinatario. */
+type Receptor = {
+  recibidoPorId: string | null;
+  recibidoPorNombre: string | null;
+  recibidoPorRut: string | null;
+};
+
+const SIN_RECEPTOR_ALTERNO: Receptor = {
+  recibidoPorId: null,
+  recibidoPorNombre: null,
+  recibidoPorRut: null,
+};
+
+/**
+ * Lee quién está recibiendo en la práctica.
+ *
+ * El material va dirigido a alguien, pero a veces lo retira otro: un compañero
+ * que baja del cerro, el supervisor que pasa por bodega. Quien retira es quien
+ * firma, así que el acta tiene que nombrarlo o la firma no correspondería a
+ * nadie. El destinatario **no cambia**: el equipamiento sigue siendo suyo y en
+ * su historial queda.
+ *
+ * Tres formas, en orden de trazabilidad: el propio destinatario (lo normal),
+ * otro usuario del sistema, o un nombre a mano para quien no tiene cuenta.
+ */
+async function leerReceptor(
+  formData: FormData,
+  usuario: { id: string; rol: Rol; alcance: Alcance },
+  solicitud: { solicitanteId: string },
+): Promise<
+  { receptor: Receptor; error?: undefined } | { receptor?: undefined; error: string }
+> {
+  const modo = String(formData.get("receptorModo") ?? "destinatario");
+
+  if (modo === "destinatario") return { receptor: SIN_RECEPTOR_ALTERNO };
+
+  // Solo gestión designa a un tercero: si el beneficiario está firmando su
+  // propio retiro, por definición es él quien recibe.
+  if (!esGestion(usuario.rol)) {
+    return { error: "Solo gestión puede registrar que recibe otra persona." };
+  }
+
+  if (modo === "usuario") {
+    const id = String(formData.get("recibidoPorId") ?? "");
+    if (!id) return { error: "Elige quién recibe el material." };
+
+    // Recibir «en nombre de sí mismo» no es un caso: es la entrega normal.
+    if (id === solicitud.solicitanteId) return { receptor: SIN_RECEPTOR_ALTERNO };
+
+    const persona = await db.usuario.findUnique({ where: { id } });
+    if (!persona || !persona.activo) {
+      return { error: "Esa persona ya no existe o está desactivada." };
+    }
+    if (!alcanza(usuario.alcance, persona.empresaId)) {
+      return { error: "Esa persona no pertenece a una empresa que gestiones." };
+    }
+
+    return {
+      receptor: {
+        recibidoPorId: persona.id,
+        recibidoPorNombre: null,
+        recibidoPorRut: null,
+      },
+    };
+  }
+
+  if (modo === "manual") {
+    const nombre = String(formData.get("recibidoPorNombre") ?? "").trim();
+    const rut = String(formData.get("recibidoPorRut") ?? "").trim() || null;
+
+    if (nombre.length < 3) {
+      return { error: "Indica el nombre completo de quien recibe." };
+    }
+
+    return {
+      receptor: { recibidoPorId: null, recibidoPorNombre: nombre, recibidoPorRut: rut },
+    };
+  }
+
+  return { error: "Indica quién recibe el material." };
+}
 
 export async function registrarEntrega(
   _estado: EstadoEntrega,
@@ -73,6 +160,10 @@ export async function registrarEntrega(
     return { error: "Debes entregar al menos un ítem." };
   }
 
+  const leido = await leerReceptor(formData, usuario, solicitud);
+  if (leido.receptor === undefined) return { error: leido.error };
+  const receptor = leido.receptor;
+
   const firmaPngUrl = await guardarImagen(firma, "image/png", "firmas");
   const ahora = new Date();
 
@@ -89,11 +180,14 @@ export async function registrarEntrega(
     const entrega = await tx.entrega.create({
       data: {
         solicitudId: solicitud.id,
+        // El destinatario no cambia aunque retire otro: el equipamiento pasa a
+        // ser suyo y en su historial vive.
         receptorId: solicitud.solicitanteId,
         entregadoPorId,
         entregadaEn: ahora,
         firmaPngUrl,
         observaciones,
+        ...receptor,
       },
     });
 
@@ -134,7 +228,36 @@ export async function registrarEntrega(
     detalle: {
       items: [...cantidades.entries()],
       ...(retiroPropio ? { retiradoPorElBeneficiario: true } : {}),
+      // Que firmó un tercero es justo lo que habría que poder reconstruir si
+      // alguien discute el acta después.
+      ...(receptor.recibidoPorId || receptor.recibidoPorNombre
+        ? {
+            recibidoPor:
+              receptor.recibidoPorId ?? receptor.recibidoPorNombre,
+          }
+        : {}),
     },
+  });
+
+  // El destinatario tiene que enterarse de que su equipamiento se entregó,
+  // sobre todo si lo retiró otro: es el único aviso que le dice que ya está a
+  // su nombre sin haberlo tenido nunca en la mano.
+  const nombreQuienRecibio = receptor.recibidoPorId
+    ? ((await db.usuario.findUnique({
+        where: { id: receptor.recibidoPorId },
+        select: { nombre: true },
+      }))?.nombre ?? null)
+    : receptor.recibidoPorNombre;
+
+  await notificar({
+    destinatarios: [solicitud.solicitanteId],
+    tipo: "SOLICITUD_ENTREGADA",
+    titulo: `Solicitud ${formatearFolio(solicitud.folio)} entregada`,
+    cuerpo: nombreQuienRecibio
+      ? `Retirada por ${nombreQuienRecibio} a tu nombre. El acta ya está disponible.`
+      : "Entregada y firmada. El acta ya está disponible.",
+    url: `/solicitudes/${solicitud.id}`,
+    excluir: usuario.id,
   });
 
   await dejarAviso(

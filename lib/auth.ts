@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getIronSession, type SessionOptions } from "iron-session";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { alcanceDe, type Alcance } from "@/lib/alcance";
 import type { Rol } from "@/generated/prisma/enums";
 
 export type DatosSesion = {
@@ -41,6 +42,17 @@ export type UsuarioSesion = {
   rol: Rol;
   brigadaId: string | null;
   brigadaNombre: string | null;
+  /** Empresa a la que pertenece. Null en el ADMIN del sistema. */
+  empresaId: string | null;
+  empresaNombre: string | null;
+  /** Las que atiende un gestor; vacío en el resto de los roles. */
+  empresasGestionadas: { id: string; nombre: string }[];
+  /**
+   * Hasta dónde ve. Se resuelve una vez aquí y viaja con la sesión para que
+   * ninguna consulta tenga que volver a deducirlo —ni pueda olvidarse de
+   * hacerlo—. Ver lib/alcance.ts.
+   */
+  alcance: Alcance;
 };
 
 /** Devuelve el usuario en sesión, o null si no hay sesión válida. */
@@ -50,7 +62,15 @@ export async function usuarioActual(): Promise<UsuarioSesion | null> {
 
   const usuario = await db.usuario.findUnique({
     where: { id: sesion.usuarioId },
-    include: { brigada: { select: { nombre: true } } },
+    include: {
+      brigada: { select: { nombre: true } },
+      empresa: { select: { nombre: true } },
+      empresasGestionadas: {
+        where: { activa: true },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: "asc" },
+      },
+    },
   });
 
   // Cuenta borrada o desactivada mientras la sesión seguía viva.
@@ -63,6 +83,10 @@ export async function usuarioActual(): Promise<UsuarioSesion | null> {
     rol: usuario.rol,
     brigadaId: usuario.brigadaId,
     brigadaNombre: usuario.brigada?.nombre ?? null,
+    empresaId: usuario.empresaId,
+    empresaNombre: usuario.empresa?.nombre ?? null,
+    empresasGestionadas: usuario.empresasGestionadas,
+    alcance: alcanceDe(usuario),
   };
 }
 

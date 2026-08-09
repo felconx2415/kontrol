@@ -75,6 +75,7 @@ export async function actaDeEntrega(
         select: { nombre: true, rut: true, rol: true, brigada: { select: { nombre: true } } },
       },
       entregadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
+      recibidoPor: { select: { nombre: true, rut: true } },
       solicitud: { include: { brigada: { select: { nombre: true } } } },
       items: { include: { solicitudItem: { include: { articulo: true } } } },
     },
@@ -103,13 +104,24 @@ export async function actaDeEntrega(
   ]);
   const fecha = fechaCorta(entrega.entregadaEn);
 
+  // Quien retiró de verdad, cuando no fue el destinatario. La firma capturada
+  // es suya, así que el acta tiene que ponerla a su nombre: atribuírsela al
+  // destinatario sería consignar una firma que él nunca hizo.
+  const retiro = entrega.recibidoPor
+    ? { nombre: entrega.recibidoPor.nombre, rut: entrega.recibidoPor.rut }
+    : entrega.recibidoPorNombre
+      ? { nombre: entrega.recibidoPorNombre, rut: entrega.recibidoPorRut }
+      : null;
+
   const firmas: FirmaActa[] = [
     {
       imagen: firma,
-      nombre: entrega.receptor.nombre,
-      rut: entrega.receptor.rut,
+      nombre: retiro?.nombre ?? entrega.receptor.nombre,
+      rut: retiro?.rut ?? entrega.receptor.rut,
       fecha,
-      rol: "Firma del receptor",
+      rol: retiro
+        ? `Firma de quien retira, en representación de ${entrega.receptor.nombre}`
+        : "Firma del receptor",
     },
     {
       imagen: firmaEntrega,
@@ -138,6 +150,16 @@ export async function actaDeEntrega(
           valor: entrega.solicitud.brigada?.nombre ?? entrega.receptor.brigada?.nombre ?? null,
         },
         { rotulo: "Cargo", valor: ETIQUETA_ROL[entrega.receptor.rol] },
+        // Solo aparece cuando hubo un tercero: en el caso normal, una línea
+        // «Retira: él mismo» sería puro ruido en el documento.
+        ...(retiro
+          ? [
+              { rotulo: "Retira", valor: retiro.nombre },
+              ...(retiro.rut
+                ? [{ rotulo: "RUT de quien retira", valor: retiro.rut, dato: true }]
+                : []),
+            ]
+          : []),
       ],
     },
     entrega: {

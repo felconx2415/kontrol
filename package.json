@@ -1,6 +1,6 @@
 {
   "name": "kontrol",
-  "version": "0.6.1-beta",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,8 +12,10 @@
     "db:seed": "prisma db seed",
     "db:demo": "tsx prisma/demo.ts",
     "db:import": "tsx prisma/importar-codigario.mts",
+    "db:escenario": "tsx prisma/escenario-prueba.mts",
     "db:studio": "prisma studio",
-    "e2e": "tsx e2e/flujo-completo.mts"
+    "e2e": "tsx e2e/flujo-completo.mts",
+    "e2e:empresas": "tsx e2e/empresas-y-avisos.mts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

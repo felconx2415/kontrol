@@ -10,6 +10,7 @@ import {
   formatearFecha,
 } from "@/lib/vencimientos";
 import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { alcanza } from "@/lib/alcance";
 import Insignia from "@/components/ui/insignia";
 import ProgresoSolicitud from "@/components/progreso-solicitud";
 import { Vacio } from "@/components/ui/superficie";
@@ -38,6 +39,12 @@ export default async function Historial({
   });
 
   if (!persona) notFound();
+
+  // El equipamiento de alguien de otra empresa no se consulta, aunque el rol
+  // alcance para ver historiales ajenos.
+  if (!esMio && !alcanza(actual.alcance, persona.empresaId)) {
+    redirect("/escritorio?error=sin-permiso");
+  }
 
   // Pedidos todavía en curso. Van en esta página porque es la que la gente
   // abre para saber «qué tengo y qué me falta»: sin esto, un pedido que un

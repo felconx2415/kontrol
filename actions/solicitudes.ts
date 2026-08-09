@@ -17,7 +17,18 @@ import {
   puedeTransicionar,
 } from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
-import type { EstadoSolicitud, Motivo, TipoSolicitud } from "@/generated/prisma/enums";
+import { alcanza, filtroEmpresa } from "@/lib/alcance";
+import {
+  destinatariosPorRol,
+  notificar,
+  ROLES_A_AVISAR,
+} from "@/lib/notificaciones";
+import type {
+  EstadoSolicitud,
+  Motivo,
+  TipoNotificacion,
+  TipoSolicitud,
+} from "@/generated/prisma/enums";
 
 export type EstadoFormulario = { error?: string; ok?: boolean };
 
@@ -94,7 +105,7 @@ export async function crearSolicitud(
 
   const personas = await db.usuario.findMany({
     where: { id: { in: ids }, activo: true },
-    select: { id: true, nombre: true, brigadaId: true },
+    select: { id: true, nombre: true, brigadaId: true, empresaId: true },
   });
   const personaPorId = new Map(personas.map((p) => [p.id, p]));
 
@@ -102,6 +113,18 @@ export async function crearSolicitud(
     return {
       error:
         "Alguno de los usuarios para los que solicitas ya no existe o está desactivado.",
+    };
+  }
+
+  // Pedir a nombre de alguien de otra empresa crearía un pedido que ni quien lo
+  // registró volvería a ver. El propio beneficiario nunca cae aquí: su empresa
+  // es, por definición, una de las suyas.
+  const fuera = personas.find(
+    (p) => p.id !== usuario.id && !alcanza(usuario.alcance, p.empresaId),
+  );
+  if (fuera) {
+    return {
+      error: `${fuera.nombre} no pertenece a ninguna de las empresas que gestionas.`,
     };
   }
 
@@ -198,6 +221,8 @@ export async function crearSolicitud(
       id: string;
       folio: number;
       nombre: string;
+      solicitanteId: string;
+      empresaId: string | null;
       esPropia: boolean;
       items: number;
       tipo: TipoSolicitud;
@@ -214,8 +239,11 @@ export async function crearSolicitud(
           folio,
           solicitanteId: persona.id,
           // La brigada es la del beneficiario, no la de quien registra: es la
-          // que va en el formato del almacén.
+          // que va en el formato del almacén. La empresa, por lo mismo: el
+          // pedido pertenece a la del beneficiario aunque lo teclee un gestor
+          // que lleva varias.
           brigadaId: persona.brigadaId,
+          empresaId: persona.empresaId,
           creadaPorId: persona.id === usuario.id ? null : usuario.id,
           tipo,
           estado: "PENDIENTE",
@@ -240,6 +268,8 @@ export async function crearSolicitud(
         id: solicitud.id,
         folio,
         nombre: persona.nombre,
+        solicitanteId: persona.id,
+        empresaId: persona.empresaId,
         esPropia: persona.id === usuario.id,
         items: items.length,
         tipo,
@@ -271,6 +301,28 @@ export async function crearSolicitud(
     });
   }
 
+  // Quien aprueba se entera de que hay cola; el beneficiario, de que pidieron
+  // a su nombre. A quien la escribió no, que acaba de hacerlo.
+  for (const creada of creadas) {
+    const aprobadores = await destinatariosPorRol(
+      ROLES_A_AVISAR.SOLICITUD_CREADA!,
+      creada.empresaId,
+    );
+
+    await notificar({
+      // El beneficiario entra en la lista solo si el pedido no es suyo: si lo
+      // escribió él, la notificación le contaría lo que acaba de hacer.
+      destinatarios: creada.esPropia
+        ? aprobadores
+        : [...aprobadores, creada.solicitanteId],
+      tipo: "SOLICITUD_CREADA",
+      titulo: `Solicitud ${formatearFolio(creada.folio)} por aprobar`,
+      cuerpo: `${creada.nombre} · ${creada.tipo === "REEMPLAZO" ? "Reemplazo" : "Equipamiento nuevo"} · ${creada.items} ítem${creada.items === 1 ? "" : "s"}.`,
+      url: `/solicitudes/${creada.id}`,
+      excluir: usuario.id,
+    });
+  }
+
   revalidatePath("/solicitudes");
   revalidatePath("/escritorio");
 
@@ -292,6 +344,112 @@ export async function crearSolicitud(
       .join(", ")}). Todas quedan a la espera de aprobación.`,
   );
   redirect("/solicitudes?estado=PENDIENTE");
+}
+
+/**
+ * Avisa del cambio de estado a quien corresponde.
+ *
+ * Cada estado tiene dos audiencias posibles y distinta razón para enterarse: el
+ * beneficiario **espera** su equipamiento y quiere saber en qué va; gestión
+ * **tiene que hacer** el paso siguiente. Por eso el texto no es el mismo para
+ * los dos, aunque el hecho sí.
+ *
+ * Los estados que no aparecen aquí no generan aviso: BORRADOR no le importa a
+ * nadie más, y ENTREGADA la avisa registrarEntrega(), que es la única que sabe
+ * quién firmó.
+ */
+async function avisarCambioDeEstado(
+  solicitud: {
+    id: string;
+    folio: number;
+    solicitanteId: string;
+    empresaId: string | null;
+  },
+  nuevoEstado: EstadoSolicitud,
+  autorId: string,
+  motivoRechazo?: string | null,
+): Promise<void> {
+  const folio = formatearFolio(solicitud.folio);
+  const url = `/solicitudes/${solicitud.id}`;
+
+  // Lo que se le cuenta a quien espera el equipamiento.
+  const PARA_EL_BENEFICIARIO: Partial<
+    Record<EstadoSolicitud, { tipo: TipoNotificacion; titulo: string; cuerpo: string }>
+  > = {
+    APROBADA: {
+      tipo: "SOLICITUD_APROBADA",
+      titulo: `Solicitud ${folio} aprobada`,
+      cuerpo: "Aprobada. Ahora se pide el material al almacén.",
+    },
+    RECHAZADA: {
+      tipo: "SOLICITUD_RECHAZADA",
+      titulo: `Solicitud ${folio} rechazada`,
+      cuerpo: motivoRechazo?.trim() || "No fue aprobada.",
+    },
+    RESERVA_SOLICITADA: {
+      tipo: "SOLICITUD_RESERVA_SOLICITADA",
+      titulo: `Solicitud ${folio}: reserva pedida`,
+      cuerpo: "Se pidió el número de reserva al almacén.",
+    },
+    EN_GESTION: {
+      tipo: "SOLICITUD_EN_GESTION",
+      titulo: `Solicitud ${folio} pedida al almacén`,
+      cuerpo: "El material viene en camino.",
+    },
+    RECIBIDA: {
+      tipo: "SOLICITUD_RECIBIDA",
+      titulo: `Solicitud ${folio}: material en bodega`,
+      cuerpo: "Ya llegó. Te citarán para entregártelo y firmar.",
+    },
+    CANCELADA: {
+      tipo: "SOLICITUD_CANCELADA",
+      titulo: `Solicitud ${folio} cancelada`,
+      cuerpo: "Se canceló antes de completarse.",
+    },
+  };
+
+  const aviso = PARA_EL_BENEFICIARIO[nuevoEstado];
+  if (aviso) {
+    await notificar({
+      destinatarios: [solicitud.solicitanteId],
+      tipo: aviso.tipo,
+      titulo: aviso.titulo,
+      cuerpo: aviso.cuerpo,
+      url,
+      excluir: autorId,
+    });
+  }
+
+  // Y lo que le toca hacer a gestión.
+  const PARA_GESTION: Partial<
+    Record<EstadoSolicitud, { tipo: TipoNotificacion; titulo: string; cuerpo: string }>
+  > = {
+    APROBADA: {
+      tipo: "SOLICITUD_APROBADA",
+      titulo: `Solicitud ${folio} lista para pedir`,
+      cuerpo: "Aprobada: queda pendiente el pedido al almacén.",
+    },
+    RECIBIDA: {
+      tipo: "SOLICITUD_RECIBIDA",
+      titulo: `Solicitud ${folio} lista para entregar`,
+      cuerpo: "El material está en bodega: entrega y toma la firma.",
+    },
+  };
+
+  const paraGestion = PARA_GESTION[nuevoEstado];
+  if (!paraGestion) return;
+
+  await notificar({
+    destinatarios: await destinatariosPorRol(
+      ROLES_A_AVISAR[paraGestion.tipo] ?? ["GESTOR", "ADMIN"],
+      solicitud.empresaId,
+    ),
+    tipo: paraGestion.tipo,
+    titulo: paraGestion.titulo,
+    cuerpo: paraGestion.cuerpo,
+    url,
+    excluir: autorId,
+  });
 }
 
 export type CambioItem = {
@@ -332,6 +490,9 @@ export async function editarSolicitud(
   });
 
   if (!solicitud) return { error: "La solicitud no existe." };
+  if (!alcanza(usuario.alcance, solicitud.empresaId)) {
+    return { error: "Esa solicitud no pertenece a una empresa que gestiones." };
+  }
   if (solicitud.estado !== "PENDIENTE") {
     return { error: "Solo se puede editar una solicitud pendiente de aprobación." };
   }
@@ -395,6 +556,17 @@ export async function editarSolicitud(
     entidadId: solicitudId,
     accion: "EDITADA",
     detalle,
+  });
+
+  // Al beneficiario le cambiaron lo que pidió: es de las pocas cosas que
+  // conviene que sepa antes de recibir el material y no al abrirlo.
+  await notificar({
+    destinatarios: [solicitud.solicitanteId],
+    tipo: "SOLICITUD_EDITADA",
+    titulo: `Solicitud ${formatearFolio(solicitud.folio)} ajustada`,
+    cuerpo: detalle.join(" · "),
+    url: `/solicitudes/${solicitudId}`,
+    excluir: usuario.id,
   });
 
   await dejarAviso("Pedido actualizado.");
@@ -537,6 +709,13 @@ export async function cambiarEstado(
     detalle: extra,
   });
 
+  await avisarCambioDeEstado(
+    solicitud,
+    nuevoEstado,
+    usuario.id,
+    extra?.motivoRechazo,
+  );
+
   const CONFIRMACION: Partial<Record<EstadoSolicitud, string>> = {
     APROBADA: "Solicitud aprobada.",
     RECHAZADA: "Solicitud rechazada.",
@@ -649,6 +828,8 @@ export async function marcarRecibida(
     detalle: detalle.length > 0 ? detalle : { completo: true },
   });
 
+  await avisarCambioDeEstado(solicitud, "RECIBIDA", usuario.id);
+
   await dejarAviso(
     detalle.length > 0
       ? "Marcada como recibida (recepción parcial registrada)."
@@ -726,9 +907,17 @@ export async function aprobarVarias(
     return { error: "No seleccionaste ninguna solicitud." };
   }
 
+  // Los ids vienen de una lista con casillas marcadas: el alcance los acota
+  // igual que si llegaran a mano.
   const solicitudes = await db.solicitud.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, folio: true, estado: true },
+    where: { ...filtroEmpresa(usuario.alcance), id: { in: ids } },
+    select: {
+      id: true,
+      folio: true,
+      estado: true,
+      solicitanteId: true,
+      empresaId: true,
+    },
   });
 
   const aprobables = solicitudes.filter((s) =>
@@ -756,6 +945,10 @@ export async function aprobarVarias(
       accion: "APROBADA",
       detalle: aprobables.length > 1 ? { enLoteDe: aprobables.length } : undefined,
     });
+  }
+
+  for (const s of aprobables) {
+    await avisarCambioDeEstado(s, "APROBADA", usuario.id);
   }
 
   const omitidas = solicitudes.length - aprobables.length;
@@ -795,8 +988,14 @@ export async function solicitarReservaVarias(
   }
 
   const solicitudes = await db.solicitud.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, estado: true },
+    where: { ...filtroEmpresa(usuario.alcance), id: { in: ids } },
+    select: {
+      id: true,
+      folio: true,
+      estado: true,
+      solicitanteId: true,
+      empresaId: true,
+    },
   });
 
   const pedibles = solicitudes.filter((s) =>
@@ -828,6 +1027,10 @@ export async function solicitarReservaVarias(
       accion: "RESERVA_SOLICITADA",
       detalle: pedibles.length > 1 ? { enLoteDe: pedibles.length } : undefined,
     });
+  }
+
+  for (const s of pedibles) {
+    await avisarCambioDeEstado(s, "RESERVA_SOLICITADA", usuario.id);
   }
 
   const omitidas = solicitudes.length - pedibles.length;
@@ -877,11 +1080,14 @@ export async function enviarVariasAlAlmacen(
   }
 
   const solicitudes = await db.solicitud.findMany({
-    where: { id: { in: ids } },
+    where: { ...filtroEmpresa(usuario.alcance), id: { in: ids } },
     orderBy: { folio: "asc" },
     select: {
       id: true,
+      folio: true,
       estado: true,
+      solicitanteId: true,
+      empresaId: true,
       items: {
         select: {
           id: true,
@@ -950,6 +1156,10 @@ export async function enviarVariasAlAlmacen(
         ...(enviables.length > 1 ? { enLoteDe: enviables.length } : {}),
       },
     });
+  }
+
+  for (const s of enviables) {
+    await avisarCambioDeEstado(s, "EN_GESTION", usuario.id);
   }
 
   const omitidas = solicitudes.length - enviables.length;

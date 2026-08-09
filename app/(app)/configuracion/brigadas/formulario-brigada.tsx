@@ -5,6 +5,7 @@ import { crearBrigada, type EstadoAdmin } from "@/actions/admin";
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import type { EmpresaOpcion } from "../empresas/formulario-empresa";
 
 export type SupervisorOpcion = { id: string; nombre: string; activo: boolean };
 
@@ -15,8 +16,10 @@ export function etiquetaSupervisor(s: SupervisorOpcion) {
 
 export default function FormularioBrigada({
   supervisores,
+  empresas,
 }: {
   supervisores: SupervisorOpcion[];
+  empresas: EmpresaOpcion[];
 }) {
   const [estado, accion] = useActionState<EstadoAdmin, FormData>(crearBrigada, {});
 
@@ -31,6 +34,23 @@ export default function FormularioBrigada({
 
       <Campo etiqueta="Nombre" htmlFor="nombre">
         <Entrada id="nombre" name="nombre" required placeholder="Brigada Norte" />
+      </Campo>
+
+      {/* La brigada vive dentro de una empresa: el nombre se repite entre
+          empresas sin chocar, pero la brigada pertenece a una sola. */}
+      <Campo etiqueta="Empresa" htmlFor="empresaId" requerido>
+        <Seleccion id="empresaId" name="empresaId" required defaultValue="">
+          <option value="" disabled>
+            Elige una empresa
+          </option>
+          {empresas
+            .filter((e) => e.activa)
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nombre}
+              </option>
+            ))}
+        </Seleccion>
       </Campo>
 
       <Campo

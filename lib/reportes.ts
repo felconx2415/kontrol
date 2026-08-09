@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import type { Categoria, EstadoSolicitud } from "@/generated/prisma/enums";
+import { filtroEmpresa, type Alcance } from "@/lib/alcance";
 
 export type FiltrosReporte = {
   desde?: string;
@@ -45,9 +46,18 @@ export function construirRangoFechas(
   return rango.gte || rango.lte ? rango : undefined;
 }
 
-/** Traduce los filtros de la URL a un where de Prisma, ignorando lo inválido. */
-export function construirFiltro(filtros: FiltrosReporte): Prisma.SolicitudWhereInput {
-  const where: Prisma.SolicitudWhereInput = {};
+/**
+ * Traduce los filtros de la URL a un where de Prisma, ignorando lo inválido.
+ *
+ * El alcance no es negociable y va primero: los filtros llegan de la URL y
+ * cualquiera puede escribir el id de una brigada ajena, así que el recorte por
+ * empresa tiene que estar puesto antes de leerlos.
+ */
+export function construirFiltro(
+  filtros: FiltrosReporte,
+  alcance: Alcance,
+): Prisma.SolicitudWhereInput {
+  const where: Prisma.SolicitudWhereInput = { ...filtroEmpresa(alcance) };
 
   const rango = construirRangoFechas(filtros);
   if (rango) where.creadaEn = rango;

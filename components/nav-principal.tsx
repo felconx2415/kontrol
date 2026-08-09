@@ -13,7 +13,11 @@ export type IconoNav =
   | "reportes"
   | "catalogo"
   | "usuarios"
-  | "brigadas";
+  | "brigadas"
+  | "empresas"
+  | "notificaciones"
+  | "perfil"
+  | "configuracion";
 
 export type EnlaceNav = { href: string; texto: string; icono: IconoNav };
 
@@ -21,8 +25,10 @@ export type EnlaceNav = { href: string; texto: string; icono: IconoNav };
  * Trazos de cada icono (set Lucide, viewBox 24×24). Solo el interior: el <svg>
  * envolvente unifica tamaño, grosor y color. `currentColor` hace que el icono
  * herede el color del enlace, así sigue al estado activo/inactivo sin código
- * extra. Distinción deliberada: Usuarios es una persona (cuenta) y Brigadas un
- * grupo (cuadrilla); el casco marca "Mi equipamiento" en una app de EPP.
+ * extra. Distinción deliberada: Usuarios es una persona (cuenta), Brigadas un
+ * grupo (cuadrilla) y Empresas un edificio (la organización que las contiene);
+ * el casco marca "Mi equipamiento" en una app de EPP. La persona dentro de un
+ * círculo es el perfil propio, para no confundirla con Usuarios.
  */
 const TRAZOS: Record<IconoNav, ReactNode> = {
   escritorio: (
@@ -94,6 +100,36 @@ const TRAZOS: Record<IconoNav, ReactNode> = {
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  empresas: (
+    <>
+      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
+      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+      <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+      <path d="M10 6h4" />
+      <path d="M10 10h4" />
+      <path d="M10 14h4" />
+      <path d="M10 18h4" />
+    </>
+  ),
+  notificaciones: (
+    <>
+      <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+      <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+    </>
+  ),
+  perfil: (
+    <>
+      <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />
+    </>
+  ),
+  configuracion: (
+    <>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
 };

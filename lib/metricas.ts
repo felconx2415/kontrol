@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import type { EstadoSolicitud, Rol } from "@/generated/prisma/enums";
 import { DIAS_AVISO_VENCIMIENTO, diasRestantes } from "@/lib/vencimientos";
 import { esGestion } from "@/lib/solicitud-estado";
+import { filtroEmpresa, type Alcance } from "@/lib/alcance";
 
 /** Estados que representan trabajo en curso, en orden del flujo. */
 export const ETAPAS_ACTIVAS: EstadoSolicitud[] = [
@@ -56,8 +57,14 @@ function dias(desde: Date | null): number | null {
   return Math.floor((Date.now() - desde.getTime()) / 86_400_000);
 }
 
-/** Embudo de solicitudes activas por etapa, con la espera más larga de cada una. */
-export async function embudoEtapas(): Promise<BarraEtapa[]> {
+/**
+ * Embudo de solicitudes activas por etapa, con la espera más larga de cada una.
+ * Cuenta solo lo que alcanza quien mira: el escritorio de un gestor de dos
+ * empresas suma esas dos y ninguna más.
+ */
+export async function embudoEtapas(alcance: Alcance): Promise<BarraEtapa[]> {
+  const deMiEmpresa = filtroEmpresa(alcance);
+
   const ETIQUETAS: Record<string, string> = {
     PENDIENTE: "Por aprobar",
     APROBADA: "Por pedir",
@@ -82,9 +89,9 @@ export async function embudoEtapas(): Promise<BarraEtapa[]> {
     ETAPAS_ACTIVAS.map(async (estado) => {
       const campo = CAMPO_ENTRADA[estado];
       const [total, masVieja] = await Promise.all([
-        db.solicitud.count({ where: { estado } }),
+        db.solicitud.count({ where: { ...deMiEmpresa, estado } }),
         db.solicitud.findFirst({
-          where: { estado },
+          where: { ...deMiEmpresa, estado },
           orderBy: { [campo]: "asc" },
           select: { [campo]: true } as Record<string, boolean>,
         }),
@@ -108,7 +115,7 @@ export async function embudoEtapas(): Promise<BarraEtapa[]> {
  * Cuántos EPP hay que cambiar por mes, mirando 6 meses hacia adelante.
  * El primer tramo agrupa lo ya vencido, que es lo que exige acción hoy.
  */
-export async function vencimientosPorMes(): Promise<BarraMes[]> {
+export async function vencimientosPorMes(alcance: Alcance): Promise<BarraMes[]> {
   const hoy = new Date();
   const horizonte = new Date(hoy);
   horizonte.setMonth(horizonte.getMonth() + 6);
@@ -118,6 +125,7 @@ export async function vencimientosPorMes(): Promise<BarraMes[]> {
       reemplazadoEn: null,
       reemplazadoPor: null,
       venceEn: { not: null, lte: horizonte },
+      entrega: { solicitud: filtroEmpresa(alcance) },
     },
     select: { venceEn: true },
   });
@@ -160,12 +168,19 @@ export async function vencimientosPorMes(): Promise<BarraMes[]> {
 }
 
 /** Detalle accionable: qué hay que cambiar, de quién y cuándo. */
-export async function proximosCambios(limite = 12): Promise<CambioProximo[]> {
+export async function proximosCambios(
+  alcance: Alcance,
+  limite = 12,
+): Promise<CambioProximo[]> {
   const corte = new Date();
   corte.setDate(corte.getDate() + DIAS_AVISO_VENCIMIENTO);
 
   const items = await db.entregaItem.findMany({
-    where: { reemplazadoEn: null, venceEn: { not: null, lte: corte } },
+    where: {
+      reemplazadoEn: null,
+      venceEn: { not: null, lte: corte },
+      entrega: { solicitud: filtroEmpresa(alcance) },
+    },
     orderBy: { venceEn: "asc" },
     take: limite,
     include: {
@@ -193,30 +208,48 @@ export async function proximosCambios(limite = 12): Promise<CambioProximo[]> {
   }));
 }
 
-export async function kpis(usuarioId: string, rol: Rol): Promise<Kpi[]> {
+export async function kpis(
+  usuarioId: string,
+  rol: Rol,
+  alcance: Alcance,
+): Promise<Kpi[]> {
   const hoy = new Date();
   const corte30 = new Date(hoy);
   corte30.setDate(corte30.getDate() + DIAS_AVISO_VENCIMIENTO);
 
+  const deMiEmpresa = filtroEmpresa(alcance);
+  // Los vencimientos se cuentan sobre entregas, que llegan a la empresa por la
+  // solicitud que las originó.
+  const vencimientosDeMiEmpresa = { entrega: { solicitud: deMiEmpresa } };
+
   const [porAprobar, antiguaPendiente, enGestion, porEntregar, vencidos, porVencer, mias] =
     await Promise.all([
-      db.solicitud.count({ where: { estado: "PENDIENTE" } }),
+      db.solicitud.count({ where: { ...deMiEmpresa, estado: "PENDIENTE" } }),
       db.solicitud.findFirst({
-        where: { estado: "PENDIENTE" },
+        where: { ...deMiEmpresa, estado: "PENDIENTE" },
         orderBy: { enviadaEn: "asc" },
         select: { enviadaEn: true },
       }),
       db.solicitud.count({
         where: {
+          ...deMiEmpresa,
           estado: { in: ["APROBADA", "RESERVA_SOLICITADA", "EN_GESTION"] },
         },
       }),
-      db.solicitud.count({ where: { estado: "RECIBIDA" } }),
+      db.solicitud.count({ where: { ...deMiEmpresa, estado: "RECIBIDA" } }),
       db.entregaItem.count({
-        where: { reemplazadoEn: null, venceEn: { not: null, lt: hoy } },
+        where: {
+          ...vencimientosDeMiEmpresa,
+          reemplazadoEn: null,
+          venceEn: { not: null, lt: hoy },
+        },
       }),
       db.entregaItem.count({
-        where: { reemplazadoEn: null, venceEn: { not: null, gte: hoy, lte: corte30 } },
+        where: {
+          ...vencimientosDeMiEmpresa,
+          reemplazadoEn: null,
+          venceEn: { not: null, gte: hoy, lte: corte30 },
+        },
       }),
       db.solicitud.count({
         where: { solicitanteId: usuarioId, estado: { in: ETAPAS_ACTIVAS } },

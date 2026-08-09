@@ -17,6 +17,27 @@ const nextConfig: NextConfig = {
   // tiempo de ejecución: empaquetarlo lo rompe. Se deja fuera del bundle del
   // servidor para que se cargue como módulo de Node normal.
   serverExternalPackages: ["playwright"],
+
+  // /admin pasó a /configuracion. El nombre viejo engañaba: el catálogo nunca
+  // fue de administración —lo lleva gestión— y convivía con tres pantallas que
+  // sí son exclusivas del ADMIN.
+  //
+  // El orden importa: `articulos` además cambió de nombre, así que su regla
+  // tiene que resolverse antes que el comodín.
+  async redirects() {
+    return [
+      {
+        source: "/admin/articulos",
+        destination: "/configuracion/catalogo",
+        permanent: true,
+      },
+      {
+        source: "/admin/:ruta*",
+        destination: "/configuracion/:ruta*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

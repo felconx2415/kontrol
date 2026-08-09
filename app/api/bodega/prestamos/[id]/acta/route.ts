@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { usuarioActual } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { filtroEmpresa } from "@/lib/alcance";
 import { origenPublico } from "@/lib/origen";
 import { esGestion } from "@/lib/solicitud-estado";
 import { actaDePrestamo } from "@/lib/actas/generar";
@@ -16,8 +17,9 @@ export async function GET(
 
   const { id } = await params;
 
-  const prestamo = await db.prestamo.findUnique({
-    where: { id },
+  // El préstamo se busca dentro del alcance: fuera de él, «no existe».
+  const prestamo = await db.prestamo.findFirst({
+    where: { id, items: { some: { item: filtroEmpresa(usuario.alcance) } } },
     select: { id: true },
   });
   if (!prestamo) {

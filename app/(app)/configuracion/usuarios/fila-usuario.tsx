@@ -9,11 +9,13 @@ import {
   restablecerPassword,
   type EstadoAdmin,
 } from "@/actions/admin";
-import { ETIQUETA_ROL, ROLES } from "@/lib/solicitud-estado";
+import { ETIQUETA_ROL } from "@/lib/solicitud-estado";
 import Boton from "@/components/ui/boton";
-import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
+import { Campo, Entrada } from "@/components/ui/campo";
 import Insignia from "@/components/ui/insignia";
 import { Aviso } from "@/components/ui/superficie";
+import CamposCuenta, { type BrigadaOpcion } from "./campos-cuenta";
+import type { EmpresaOpcion } from "../empresas/formulario-empresa";
 import type { Rol } from "@/generated/prisma/enums";
 
 export type UsuarioFila = {
@@ -24,10 +26,13 @@ export type UsuarioFila = {
   rol: Rol;
   brigadaId: string | null;
   brigadaNombre: string | null;
+  empresaId: string | null;
+  empresaNombre: string | null;
+  /** Las que atiende, si es gestor. Vacío en el resto de los roles. */
+  empresasGestionadas: string[];
   activo: boolean;
 };
 
-type Brigada = { id: string; nombre: string };
 type Panel = "editar" | "password" | "eliminar" | null;
 
 /**
@@ -38,10 +43,12 @@ type Panel = "editar" | "password" | "eliminar" | null;
 export default function FilaUsuario({
   usuario,
   brigadas,
+  empresas,
   esUsuarioActual,
 }: {
   usuario: UsuarioFila;
-  brigadas: Brigada[];
+  brigadas: BrigadaOpcion[];
+  empresas: EmpresaOpcion[];
   esUsuarioActual: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
@@ -73,6 +80,19 @@ export default function FilaUsuario({
         </td>
         <td data-label="Rol" className="px-4 py-2.5">
           {ETIQUETA_ROL[usuario.rol]}
+        </td>
+        <td data-label="Empresa" className="px-4 py-2.5 text-tinta-suave">
+          {usuario.rol === "ADMIN" && !usuario.empresaNombre
+            ? "Todas"
+            : (usuario.empresaNombre ?? "—")}
+          {/* Un gestor de varias empresas es lo primero que hay que poder ver
+              de un vistazo: es lo que define hasta dónde llega su cuenta. */}
+          {usuario.empresasGestionadas.length > 0 && (
+            <span className="block text-xs text-tinta-tenue">
+              atiende {usuario.empresasGestionadas.length} empresa
+              {usuario.empresasGestionadas.length === 1 ? "" : "s"}
+            </span>
+          )}
         </td>
         <td data-label="Brigada" className="px-4 py-2.5 text-tinta-suave">
           {usuario.brigadaNombre ?? "—"}
@@ -127,11 +147,12 @@ export default function FilaUsuario({
 
       {panel && (
         <tr className="bg-panel-suave">
-          <td colSpan={6} className="celda-completa panel-expandible px-4 py-4">
+          <td colSpan={7} className="celda-completa panel-expandible px-4 py-4">
             {panel === "editar" && (
               <PanelEditar
                 usuario={usuario}
                 brigadas={brigadas}
+                empresas={empresas}
                 esUsuarioActual={esUsuarioActual}
                 onCerrar={cerrar}
               />
@@ -180,11 +201,13 @@ function BotonAccion({
 function PanelEditar({
   usuario,
   brigadas,
+  empresas,
   esUsuarioActual,
   onCerrar,
 }: {
   usuario: UsuarioFila;
-  brigadas: Brigada[];
+  brigadas: BrigadaOpcion[];
+  empresas: EmpresaOpcion[];
   esUsuarioActual: boolean;
   onCerrar: () => void;
 }) {
@@ -224,43 +247,16 @@ function PanelEditar({
         />
       </Campo>
 
-      <Campo
-        etiqueta="Rol"
-        htmlFor={`rol-${usuario.id}`}
-        pista={esUsuarioActual ? "No puedes cambiar tu propio rol." : undefined}
-      >
-        <Seleccion
-          id={`rol-${usuario.id}`}
-          name="rol"
-          defaultValue={usuario.rol}
-          disabled={esUsuarioActual}
-        >
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {ETIQUETA_ROL[r]}
-            </option>
-          ))}
-        </Seleccion>
-        {/* Un select deshabilitado no se envía; conserva el rol actual. */}
-        {esUsuarioActual && (
-          <input type="hidden" name="rol" value={usuario.rol} />
-        )}
-      </Campo>
-
-      <Campo etiqueta="Brigada" htmlFor={`brigada-${usuario.id}`}>
-        <Seleccion
-          id={`brigada-${usuario.id}`}
-          name="brigadaId"
-          defaultValue={usuario.brigadaId ?? ""}
-        >
-          <option value="">Sin brigada</option>
-          {brigadas.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nombre}
-            </option>
-          ))}
-        </Seleccion>
-      </Campo>
+      <CamposCuenta
+        idPrefijo={usuario.id}
+        empresas={empresas}
+        brigadas={brigadas}
+        rolInicial={usuario.rol}
+        empresaInicial={usuario.empresaId}
+        brigadaInicial={usuario.brigadaId}
+        gestionadasIniciales={usuario.empresasGestionadas}
+        rolBloqueado={esUsuarioActual}
+      />
 
       <Mensajes estado={estado} />
 

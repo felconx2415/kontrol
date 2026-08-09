@@ -15,6 +15,11 @@ import {
   ETIQUETA_MOVIMIENTO,
   UMBRAL_STOCK_BAJO,
 } from "@/lib/bodega";
+import {
+  filtroEmpresa,
+  filtroEmpresaPropia,
+  type Alcance,
+} from "@/lib/alcance";
 import BarraAcciones from "./barra-acciones";
 import FormularioItem from "./formulario-item";
 import FormularioItemCatalogo from "./formulario-item-catalogo";
@@ -64,14 +69,18 @@ export default async function PaginaBodega({
     asignacion?: string;
   }>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const { tab: tabParam, q, cat, estado, stock, page, acta, asignacion } =
     await searchParams;
+  // La bodega es material físico de una empresa: un gestor de dos ve las dos
+  // juntas, pero nunca la de una tercera.
+  const deMiEmpresa = filtroEmpresa(usuario.alcance);
   const tab: Tab = TABS.some((t) => t.id === tabParam) ? (tabParam as Tab) : "inventario";
   const pagina = Math.max(1, Number(page) || 1);
 
-  const [items, prestamos, articulos] = await Promise.all([
+  const [items, prestamos, articulos, empresasBodega] = await Promise.all([
     db.itemBodega.findMany({
+      where: deMiEmpresa,
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
         lineasPrestamo: {
@@ -81,7 +90,7 @@ export default async function PaginaBodega({
       },
     }),
     db.prestamo.findMany({
-      where: { estado: "ACTIVO" },
+      where: { estado: "ACTIVO", items: { some: { item: deMiEmpresa } } },
       orderBy: { prestadoEn: "asc" },
       include: {
         items: {
@@ -94,6 +103,13 @@ export default async function PaginaBodega({
       where: { activo: true },
       orderBy: { nombre: "asc" },
       select: { id: true, codigo: true, nombre: true, categoria: true },
+    }),
+    // A qué bodegas puede entrar material quien está mirando. Con una sola, los
+    // formularios ni preguntan: la asumen.
+    db.empresa.findMany({
+      where: { ...filtroEmpresaPropia(usuario.alcance), activa: true },
+      orderBy: { nombre: "asc" },
+      select: { id: true, nombre: true },
     }),
   ]);
 
@@ -149,7 +165,7 @@ export default async function PaginaBodega({
   let movimientos: Awaited<ReturnType<typeof cargarMovimientos>>["filas"] = [];
   let totalPaginasMov = 0;
   if (tab === "movimientos") {
-    const res = await cargarMovimientos(pagina);
+    const res = await cargarMovimientos(pagina, usuario.alcance);
     movimientos = res.filas;
     totalPaginasMov = Math.ceil(res.total / POR_PAGINA);
   }
@@ -291,10 +307,13 @@ export default async function PaginaBodega({
       )}
 
       <BarraAcciones
-        formularioItem={<FormularioItem />}
+        formularioItem={<FormularioItem empresas={empresasBodega} />}
         formularioCatalogo={
           articulosDisponibles.length > 0 ? (
-            <FormularioItemCatalogo articulos={articulosDisponibles} />
+            <FormularioItemCatalogo
+              articulos={articulosDisponibles}
+              empresas={empresasBodega}
+            />
           ) : null
         }
         formularioMovimiento={
@@ -592,10 +611,14 @@ export default async function PaginaBodega({
 }
 
 /** Página del historial global de movimientos, ordenado del más reciente. */
-async function cargarMovimientos(pagina: number) {
+async function cargarMovimientos(pagina: number, alcance: Alcance) {
+  // El movimiento hereda la empresa del ítem que movió.
+  const where = { item: filtroEmpresa(alcance) };
+
   const [total, filas] = await Promise.all([
-    db.movimientoBodega.count(),
+    db.movimientoBodega.count({ where }),
     db.movimientoBodega.findMany({
+      where,
       orderBy: { creadoEn: "desc" },
       skip: (pagina - 1) * POR_PAGINA,
       take: POR_PAGINA,

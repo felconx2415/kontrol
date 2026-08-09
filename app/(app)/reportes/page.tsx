@@ -16,6 +16,7 @@ import {
   construirRangoFechas,
   type FiltrosReporte,
 } from "@/lib/reportes";
+import { filtroEmpresa } from "@/lib/alcance";
 import type { EstadoSolicitud } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Reportes · Kontrol" };
@@ -36,18 +37,19 @@ export default async function Reportes({
 }: {
   searchParams: Promise<FiltrosReporte>;
 }) {
-  await requerirRol(...ROLES_GESTION);
+  const usuario = await requerirRol(...ROLES_GESTION);
   const filtros = await searchParams;
 
   // El rango de fechas se aplica también a la bodega (préstamos por prestadoEn,
   // traslados por asignadoEn). Los filtros de estado/categoría son propios de
   // las solicitudes; brigada sí acota los traslados por la brigada del usuario.
   const rango = construirRangoFechas(filtros);
+  const deMiEmpresa = filtroEmpresa(usuario.alcance);
 
   const [brigadas, solicitudes, prestamos, traslados] = await Promise.all([
-    db.brigada.findMany({ orderBy: { nombre: "asc" } }),
+    db.brigada.findMany({ where: deMiEmpresa, orderBy: { nombre: "asc" } }),
     db.solicitud.findMany({
-      where: construirFiltro(filtros),
+      where: construirFiltro(filtros, usuario.alcance),
       orderBy: { creadaEn: "desc" },
       take: 200,
       include: {
@@ -57,7 +59,11 @@ export default async function Reportes({
       },
     }),
     db.prestamoItem.findMany({
-      where: rango ? { prestamo: { prestadoEn: rango } } : {},
+      // El préstamo llega a la empresa por el ítem de bodega que salió.
+      where: {
+        item: deMiEmpresa,
+        ...(rango ? { prestamo: { prestadoEn: rango } } : {}),
+      },
       orderBy: { prestamo: { prestadoEn: "desc" } },
       take: 200,
       include: {
@@ -74,6 +80,7 @@ export default async function Reportes({
     }),
     db.asignacionBodega.findMany({
       where: {
+        item: deMiEmpresa,
         ...(rango ? { asignadoEn: rango } : {}),
         ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
       },

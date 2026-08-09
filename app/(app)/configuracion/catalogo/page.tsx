@@ -73,7 +73,7 @@ export default async function AdminArticulos({
       <Paginacion
         paginaActual={pagina}
         totalPaginas={totalPaginas}
-        href={(p) => `/admin/articulos?page=${p}`}
+        href={(p) => `/configuracion/catalogo?page=${p}`}
       />
     </div>
   );
