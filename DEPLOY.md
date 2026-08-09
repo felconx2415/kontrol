@@ -127,13 +127,33 @@ Kontrol publica el puerto **solo en loopback** y Caddy proxea a `127.0.0.1`.
 
 ## Datos y persistencia
 
-- **`kontrol_data`** (volumen): base SQLite en `/data/kontrol.db`.
-- **`kontrol_uploads`** (volumen): firmas, fotos y actas.
-- Respaldo rápido:
-  ```bash
-  docker run --rm -v kontrol_data:/d -v "$PWD":/b alpine \
-    sh -c 'cp /d/kontrol.db /b/kontrol-backup.db'
-  ```
+Los volúmenes se llaman **`kontrol_kontrol_data`** y **`kontrol_kontrol_uploads`**:
+Compose antepone el nombre del proyecto (la carpeta, `kontrol`) a las claves
+`kontrol_data` y `kontrol_uploads` del `docker-compose.yml`. Confirma cuáles usa
+el contenedor de verdad antes de respaldar, porque en el servidor conviven
+volúmenes vacíos con los nombres cortos:
+
+```bash
+docker inspect kontrol -f '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{println}}{{end}}'
+```
+
+- **`kontrol_kontrol_data`** → `/data`: base SQLite en `/data/kontrol.db`.
+- **`kontrol_kontrol_uploads`** → `/app/public/uploads`: firmas, fotos y actas.
+
+Respaldo antes de cualquier actualización que traiga migraciones:
+
+```bash
+STAMP=$(date +%Y%m%d-%H%M); mkdir -p ~/backups/kontrol
+
+# La base con `.backup` de SQLite y no con `cp`: copiar el archivo mientras el
+# contenedor escribe puede llevarse una copia a medias.
+docker run --rm -v kontrol_kontrol_data:/d -v ~/backups/kontrol:/b alpine \
+  sh -c "apk add --no-cache sqlite >/dev/null && sqlite3 /d/kontrol.db \".backup /b/kontrol-$STAMP.db\""
+
+# Firmas, fotos y actas: son irreemplazables.
+docker run --rm -v kontrol_kontrol_uploads:/u -v ~/backups/kontrol:/b alpine \
+  tar czf "/b/uploads-$STAMP.tar.gz" -C /u .
+```
 
 ## Operación
 
