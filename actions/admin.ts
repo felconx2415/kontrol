@@ -10,6 +10,7 @@ import {
   ROLES_GESTION,
 } from "@/lib/solicitud-estado";
 import { notificar } from "@/lib/notificaciones";
+import { dejarAviso } from "@/lib/avisos";
 import type { Categoria, Rol, TipoBrigada } from "@/generated/prisma/enums";
 
 export type EstadoAdmin = { error?: string; ok?: string };
@@ -775,4 +776,303 @@ export async function alternarEmpresa(formData: FormData) {
   revalidatePath("/configuracion/empresas");
   revalidatePath("/configuracion/usuarios");
   revalidatePath("/configuracion/brigadas");
+}
+
+// ── Cuentas en lote ───────────────────────────────────────────────────────
+// Separar la operación en dos empresas obliga a repartir a toda la gente, y
+// hacerlo cuenta por cuenta son tantos paneles como personas. Estas acciones
+// trabajan sobre lo que se marcó en la lista; validan igual que la vía
+// individual y dejan intacto —informándolo— lo que no corresponda.
+
+/** Los ids llegan de casillas marcadas: se limpian antes de tocar nada. */
+function idsLimpios(ids: string[]): string[] {
+  return [...new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean))];
+}
+
+/**
+ * Mueve varias cuentas a otra empresa, decidiendo qué pasa con su brigada.
+ *
+ * La brigada vive dentro de una empresa, así que mover a alguien la deja atrás.
+ * La regla: **si se mueve la brigada entera, la brigada se muda con ella**; si
+ * solo va parte, esas cuentas quedan sin brigada. Así reorganizar por cuadrillas
+ * —que es como se piensa en terreno— no obliga a recrearlas al otro lado.
+ *
+ * Si la empresa destino ya tiene una brigada con ese nombre, las cuentas se
+ * enganchan a **esa** en vez de mudar la original: dos «Brigada Norte» en la
+ * misma empresa no pueden existir, y fusionar es lo que se querría de todas
+ * formas.
+ */
+export async function asignarEmpresaAVarios(
+  ids: string[],
+  empresaId: string,
+): Promise<{ error?: string; mensaje?: string }> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+
+  const seleccion = idsLimpios(ids);
+  if (seleccion.length === 0) return { error: "No seleccionaste ninguna cuenta." };
+  if (!empresaId) return { error: "Elige la empresa de destino." };
+
+  const empresa = await db.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return { error: "Esa empresa ya no existe." };
+
+  const usuarios = await db.usuario.findMany({
+    where: { id: { in: seleccion } },
+    select: { id: true, nombre: true, empresaId: true, brigadaId: true },
+  });
+  if (usuarios.length === 0) return { error: "Esas cuentas ya no existen." };
+
+  const aMover = usuarios.filter((u) => u.empresaId !== empresaId);
+  if (aMover.length === 0) {
+    return { error: `Todas las cuentas seleccionadas ya están en ${empresa.nombre}.` };
+  }
+
+  // Qué brigadas están en juego y si van completas.
+  const brigadasTocadas = [
+    ...new Set(aMover.map((u) => u.brigadaId).filter((b): b is string => Boolean(b))),
+  ];
+
+  const brigadas = await db.brigada.findMany({
+    where: { id: { in: brigadasTocadas } },
+    select: {
+      id: true,
+      nombre: true,
+      empresaId: true,
+      supervisorId: true,
+      _count: { select: { miembros: true } },
+    },
+  });
+
+  const movidos = new Set(aMover.map((u) => u.id));
+
+  // Brigada de destino de cada una: mudarla, engancharla a su homónima, o
+  // ninguna (la cuenta queda sin brigada).
+  const destinoDeBrigada = new Map<string, string | null>();
+  let mudadas = 0;
+  let fusionadas = 0;
+
+  for (const brigada of brigadas) {
+    const seleccionados = aMover.filter((u) => u.brigadaId === brigada.id).length;
+    const completa = seleccionados === brigada._count.miembros;
+
+    if (!completa) {
+      destinoDeBrigada.set(brigada.id, null);
+      continue;
+    }
+
+    const homonima = await db.brigada.findFirst({
+      where: { empresaId, nombre: brigada.nombre },
+      select: { id: true },
+    });
+
+    if (homonima) {
+      destinoDeBrigada.set(brigada.id, homonima.id);
+      fusionadas++;
+    } else {
+      destinoDeBrigada.set(brigada.id, brigada.id); // se muda tal cual
+      mudadas++;
+    }
+  }
+
+  const sinBrigada = aMover.filter(
+    (u) => u.brigadaId && destinoDeBrigada.get(u.brigadaId) === null,
+  ).length;
+
+  await db.$transaction(async (tx) => {
+    for (const brigada of brigadas) {
+      if (destinoDeBrigada.get(brigada.id) !== brigada.id) continue;
+
+      await tx.brigada.update({
+        where: { id: brigada.id },
+        data: {
+          empresaId,
+          // Un supervisor que se queda en la otra empresa no puede seguir a
+          // cargo de una brigada que ya no ve.
+          ...(brigada.supervisorId && !movidos.has(brigada.supervisorId)
+            ? { supervisorId: null }
+            : {}),
+        },
+      });
+    }
+
+    for (const usuario of aMover) {
+      await tx.usuario.update({
+        where: { id: usuario.id },
+        data: {
+          empresaId,
+          brigadaId: usuario.brigadaId
+            ? destinoDeBrigada.get(usuario.brigadaId)
+            : null,
+        },
+      });
+    }
+  });
+
+  for (const usuario of aMover) {
+    await registrarAuditoria({
+      usuarioId: admin.id,
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      accion: "EDITADO",
+      detalle: {
+        empresaId: [usuario.empresaId, empresaId],
+        ...(aMover.length > 1 ? { enLoteDe: aMover.length } : {}),
+      },
+    });
+  }
+
+  // El resumen nombra lo que no era obvio al marcar las casillas: qué pasó con
+  // las brigadas y quién se quedó sin ella.
+  const partes = [
+    `${aMover.length} cuenta${aMover.length === 1 ? "" : "s"} en ${empresa.nombre}`,
+  ];
+  if (mudadas > 0) {
+    partes.push(`${mudadas} brigada${mudadas === 1 ? "" : "s"} se mudó con ellas`);
+  }
+  if (fusionadas > 0) {
+    partes.push(
+      `${fusionadas} se unió a su homónima en ${empresa.nombre}`,
+    );
+  }
+  if (sinBrigada > 0) {
+    partes.push(
+      `${sinBrigada} quedó sin brigada por moverse solo parte de su cuadrilla`,
+    );
+  }
+
+  const omitidas = usuarios.length - aMover.length;
+  if (omitidas > 0) partes.push(`${omitidas} ya estaba ahí`);
+
+  const mensaje = `${partes.join(" · ")}.`;
+  await dejarAviso(mensaje);
+
+  revalidatePath("/configuracion/usuarios");
+  revalidatePath("/configuracion/brigadas");
+  revalidatePath("/configuracion/empresas");
+  return { mensaje };
+}
+
+/**
+ * Pone la misma brigada a varias cuentas, o se la quita a todas.
+ *
+ * La brigada tiene que ser de la empresa de cada cuenta: una cuadrilla de otra
+ * empresa dejaría al usuario en un grupo que su propia gestión no ve.
+ */
+export async function asignarBrigadaAVarios(
+  ids: string[],
+  brigadaId: string,
+): Promise<{ error?: string; mensaje?: string }> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+
+  const seleccion = idsLimpios(ids);
+  if (seleccion.length === 0) return { error: "No seleccionaste ninguna cuenta." };
+
+  const usuarios = await db.usuario.findMany({
+    where: { id: { in: seleccion } },
+    select: { id: true, nombre: true, empresaId: true, brigadaId: true },
+  });
+  if (usuarios.length === 0) return { error: "Esas cuentas ya no existen." };
+
+  // Cadena vacía = quitar la brigada.
+  const brigada = brigadaId
+    ? await db.brigada.findUnique({
+        where: { id: brigadaId },
+        select: { id: true, nombre: true, empresaId: true },
+      })
+    : null;
+
+  if (brigadaId && !brigada) return { error: "Esa brigada ya no existe." };
+
+  if (brigada) {
+    const ajeno = usuarios.find((u) => u.empresaId !== brigada.empresaId);
+    if (ajeno) {
+      return {
+        error: `${ajeno.nombre} no pertenece a la empresa de «${brigada.nombre}». Mueve primero la cuenta de empresa.`,
+      };
+    }
+  }
+
+  const aCambiar = usuarios.filter((u) => u.brigadaId !== (brigada?.id ?? null));
+  if (aCambiar.length === 0) {
+    return { error: "Las cuentas seleccionadas ya estaban así." };
+  }
+
+  await db.usuario.updateMany({
+    where: { id: { in: aCambiar.map((u) => u.id) } },
+    data: { brigadaId: brigada?.id ?? null },
+  });
+
+  for (const usuario of aCambiar) {
+    await registrarAuditoria({
+      usuarioId: admin.id,
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      accion: "EDITADO",
+      detalle: {
+        brigadaId: [usuario.brigadaId, brigada?.id ?? null],
+        ...(aCambiar.length > 1 ? { enLoteDe: aCambiar.length } : {}),
+      },
+    });
+  }
+
+  const mensaje = brigada
+    ? `${aCambiar.length} cuenta${aCambiar.length === 1 ? "" : "s"} en «${brigada.nombre}».`
+    : `${aCambiar.length} cuenta${aCambiar.length === 1 ? "" : "s"} sin brigada.`;
+
+  await dejarAviso(mensaje);
+  revalidatePath("/configuracion/usuarios");
+  revalidatePath("/configuracion/brigadas");
+  return { mensaje };
+}
+
+/** Activa o desactiva varias cuentas de una vez, p. ej. al cerrar una faena. */
+export async function alternarVariosUsuarios(
+  ids: string[],
+  activo: boolean,
+): Promise<{ error?: string; mensaje?: string }> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+
+  const seleccion = idsLimpios(ids);
+  if (seleccion.length === 0) return { error: "No seleccionaste ninguna cuenta." };
+
+  // Nadie se desactiva a sí mismo: el sistema quedaría sin quien lo administre.
+  const propia = seleccion.includes(admin.id);
+  const objetivo = seleccion.filter((id) => id !== admin.id);
+
+  if (objetivo.length === 0) {
+    return { error: "No puedes desactivar tu propia cuenta." };
+  }
+
+  const usuarios = await db.usuario.findMany({
+    where: { id: { in: objetivo }, activo: !activo },
+    select: { id: true },
+  });
+
+  if (usuarios.length === 0) {
+    return { error: `Las cuentas seleccionadas ya estaban ${activo ? "activas" : "inactivas"}.` };
+  }
+
+  await db.usuario.updateMany({
+    where: { id: { in: usuarios.map((u) => u.id) } },
+    data: { activo },
+  });
+
+  for (const usuario of usuarios) {
+    await registrarAuditoria({
+      usuarioId: admin.id,
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      accion: activo ? "ACTIVADO" : "DESACTIVADO",
+      detalle: usuarios.length > 1 ? { enLoteDe: usuarios.length } : undefined,
+    });
+  }
+
+  const mensaje = `${usuarios.length} cuenta${
+    usuarios.length === 1 ? "" : "s"
+  } ${activo ? "activada" : "desactivada"}${usuarios.length === 1 ? "" : "s"}.${
+    propia ? " Tu propia cuenta quedó sin cambios." : ""
+  }`;
+
+  await dejarAviso(mensaje);
+  revalidatePath("/configuracion/usuarios");
+  return { mensaje };
 }

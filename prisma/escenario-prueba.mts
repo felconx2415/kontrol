@@ -15,10 +15,11 @@ import bcrypt from "bcryptjs";
  *   multigestor  → las dos a la vez
  *   admin        → todas, sin pertenecer a ninguna
  *
- * Reejecutable: cada corrida **reinicia** las solicitudes de Forestal Sur a su
- * estado de partida. Sin eso, probar dos veces seguidas no sirve —la primera
- * aprueba y entrega, y la segunda ya no encuentra nada en esas etapas—. Las
- * cuentas, la brigada y la bodega se conservan.
+ * Reejecutable: cada corrida **devuelve el escenario a su estado de partida**
+ * —las solicitudes de Forestal Sur y el reparto de la gente entre las dos
+ * empresas—. Sin eso, probar dos veces seguidas no sirve: la primera aprueba,
+ * entrega y mueve cuentas de una empresa a otra, y la segunda ya no encuentra
+ * nada donde lo esperaba. La bodega y el catálogo se conservan.
  */
 const db = new PrismaClient({
   adapter: new PrismaBetterSqlite3({
@@ -50,15 +51,15 @@ async function main() {
     where: { nombre: "Empresa principal" },
   });
 
-  const sur = await db.empresa.upsert({
+  const forestal = await db.empresa.upsert({
     where: { nombre: "Forestal Sur" },
     create: { nombre: "Forestal Sur", rut: "76.543.210-K" },
     update: {},
   });
 
   const brigadaCosta = await db.brigada.upsert({
-    where: { empresaId_nombre: { empresaId: sur.id, nombre: "Brigada Costa" } },
-    create: { nombre: "Brigada Costa", empresaId: sur.id, tipo: "CONTRATISTA" },
+    where: { empresaId_nombre: { empresaId: forestal.id, nombre: "Brigada Costa" } },
+    create: { nombre: "Brigada Costa", empresaId: forestal.id, tipo: "CONTRATISTA" },
     update: {},
   });
 
@@ -68,10 +69,10 @@ async function main() {
       username: "gestorsur",
       nombre: "Andrea Vidal",
       rol: "GESTOR" as const,
-      empresaId: sur.id,
+      empresaId: forestal.id,
       brigadaId: null,
       // Solo Forestal Sur: es el caso de una empresa.
-      gestiona: [sur.id],
+      gestiona: [forestal.id],
     },
     {
       username: "multigestor",
@@ -80,13 +81,13 @@ async function main() {
       empresaId: principal.id,
       brigadaId: null,
       // Las dos a la vez: es el caso que pediste.
-      gestiona: [principal.id, sur.id],
+      gestiona: [principal.id, forestal.id],
     },
     {
       username: "aprobadorsur",
       nombre: "Claudia Reyes",
       rol: "APROBADOR" as const,
-      empresaId: sur.id,
+      empresaId: forestal.id,
       brigadaId: brigadaCosta.id,
       gestiona: [],
     },
@@ -94,7 +95,7 @@ async function main() {
       username: "rlagos",
       nombre: "Rubén Lagos",
       rol: "SOLICITANTE" as const,
-      empresaId: sur.id,
+      empresaId: forestal.id,
       brigadaId: brigadaCosta.id,
       gestiona: [],
     },
@@ -102,7 +103,7 @@ async function main() {
       username: "tmella",
       nombre: "Tamara Mella",
       rol: "SOLICITANTE" as const,
-      empresaId: sur.id,
+      empresaId: forestal.id,
       brigadaId: brigadaCosta.id,
       gestiona: [],
     },
@@ -139,11 +140,56 @@ async function main() {
     },
   });
 
+  // ── El lado de Empresa principal ────────────────────────────────────────
+  // Probar el traslado en lote mueve gente y brigadas de una empresa a otra, así
+  // que hay que reponer también este lado o la segunda corrida arranca torcida.
+  const principalBrigadas = ["Brigada Norte", "Brigada Sur"];
+  for (const nombre of principalBrigadas) {
+    const existente = await db.brigada.findFirst({ where: { nombre } });
+    if (existente) {
+      await db.brigada.update({
+        where: { id: existente.id },
+        data: { empresaId: principal.id },
+      });
+    } else {
+      await db.brigada.create({ data: { nombre, empresaId: principal.id } });
+    }
+  }
+
+  const brigadaNorte = await db.brigada.findFirstOrThrow({
+    where: { empresaId: principal.id, nombre: "Brigada Norte" },
+  });
+  const brigadaSur = await db.brigada.findFirstOrThrow({
+    where: { empresaId: principal.id, nombre: "Brigada Sur" },
+  });
+
+  const dePrincipal: [string, string | null][] = [
+    ["gestor", null],
+    ["aprobador", brigadaNorte.id],
+    ["jperez", brigadaNorte.id],
+    ["msoto", brigadaNorte.id],
+    ["pmunoz", brigadaSur.id],
+  ];
+  for (const [username, brigadaId] of dePrincipal) {
+    await db.usuario.updateMany({
+      where: { username },
+      data: { empresaId: principal.id, brigadaId, activo: true },
+    });
+  }
+  await db.brigada.update({
+    where: { id: brigadaNorte.id },
+    data: {
+      supervisorId: (
+        await db.usuario.findUniqueOrThrow({ where: { username: "aprobador" } })
+      ).id,
+    },
+  });
+
   // ── Bodega propia de Forestal Sur ───────────────────────────────────────
   // Mismo código que podría existir en la otra empresa: el aislamiento tiene
   // que permitirlo sin chocar.
   const yaEnBodega = await db.itemBodega.findFirst({
-    where: { empresaId: sur.id, codigo: "HER-01" },
+    where: { empresaId: forestal.id, codigo: "HER-01" },
   });
   if (!yaEnBodega) {
     await db.itemBodega.create({
@@ -153,7 +199,7 @@ async function main() {
         categoria: "Herramientas",
         ubicacion: "Estante A2",
         stock: 4,
-        empresaId: sur.id,
+        empresaId: forestal.id,
       },
     });
   }
@@ -175,7 +221,7 @@ async function main() {
   // cada corrida parta del mismo estado. Solo toca Forestal Sur: los datos de
   // la otra empresa no se rozan.
   const previas = await db.solicitud.findMany({
-    where: { empresaId: sur.id },
+    where: { empresaId: forestal.id },
     select: { id: true },
   });
   const ids = previas.map((s) => s.id);
@@ -193,7 +239,7 @@ async function main() {
 
   // Y la campana vuelve a cero para la gente de esta empresa.
   await db.notificacion.deleteMany({
-    where: { usuario: { empresaId: sur.id } },
+    where: { usuario: { empresaId: forestal.id } },
   });
 
   {
@@ -203,7 +249,7 @@ async function main() {
         folio: await siguienteFolio(),
         solicitanteId: ruben.id,
         brigadaId: brigadaCosta.id,
-        empresaId: sur.id,
+        empresaId: forestal.id,
         tipo: "NUEVO",
         estado: "PENDIENTE",
         justificacion: "Incorporación a la cuadrilla de poda.",
@@ -224,7 +270,7 @@ async function main() {
         folio: await siguienteFolio(),
         solicitanteId: tamara.id,
         brigadaId: brigadaCosta.id,
-        empresaId: sur.id,
+        empresaId: forestal.id,
         tipo: "NUEVO",
         estado: "APROBADA",
         justificacion: "Equipamiento de temporada.",
@@ -249,7 +295,7 @@ async function main() {
         folio: await siguienteFolio(),
         solicitanteId: ruben.id,
         brigadaId: brigadaCosta.id,
-        empresaId: sur.id,
+        empresaId: forestal.id,
         tipo: "NUEVO",
         estado: "RECIBIDA",
         justificacion: "Reposición de casco.",
@@ -275,7 +321,7 @@ async function main() {
     });
   }
 
-  const totalSur = await db.solicitud.count({ where: { empresaId: sur.id } });
+  const totalSur = await db.solicitud.count({ where: { empresaId: forestal.id } });
   console.log(`Listo. «Forestal Sur» con ${totalSur} solicitudes y 5 cuentas.`);
   console.log(`Contraseña de todas: ${PASS}`);
 }

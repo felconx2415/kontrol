@@ -15,7 +15,8 @@
     "db:escenario": "tsx prisma/escenario-prueba.mts",
     "db:studio": "prisma studio",
     "e2e": "tsx e2e/flujo-completo.mts",
-    "e2e:empresas": "tsx e2e/empresas-y-avisos.mts"
+    "e2e:empresas": "tsx e2e/empresas-y-avisos.mts",
+    "e2e:lote": "tsx e2e/cuentas-en-lote.mts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",

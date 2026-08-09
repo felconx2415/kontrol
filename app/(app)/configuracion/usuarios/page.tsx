@@ -2,11 +2,10 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ROLES_ADMIN } from "@/lib/solicitud-estado";
-import { Tabla } from "@/components/ui/tabla";
 import { Aviso } from "@/components/ui/superficie";
 import Paginacion from "@/components/ui/paginacion";
 import FormularioUsuario from "./formulario-usuario";
-import FilaUsuario from "./fila-usuario";
+import ListaUsuarios from "./lista-usuarios";
 
 export const metadata = { title: "Usuarios · Kontrol" };
 
@@ -38,9 +37,17 @@ export default async function AdminUsuarios({
     }),
     // Todas las brigadas, con su empresa: el formulario filtra en el cliente
     // según la empresa elegida, sin ir y volver al servidor en cada cambio.
+    // Con cuántos miembros cuenta cada una: es lo que permite avisar, antes de
+    // confirmar, si una brigada se muda entera o si alguien va a quedarse sin
+    // ella. Ver `avisoBrigadas` en lista-usuarios.tsx.
     db.brigada.findMany({
       orderBy: { nombre: "asc" },
-      select: { id: true, nombre: true, empresaId: true },
+      select: {
+        id: true,
+        nombre: true,
+        empresaId: true,
+        _count: { select: { miembros: true } },
+      },
     }),
     db.empresa.findMany({
       orderBy: { nombre: "asc" },
@@ -72,40 +79,29 @@ export default async function AdminUsuarios({
         </Aviso>
       )}
 
-      <Tabla
-        encabezados={[
-          "Nombre",
-          "Usuario",
-          "Rol",
-          "Empresa",
-          "Brigada",
-          "Estado",
-          { texto: "Acciones", alineado: "der" },
-        ]}
-        anchoMinimo="60rem"
-      >
-        {usuarios.map((u) => (
-          <FilaUsuario
-            key={u.id}
-            usuario={{
-              id: u.id,
-              nombre: u.nombre,
-              username: u.username,
-              rut: u.rut,
-              rol: u.rol,
-              brigadaId: u.brigadaId,
-              brigadaNombre: u.brigada?.nombre ?? null,
-              empresaId: u.empresaId,
-              empresaNombre: u.empresa?.nombre ?? null,
-              empresasGestionadas: u.empresasGestionadas.map((e) => e.id),
-              activo: u.activo,
-            }}
-            brigadas={brigadas}
-            empresas={empresas}
-            esUsuarioActual={u.id === actual.id}
-          />
-        ))}
-      </Tabla>
+      <ListaUsuarios
+        idActual={actual.id}
+        empresas={empresas}
+        brigadas={brigadas.map((b) => ({
+          id: b.id,
+          nombre: b.nombre,
+          empresaId: b.empresaId,
+          miembros: b._count.miembros,
+        }))}
+        usuarios={usuarios.map((u) => ({
+          id: u.id,
+          nombre: u.nombre,
+          username: u.username,
+          rut: u.rut,
+          rol: u.rol,
+          brigadaId: u.brigadaId,
+          brigadaNombre: u.brigada?.nombre ?? null,
+          empresaId: u.empresaId,
+          empresaNombre: u.empresa?.nombre ?? null,
+          empresasGestionadas: u.empresasGestionadas.map((e) => e.id),
+          activo: u.activo,
+        }))}
+      />
 
       <Paginacion
         paginaActual={pagina}

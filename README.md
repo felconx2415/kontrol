@@ -54,6 +54,12 @@ Un gestor sin empresas marcadas cae en la suya propia, así que una cuenta nunca
 queda a ciegas por olvido. Las reglas viven en `lib/alcance.ts` y toda consulta
 que cruce personas pasa por ahí.
 
+Repartir gente entre empresas se hace en lote desde `/configuracion/usuarios`:
+se marcan las cuentas y se mueven de una vez. Si va la cuadrilla completa, **la
+brigada se muda con ella**; si va solo parte, esas cuentas quedan sin brigada y
+se avisa antes de confirmar. Cuando la empresa destino ya tiene una brigada con
+ese nombre, las cuentas se enganchan a esa en vez de duplicarla.
+
 Las empresas se administran en `/configuracion/empresas`. No se eliminan —sus
 solicitudes, actas y bodega apuntan a ellas—, se desactivan: dejan de ofrecerse
 al crear cuentas y brigadas sin tocar el historial.
@@ -164,7 +170,13 @@ npm run e2e            # flujo completo: requiere el servidor en localhost:3000
 
 npm run db:escenario   # siembra (o reinicia) una segunda empresa de prueba
 npm run e2e:empresas   # separación por empresa, avisos, reservas y receptor
+npm run e2e:lote       # acciones en lote sobre las cuentas
 ```
+
+`e2e:lote` reparte gente entre las dos empresas, así que hay que volver a
+sembrar el escenario antes de correr las otras suites: si no, el gestor de una
+empresa deja de ver a quien se movió —que es justo lo que el aislamiento debe
+hacer— y `e2e` falla por eso.
 
 `e2e:empresas` va aparte porque necesita **dos** empresas: con una sola el
 aislamiento no se puede comprobar, ya que todo el mundo alcanza todo y

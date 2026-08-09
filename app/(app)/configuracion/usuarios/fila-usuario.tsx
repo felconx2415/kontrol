@@ -45,11 +45,16 @@ export default function FilaUsuario({
   brigadas,
   empresas,
   esUsuarioActual,
+  marcada,
+  onMarcar,
 }: {
   usuario: UsuarioFila;
   brigadas: BrigadaOpcion[];
   empresas: EmpresaOpcion[];
   esUsuarioActual: boolean;
+  /** Seleccionada para una acción en lote. */
+  marcada: boolean;
+  onMarcar: () => void;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
   const cerrar = () => setPanel(null);
@@ -64,6 +69,17 @@ export default function FilaUsuario({
           usuario.activo ? "" : "text-tinta-tenue"
         }`}
       >
+        {/* La casilla va sin `data-label`: al apilarse en móvil no necesita
+            rótulo, se entiende por su posición junto al nombre. */}
+        <td className="w-10 py-2.5 pl-4">
+          <input
+            type="checkbox"
+            checked={marcada}
+            onChange={onMarcar}
+            aria-label={`Seleccionar a ${usuario.nombre}`}
+            className="foco-anillo size-5 cursor-pointer rounded border-borde-fuerte accent-marca-600"
+          />
+        </td>
         <td data-label="Nombre" className="px-4 py-2.5">
           <Link
             href={`/historial/${usuario.id}`}
@@ -147,7 +163,7 @@ export default function FilaUsuario({
 
       {panel && (
         <tr className="bg-panel-suave">
-          <td colSpan={7} className="celda-completa panel-expandible px-4 py-4">
+          <td colSpan={8} className="celda-completa panel-expandible px-4 py-4">
             {panel === "editar" && (
               <PanelEditar
                 usuario={usuario}
