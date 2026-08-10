@@ -10,6 +10,7 @@ import {
   formatearFecha,
 } from "@/lib/vencimientos";
 import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { cantidadConUnidad } from "@/lib/unidades";
 import { alcanza } from "@/lib/alcance";
 import Insignia from "@/components/ui/insignia";
 import ProgresoSolicitud from "@/components/progreso-solicitud";
@@ -184,9 +185,11 @@ export default async function Historial({
                     </p>
                     <p className="text-xs text-tinta-tenue">
                       {item.solicitudItem.articulo.codigo} ·{" "}
-                      {item.cantidadEntregada}{" "}
-                      {item.solicitudItem.articulo.unidad}
-                      {item.cantidadEntregada === 1 ? "" : "s"} · entregado{" "}
+                      {cantidadConUnidad(
+                        item.cantidadEntregada,
+                        item.solicitudItem.articulo.unidad,
+                      )}{" "}
+                      · entregado{" "}
                       {formatearFecha(item.entrega.entregadaEn)}
                     </p>
                   </div>
@@ -219,8 +222,8 @@ export default async function Historial({
                 <div>
                   <p className="text-sm font-medium">{a.item.nombre}</p>
                   <p className="text-xs text-tinta-tenue">
-                    {a.item.codigo} · {a.cantidad} {a.item.unidad}
-                    {a.cantidad === 1 ? "" : "s"} · asignado{" "}
+                    {a.item.codigo} ·{" "}
+                    {cantidadConUnidad(a.cantidad, a.item.unidad)} · asignado{" "}
                     {formatearFecha(a.asignadoEn)} por {a.asignadoPor.nombre}
                     {a.notas ? ` · ${a.notas}` : ""}
                   </p>

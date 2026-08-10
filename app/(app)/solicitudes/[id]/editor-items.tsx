@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useActionState, useState } from "react";
 import { editarSolicitud, type EstadoFormulario } from "@/actions/solicitudes";
 import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { cantidadConUnidad } from "@/lib/unidades";
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
@@ -23,6 +24,12 @@ export type ItemEditable = {
   detalleReemplazo: string | null;
   fotoEvidenciaUrl: string | null;
   entregaAnteriorFecha: string | null;
+  /** Lo que salió de verdad por esta línea, una vez entregada. */
+  entregado: {
+    cantidad: number;
+    numeroSerie: string | null;
+    venceEnTexto: string | null;
+  } | null;
 };
 
 type Borrador = { cantidad: number; quitar: boolean };
@@ -96,8 +103,12 @@ export default function EditorItems({
         <ul className="divide-y divide-borde">
           {items.map((item) => (
             <li key={item.id} className="px-4 py-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+              {/* Sin `flex-wrap`: un nombre largo empujaba la cantidad a su
+                  propia línea en unos ítems y no en otros, y la columna de
+                  cifras quedaba en zigzag. Ahora el nombre se ajusta dentro de
+                  su propio ancho y la cantidad no se mueve. */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{item.articuloNombre}</p>
                   <p className="text-xs text-tinta-tenue">
                     {item.articuloCodigo} ·{" "}
@@ -112,33 +123,58 @@ export default function EditorItems({
                     </p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="shrink-0 text-right">
                   <p className="text-sm tabular-nums text-tinta-suave">
-                    {item.cantidad} {item.unidad}
-                    {item.cantidad === 1 ? "" : "s"}
+                    {cantidadConUnidad(item.cantidad, item.unidad)}
                   </p>
+                  {/* Que del almacén llegara menos de lo pedido hay que verlo
+                      **antes** de firmar, no descubrirlo entregando. Si llegó
+                      todo no se dice nada: repetir la misma cifra solo estorba. */}
                   {item.cantidadRecibida !== null &&
                     item.cantidadRecibida !== item.cantidad && (
-                      <p className="text-xs tabular-nums text-espera">
-                        recibido: {item.cantidadRecibida}
+                      <p className="text-xs font-medium tabular-nums text-espera">
+                        llegaron {item.cantidadRecibida} de {item.cantidad}
                       </p>
                     )}
                 </div>
               </div>
 
+              {/* Lo entregado, con su serie y vencimiento. Antes había que abrir
+                  el PDF del acta para saber qué se le dio exactamente a alguien
+                  y hasta cuándo le sirve. */}
+              {item.entregado && (
+                <p className="mt-1.5 text-xs text-exito">
+                  Entregado:{" "}
+                  {cantidadConUnidad(item.entregado.cantidad, item.unidad)}
+                  {item.entregado.numeroSerie
+                    ? ` · serie ${item.entregado.numeroSerie}`
+                    : ""}
+                  {item.entregado.venceEnTexto
+                    ? ` · vence ${item.entregado.venceEnTexto}`
+                    : ""}
+                </p>
+              )}
+
+              {/* La cadena de reemplazo sale de la caja del motivo: dice qué
+                  ítem viene a sustituir esta línea, y eso es del pedido, no de
+                  la justificación. */}
+              {item.entregaAnteriorFecha && (
+                <p className="mt-1 text-xs text-tinta-suave">
+                  Reemplaza lo entregado el {item.entregaAnteriorFecha}
+                </p>
+              )}
+
               {item.motivo && (
-                <div className="mt-2 rounded-lg bg-panel-suave p-2.5">
-                  <p className="text-xs font-medium text-tinta">
-                    Motivo: {ETIQUETA_MOTIVO[item.motivo as keyof typeof ETIQUETA_MOTIVO]}
+                <div className="mt-1">
+                  <p className="text-xs text-tinta-suave">
+                    Motivo:{" "}
+                    <span className="text-tinta">
+                      {ETIQUETA_MOTIVO[item.motivo as keyof typeof ETIQUETA_MOTIVO]}
+                    </span>
                   </p>
                   {item.detalleReemplazo && (
                     <p className="mt-0.5 text-xs text-tinta-suave">
                       {item.detalleReemplazo}
-                    </p>
-                  )}
-                  {item.entregaAnteriorFecha && (
-                    <p className="mt-0.5 text-xs text-tinta-tenue">
-                      Reemplaza el entregado el {item.entregaAnteriorFecha}
                     </p>
                   )}
                   {item.fotoEvidenciaUrl && (
@@ -184,9 +220,8 @@ export default function EditorItems({
                         {item.articuloNombre}
                       </p>
                       <p className="text-xs text-tinta-tenue">
-                        {item.articuloCodigo} · pedido original: {item.cantidad}{" "}
-                        {item.unidad}
-                        {item.cantidad === 1 ? "" : "s"}
+                        {item.articuloCodigo} · pedido original:{" "}
+                        {cantidadConUnidad(item.cantidad, item.unidad)}
                       </p>
                     </div>
                     <Boton

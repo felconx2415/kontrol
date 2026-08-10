@@ -342,7 +342,7 @@ try {
   );
   check(
     "Se enlaza con la entrega anterior",
-    await verTexto(solicitante, /Reemplaza el entregado el/),
+    await verTexto(solicitante, /Reemplaza lo entregado el/),
   );
 
   // El mismo ítem no puede pedirse dos veces en paralelo: el servidor lo

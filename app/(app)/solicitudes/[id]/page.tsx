@@ -8,6 +8,8 @@ import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
 import {
   accionesDisponibles,
   CECO_ALMACEN,
+  DIAS_ETAPA_ESTANCADA,
+  entroAlEstadoEn,
   CECO_RESERVA_PROPIA,
   esGestion,
   ETIQUETA_ESTADO,
@@ -18,6 +20,7 @@ import {
 } from "@/lib/solicitud-estado";
 import { alcanza } from "@/lib/alcance";
 import { reservasRecientes } from "@/lib/reservas";
+import { cuantoLleva, diasDesde } from "@/lib/tiempo-relativo";
 import EstadoBadge from "@/components/estado-badge";
 import TimelineSolicitud, { type HitoTimeline } from "@/components/timeline-solicitud";
 import ProgresoSolicitud from "@/components/progreso-solicitud";
@@ -39,7 +42,7 @@ export default async function DetalleSolicitud({
   const solicitud = await db.solicitud.findUnique({
     where: { id },
     include: {
-      solicitante: { select: { id: true, nombre: true } },
+      solicitante: { select: { id: true, nombre: true, rut: true } },
       creadaPor: { select: { nombre: true } },
       aprobador: { select: { nombre: true } },
       gestor: { select: { nombre: true } },
@@ -51,6 +54,15 @@ export default async function DetalleSolicitud({
           entregaAnterior: {
             include: {
               entrega: { select: { entregadaEn: true } },
+            },
+          },
+          // Lo que de verdad salió por esta línea: serie y vencimiento. Sin
+          // esto, «qué le entregué y cuándo vence» obligaba a abrir el PDF.
+          entregaItem: {
+            select: {
+              cantidadEntregada: true,
+              numeroSerie: true,
+              venceEn: true,
             },
           },
         },
@@ -102,13 +114,12 @@ export default async function DetalleSolicitud({
   const puedeEnviarAlmacen =
     esGestion(usuario.rol) &&
     hayItemsAlmacen &&
-    [
-      "APROBADA",
-      "RESERVA_SOLICITADA",
-      "EN_GESTION",
-      "RECIBIDA",
-      "ENTREGADA",
-    ].includes(solicitud.estado);
+    // Hasta que llega el material. Con la solicitud ya entregada, descargar el
+    // formato para pedir lo que se entregó no sirve para nada y solo ocupaba
+    // sitio en la pantalla donde menos sobra.
+    ["APROBADA", "RESERVA_SOLICITADA", "EN_GESTION", "RECIBIDA"].includes(
+      solicitud.estado,
+    );
 
   // Firmar la salida: gestión sobre cualquiera, el beneficiario sobre la suya
   // cuando la retira él mismo.
@@ -191,6 +202,17 @@ export default async function DetalleSolicitud({
     ["APROBADA", "RESERVA_SOLICITADA"].includes(solicitud.estado)
       ? await reservasRecientes(usuario.alcance)
       : [];
+
+  // Cuánto lleva detenida en la etapa en que está. El escritorio ya avisaba de
+  // las colas más antiguas, pero al abrir la solicitud esa urgencia se perdía y
+  // había que deducirla de la línea de tiempo.
+  const desdeCuando = entroAlEstadoEn(solicitud);
+  const esperando = desdeCuando
+    ? {
+        texto: cuantoLleva(desdeCuando),
+        estancada: diasDesde(desdeCuando) >= DIAS_ETAPA_ESTANCADA,
+      }
+    : null;
 
   const interrumpido =
     solicitud.estado === "RECHAZADA" || solicitud.estado === "CANCELADA";
@@ -294,17 +316,45 @@ export default async function DetalleSolicitud({
             · {solicitud.tipo === "REEMPLAZO" ? "Reemplazo" : "Equipamiento nuevo"}
           </h1>
           <EstadoBadge estado={solicitud.estado} />
+          {esperando && (
+            <span
+              className={`text-sm ${
+                esperando.estancada
+                  ? "font-medium text-espera"
+                  : "text-tinta-tenue"
+              }`}
+            >
+              {esperando.estancada ? "⚠ " : ""}
+              {esperando.texto} en esta etapa
+            </span>
+          )}
         </div>
-        <p className="mt-1 text-sm text-tinta-suave">
-          {solicitud.creadaPor ? "A nombre de" : "Solicitada por"}{" "}
+        {/* El destinatario en dos líneas propias y no perdido entre la fecha y
+            quién tecleó el pedido. Es el dato del que depende el acta —quién
+            firma, en cuyo historial queda— y quien abre esta página suele estar
+            a punto de entregarle. La metadata de creación baja un escalón. */}
+        <div className="mt-3">
+          <p className="text-xs uppercase tracking-wide text-tinta-tenue">
+            {solicitud.creadaPor ? "A nombre de" : "Solicitada por"}
+          </p>
           <Link
             href={`/historial/${solicitud.solicitante.id}`}
-            className="foco-anillo rounded font-medium underline underline-offset-2"
+            className="foco-anillo inline-flex min-h-11 items-center rounded text-lg font-semibold text-tinta underline decoration-borde-fuerte underline-offset-4 transition-colors duration-150 hover:decoration-marca-600"
           >
             {solicitud.solicitante.nombre}
           </Link>
-          {solicitud.brigada ? ` · ${solicitud.brigada.nombre}` : ""} ·{" "}
-          {formatearFechaHora(solicitud.creadaEn)}
+          <p className="text-sm text-tinta-suave">
+            {[
+              solicitud.brigada?.nombre,
+              solicitud.solicitante.rut ?? "sin RUT registrado",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+
+        <p className="mt-2 text-xs text-tinta-tenue">
+          Creada el {formatearFechaHora(solicitud.creadaEn)}
           {solicitud.creadaPor
             ? ` · registrada por ${solicitud.creadaPor.nombre}`
             : ""}
@@ -321,8 +371,47 @@ export default async function DetalleSolicitud({
         </Aviso>
       )}
 
+      {/* Tres bloques en una rejilla y no dos columnas: las acciones tienen que
+          ir **primero** en el teléfono —quien abre esto suele venir a entregar,
+          y antes quedaban a dos mil píxeles de scroll, detrás de los ítems, dos
+          descargas de Excel y seis pasos de seguimiento— y arriba a la derecha
+          en escritorio. La colocación explícita en la rejilla deja el orden del
+          código igual al orden en que se usa. */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+        {acciones.length > 0 && (
+          <div className="lg:col-start-3 lg:row-start-1">
+            <AccionesSolicitud
+              solicitudId={solicitud.id}
+              acciones={acciones.map((a) => ({ hacia: a.hacia, texto: a.accion }))}
+              puedeEntregar={puedeEntregar}
+              retiroPropio={!esGestion(usuario.rol)}
+              items={solicitud.items.map((item) => ({
+                id: item.id,
+                nombre: item.articulo.nombre,
+                codigo: item.articulo.codigo,
+                unidad: item.articulo.unidad,
+                cantidad: item.cantidad,
+              }))}
+              lineasReserva={lineasConReserva(
+                solicitud.items.map((item) => ({
+                  id: item.id,
+                  nombre: item.articulo.nombre,
+                  codigo: item.articulo.codigo,
+                  ceco: item.articulo.ceco,
+                  cantidad: item.cantidad,
+                  numeroReserva: item.numeroReserva,
+                  posicionReserva: item.posicionReserva,
+                })),
+              ).map((linea) => ({ ...linea, ceco: linea.ceco! }))}
+              reservasRecientes={recientes.map((r) => ({
+                numero: r.numero,
+                ceco: r.ceco,
+                ultimaPosicion: r.ultimaPosicion,
+              }))}
+            />
+          </div>
+        )}
+        <div className="space-y-6 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1">
           {solicitud.justificacion && (
             <Tarjeta>
               <h2 className="titulo-seccion">Justificación</h2>
@@ -350,6 +439,15 @@ export default async function DetalleSolicitud({
               fotoEvidenciaUrl: item.fotoEvidenciaUrl,
               entregaAnteriorFecha: item.entregaAnterior
                 ? formatearFecha(item.entregaAnterior.entrega.entregadaEn)
+                : null,
+              entregado: item.entregaItem
+                ? {
+                    cantidad: item.entregaItem.cantidadEntregada,
+                    numeroSerie: item.entregaItem.numeroSerie,
+                    venceEnTexto: item.entregaItem.venceEn
+                      ? formatearFecha(item.entregaItem.venceEn)
+                      : null,
+                  }
                 : null,
             }))}
           />
@@ -401,36 +499,49 @@ export default async function DetalleSolicitud({
           )}
         </div>
 
-        <div className="space-y-6">
-          {puedeEnviarAlmacen && (
+        <div
+          className={`space-y-6 lg:col-start-3 ${
+            // Sin acciones que mostrar, esta columna sube a la primera fila para
+            // no dejar un hueco donde estaría el bloque que no existe.
+            acciones.length > 0 ? "lg:row-start-2" : "lg:row-start-1"
+          }`}
+        >
+          {/* Las dos descargas eran dos tarjetas separadas que se llevaban la
+              esquina superior derecha, siendo lo secundario de la pantalla.
+              Juntas ocupan una sola y cada botón dice de qué planilla se
+              trata. */}
+          {(puedeEnviarAlmacen || puedeDescargarReservas) && (
             <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
-              <h2 className="titulo-seccion">Envío a almacén</h2>
-              <p className="text-sm text-tinta-suave">
-                Descarga los ítems del CECO FD1400D082 en el formato para enviar
-                al almacén.
-              </p>
-              <a
-                href={`/api/solicitudes/almacen?ids=${solicitud.id}`}
-                className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
-              >
-                Descargar formato almacén (Excel)
-              </a>
-            </section>
-          )}
+              <h2 className="titulo-seccion">Planillas para el almacén</h2>
 
-          {puedeDescargarReservas && (
-            <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
-              <h2 className="titulo-seccion">Reservas propias</h2>
-              <p className="text-sm text-tinta-suave">
-                Descarga las líneas del CECO {CECO_RESERVA_PROPIA} con su reserva
-                y posición, para pedirlas al almacén.
-              </p>
-              <a
-                href={`/api/solicitudes/reservas?ids=${solicitud.id}`}
-                className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
-              >
-                Descargar planilla de reservas (Excel)
-              </a>
+              {puedeEnviarAlmacen && (
+                <div>
+                  <a
+                    href={`/api/solicitudes/almacen?ids=${solicitud.id}`}
+                    className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+                  >
+                    Formato de pedido (Excel)
+                  </a>
+                  <p className="mt-1 text-xs text-tinta-tenue">
+                    Los ítems del CECO {CECO_ALMACEN}, para pedirlos al almacén.
+                  </p>
+                </div>
+              )}
+
+              {puedeDescargarReservas && (
+                <div>
+                  <a
+                    href={`/api/solicitudes/reservas?ids=${solicitud.id}`}
+                    className="foco-anillo inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+                  >
+                    Planilla de reservas propias (Excel)
+                  </a>
+                  <p className="mt-1 text-xs text-tinta-tenue">
+                    Las líneas del CECO {CECO_RESERVA_PROPIA} con su reserva y
+                    posición.
+                  </p>
+                </div>
+              )}
             </section>
           )}
 
@@ -439,42 +550,11 @@ export default async function DetalleSolicitud({
             {/* El progreso arriba responde «¿en qué va?» de un vistazo; la
                 línea de tiempo, debajo, responde «¿qué pasó y cuándo?». */}
             <div className="mb-4 mt-3">
-              <ProgresoSolicitud estado={solicitud.estado} />
+              <ProgresoSolicitud estado={solicitud.estado} conNombre={false} />
             </div>
             <TimelineSolicitud hitos={hitos} interrumpido={interrumpido} />
           </Tarjeta>
 
-          {acciones.length > 0 && (
-            <AccionesSolicitud
-              solicitudId={solicitud.id}
-              acciones={acciones.map((a) => ({ hacia: a.hacia, texto: a.accion }))}
-              puedeEntregar={puedeEntregar}
-              retiroPropio={!esGestion(usuario.rol)}
-              items={solicitud.items.map((item) => ({
-                id: item.id,
-                nombre: item.articulo.nombre,
-                codigo: item.articulo.codigo,
-                unidad: item.articulo.unidad,
-                cantidad: item.cantidad,
-              }))}
-              lineasReserva={lineasConReserva(
-                solicitud.items.map((item) => ({
-                  id: item.id,
-                  nombre: item.articulo.nombre,
-                  codigo: item.articulo.codigo,
-                  ceco: item.articulo.ceco,
-                  cantidad: item.cantidad,
-                  numeroReserva: item.numeroReserva,
-                  posicionReserva: item.posicionReserva,
-                })),
-              ).map((linea) => ({ ...linea, ceco: linea.ceco! }))}
-              reservasRecientes={recientes.map((r) => ({
-                numero: r.numero,
-                ceco: r.ceco,
-                ultimaPosicion: r.ultimaPosicion,
-              }))}
-            />
-          )}
         </div>
       </div>
     </div>

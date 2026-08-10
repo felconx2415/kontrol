@@ -1,4 +1,5 @@
 import { formatearFechaHora } from "@/lib/vencimientos";
+import { cuantoLleva, duracionEntre } from "@/lib/tiempo-relativo";
 
 export type HitoTimeline = {
   clave: string;
@@ -18,6 +19,14 @@ export type HitoTimeline = {
   alerta?: boolean;
 };
 
+/**
+ * Qué pasó y cuándo.
+ *
+ * La fecha completa va **solo en el primero**; del segundo en adelante se
+ * muestra cuánto tardó desde el hito anterior. Repetirla en cada paso —cinco
+ * veces la misma— tapaba lo único que ahí se quiere leer: dónde se atasca el
+ * proceso. La fecha exacta sigue disponible en el `title` de cada línea.
+ */
 export default function TimelineSolicitud({
   hitos,
   interrumpido = false,
@@ -32,11 +41,21 @@ export default function TimelineSolicitud({
     return true;
   });
 
+  // El primero cumplido es el ancla: da la fecha, y el resto se mide contra el
+  // que lo precede.
+  const primeroCumplido = visibles.find((h) => h.fecha !== null);
+
   return (
     <ol className="space-y-0">
       {visibles.map((paso, indice) => {
         const cumplido = paso.fecha !== null;
         const esUltimo = indice === visibles.length - 1;
+
+        // El hito cumplido inmediatamente anterior, para medir la espera.
+        const anterior = visibles
+          .slice(0, indice)
+          .reverse()
+          .find((h) => h.fecha !== null);
 
         return (
           <li key={paso.clave} className="flex gap-3">
@@ -80,12 +99,24 @@ export default function TimelineSolicitud({
                 {paso.titulo}
               </p>
               {cumplido ? (
-                <p className="text-xs text-tinta-tenue">
-                  {formatearFechaHora(paso.fecha)}
+                <p
+                  className="text-xs text-tinta-tenue"
+                  // La fecha exacta no se pierde: queda a un roce del cursor.
+                  title={formatearFechaHora(paso.fecha)}
+                >
+                  {paso === primeroCumplido || !anterior?.fecha
+                    ? formatearFechaHora(paso.fecha)
+                    : duracionEntre(anterior.fecha, paso.fecha!)}
                   {paso.responsable ? ` · ${paso.responsable}` : ""}
                 </p>
               ) : (
-                <p className="text-xs text-tinta-tenue">Pendiente</p>
+                <p className="text-xs text-tinta-tenue">
+                  {/* Un paso pendiente que lleva días detenido es justamente lo
+                      que hay que ver; «Pendiente» a secas no lo dice. */}
+                  {esUltimo && anterior?.fecha
+                    ? `Pendiente · lleva ${cuantoLleva(anterior.fecha)}`
+                    : "Pendiente"}
+                </p>
               )}
 
               {paso.nota && (

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requerirUsuario } from "@/lib/auth";
+import { cantidadConUnidad } from "@/lib/unidades";
 import { db } from "@/lib/db";
 import { formatearFolio } from "@/lib/folio";
 import { formatearFechaHora } from "@/lib/vencimientos";
@@ -75,9 +76,7 @@ export default async function MisDocumentos() {
     ...asignaciones.map((a) => ({
       clave: `a-${a.id}`,
       titulo: "Acta de entrega de bodega",
-      detalle: `${a.item.nombre} · ${a.cantidad} ${a.item.unidad}${
-        a.cantidad === 1 ? "" : "s"
-      }`,
+      detalle: `${a.item.nombre} · ${cantidadConUnidad(a.cantidad, a.item.unidad)}`,
       fecha: a.asignadoEn,
       href: `/api/bodega/asignaciones/${a.id}/acta`,
       etiqueta: "Bodega",

@@ -18,10 +18,18 @@ import {
 export default function ProgresoSolicitud({
   estado,
   compacto = false,
+  conNombre = true,
 }: {
   estado: EstadoSolicitud;
   /** Solo la línea de texto, para filas de listado donde no cabe la barra. */
   compacto?: boolean;
+  /**
+   * Si el texto repite el nombre del estado. En un listado hace falta —no hay
+   * nada más que lo diga—, pero en el detalle la insignia está a un palmo del
+   * título y decirlo aquí otra vez lo dejaba escrito tres veces en la misma
+   * pantalla.
+   */
+  conNombre?: boolean;
 }) {
   const { paso, total, completado, interrumpido } = pasoDeSolicitud(estado);
   const explicacion = ESPERA_DEL_SOLICITANTE[estado];
@@ -36,14 +44,16 @@ export default function ProgresoSolicitud({
 
   const resumen = completado
     ? "Completada"
-    : `Paso ${paso} de ${total} · ${ETIQUETA_ESTADO[estado]}`;
+    : conNombre
+      ? `Paso ${paso} de ${total} · ${ETIQUETA_ESTADO[estado]}`
+      : `Paso ${paso} de ${total}`;
 
   return (
     <div className={compacto ? "" : "space-y-2"}>
       <div
         className="flex items-center gap-1"
         role="img"
-        aria-label={`${resumen}. ${explicacion}`}
+        aria-label={`Paso ${paso} de ${total}. ${ETIQUETA_ESTADO[estado]}. ${explicacion}`}
       >
         {Array.from({ length: total }).map((_, i) => (
           <span

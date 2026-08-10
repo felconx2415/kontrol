@@ -28,3 +28,37 @@ export function haceCuanto(fecha: Date, ahora = new Date()): string {
     month: "short",
   });
 }
+
+/**
+ * Cuánto pasó entre dos momentos, en corto: «+2 h», «+4 d», «+15 min».
+ *
+ * La línea de tiempo repetía la fecha completa en cada hito —cinco veces el
+ * mismo «09-08-2026, 01:07 p. m.»— y eso escondía lo único que ahí se quiere
+ * leer: **cuánto tardó cada paso**. Un pedido que estuvo cuatro días esperando
+ * la reserva se ve de un vistazo; la fecha exacta queda en el `title`.
+ */
+export function duracionEntre(desde: Date, hasta: Date): string {
+  const segundos = Math.max(0, Math.round((hasta.getTime() - desde.getTime()) / 1000));
+
+  if (segundos < 60) return "+1 min"; // menos de un minuto se lee como inmediato
+
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `+${minutos} min`;
+
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `+${horas} h`;
+
+  return `+${Math.floor(horas / 24)} d`;
+}
+
+/** Cuántos días enteros lleva algo desde una fecha. */
+export function diasDesde(fecha: Date, ahora = new Date()): number {
+  return Math.floor((ahora.getTime() - fecha.getTime()) / 86_400_000);
+}
+
+/** «hoy», «1 día», «5 días» — para decir cuánto lleva algo detenido. */
+export function cuantoLleva(fecha: Date, ahora = new Date()): string {
+  const dias = diasDesde(fecha, ahora);
+  if (dias <= 0) return "hoy";
+  return dias === 1 ? "1 día" : `${dias} días`;
+}

@@ -193,6 +193,45 @@ export function pasoDeSolicitud(estado: EstadoSolicitud): PasoSolicitud {
   };
 }
 
+/**
+ * Desde cuándo la solicitud está en el estado en que está.
+ *
+ * Cada etapa guarda su propia marca de tiempo, así que saber cuánto lleva
+ * detenida es cuestión de mirar el campo que le toca. Los desenlaces —entregada,
+ * rechazada, cancelada— devuelven null: ahí ya no hay espera que medir, y decir
+ * «lleva 20 días» de algo terminado sería alarmar por nada.
+ */
+export function entroAlEstadoEn(solicitud: {
+  estado: EstadoSolicitud;
+  enviadaEn: Date | null;
+  aprobadaEn: Date | null;
+  reservaSolicitadaEn: Date | null;
+  enGestionEn: Date | null;
+  recibidaEn: Date | null;
+}): Date | null {
+  switch (solicitud.estado) {
+    case "PENDIENTE":
+      return solicitud.enviadaEn;
+    case "APROBADA":
+      return solicitud.aprobadaEn;
+    case "RESERVA_SOLICITADA":
+      return solicitud.reservaSolicitadaEn;
+    case "EN_GESTION":
+      return solicitud.enGestionEn;
+    case "RECIBIDA":
+      return solicitud.recibidaEn;
+    default:
+      return null;
+  }
+}
+
+/**
+ * A partir de cuántos días detenida una etapa deja de ser normal y pasa a
+ * pedir atención. Es el mismo umbral con que el escritorio destaca las colas
+ * más antiguas, para que las dos pantallas no se contradigan.
+ */
+export const DIAS_ETAPA_ESTANCADA = 7;
+
 // ── Reserva del almacén externo ───────────────────────────────────────────
 
 /**

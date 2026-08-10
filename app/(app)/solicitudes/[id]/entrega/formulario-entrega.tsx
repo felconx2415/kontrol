@@ -6,6 +6,7 @@ import FirmaCanvas from "@/components/firma-canvas";
 import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Etiqueta, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
+import { cantidadConUnidad } from "@/lib/unidades";
 
 type Item = {
   id: string;
@@ -67,8 +68,8 @@ export default function FormularioEntrega({
               <div>
                 <p className="text-sm font-medium">{item.nombre}</p>
                 <p className="text-xs text-tinta-tenue">
-                  {item.codigo} · pedido: {item.cantidadPedida} {item.unidad}
-                  {item.cantidadPedida === 1 ? "" : "s"}
+                  {item.codigo} · pedido:{" "}
+                  {cantidadConUnidad(item.cantidadPedida, item.unidad)}
                   {item.cantidadRecibida !== item.cantidadPedida && (
                     <span className="text-espera">
                       {" "}
