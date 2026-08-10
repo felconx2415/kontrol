@@ -19,14 +19,46 @@ if (!secreto || secreto.length < 32) {
   );
 }
 
+/**
+ * Cuánto dura la sesión.
+ *
+ * Eran ocho horas —una jornada—, pensadas para quien entra desde un computador
+ * compartido de oficina. Con Kontrol instalado en el teléfono de cada persona
+ * ese supuesto ya no aplica: quien pide EPP puede pasar meses entre solicitudes,
+ * y tocar el icono para que lo primero que aparezca sea una pantalla de
+ * contraseña convierte la app en un trámite. Treinta días cubre ese uso
+ * esporádico sin volverse eterno.
+ *
+ * Es un plazo **absoluto**, no deslizante: se cuenta desde que se inició sesión
+ * y no se renueva al usar la app. Renovarlo exigiría reescribir la cookie en
+ * cada visita, y en el App Router las cookies solo pueden escribirse desde una
+ * Server Action o un Route Handler —nunca desde el layout que resuelve al
+ * usuario—, así que no hay dónde hacerlo sin ensuciar cada página.
+ *
+ * Lo que esto concede: un teléfono perdido queda dentro hasta 30 días. La
+ * defensa no es el plazo sino la revocación — `usuarioActual()` relee la cuenta
+ * en cada petición, así que desactivarla en /configuracion/usuarios corta el
+ * acceso al instante, sin esperar a que la cookie caduque.
+ */
+const DURACION_SESION_S = 60 * 60 * 24 * 30;
+
 export const opcionesSesion: SessionOptions = {
   password: secreto,
   cookieName: "kontrol_sesion",
+  // Se fija el `ttl` —lo que dura el sello del contenido— y no el `maxAge` de
+  // la cookie: iron-session deriva el segundo del primero restándole un minuto,
+  // para que el navegador suelte la cookie *antes* de que el sello caduque.
+  // Poniendo `maxAge` a mano se pierde ese margen y aparece una ventana en la
+  // que el navegador manda una cookie que el servidor ya rechaza.
+  //
+  // Antes ocurría al revés: había `maxAge` de 8 horas sin `ttl`, así que el
+  // sello valía los 14 días por defecto y quien conservara la cookie seguía
+  // dentro. Ahora los dos plazos son el mismo.
+  ttl: DURACION_SESION_S,
   cookieOptions: {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 8, // jornada laboral
   },
 };
 

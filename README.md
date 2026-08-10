@@ -78,6 +78,25 @@ borrarla rompería la trazabilidad de las actas de entrega firmadas.
 Un administrador no puede desactivarse, eliminarse ni cambiarse el rol a sí
 mismo, para que el sistema nunca quede sin quien lo administre.
 
+### Sesión
+
+Dura **30 días** (`lib/auth.ts`). Eran ocho horas —una jornada—, pensadas para
+un computador compartido de oficina; con la app instalada en el teléfono de cada
+persona ese supuesto ya no aplica, y quien pide EPP cada varios meses se
+encontraba una pantalla de contraseña cada vez que tocaba el icono.
+
+Es un plazo **absoluto**: se cuenta desde que se inició sesión y no se renueva al
+usar la app. Renovarlo exigiría reescribir la cookie en cada visita, y en el App
+Router las cookies solo se pueden escribir desde una Server Action o un Route
+Handler, nunca desde el layout que resuelve al usuario.
+
+Lo que concede: un teléfono perdido queda dentro hasta 30 días. La defensa no es
+el plazo sino la revocación — `usuarioActual()` relee la cuenta en cada
+petición, así que **desactivarla en `/configuracion/usuarios` corta el acceso al
+instante**, sin esperar a que la cookie caduque. No hay revocación por
+dispositivo: si alguien pierde el teléfono, se desactiva la cuenta, se le cambia
+la contraseña y se vuelve a activar.
+
 ## Flujo
 
 ```
