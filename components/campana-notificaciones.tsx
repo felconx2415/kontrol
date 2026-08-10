@@ -100,10 +100,17 @@ export default function CampanaNotificaciones({
         )}
       </button>
 
+      {/* En el teléfono el panel se ancla al viewport y no al botón. Anclado al
+          botón se salía 63px por el borde izquierdo —a su derecha todavía está
+          el menú de la persona, así que `right-0` no es el borde de la
+          pantalla— y los títulos aparecían cortados a media palabra. El `top`
+          es el borde inferior de la píldora (12px de margen + 66 de alto) más
+          un respiro. Desde `sm` sobra ancho y vuelve a colgar del botón, que es
+          donde corresponde. */}
       {abierta && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-[var(--z-pegajoso)] mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-borde bg-panel text-tinta shadow-xl"
+          className="fixed inset-x-3 top-[5.5rem] z-[var(--z-pegajoso)] overflow-hidden rounded-xl border border-borde bg-panel text-tinta shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]"
         >
           <div className="flex items-center justify-between border-b border-borde px-4 py-2.5">
             <p className="text-sm font-semibold">Notificaciones</p>

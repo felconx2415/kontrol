@@ -96,7 +96,34 @@ check(
   !cacheado.urls.some((u) => u.startsWith("/uploads/") || u.startsWith("/api/")),
 );
 
-console.log("\n5. Sin conexión");
+console.log("\n5. Los menús caben en la pantalla");
+// Esta comprobación existe porque el panel de notificaciones se salía 63px por
+// el borde izquierdo y los títulos llegaban cortados a media palabra. No lo vio
+// ninguna prueba: se descubrió mirando un teléfono de verdad.
+for (const [nombre, selector] of [
+  ["campana", 'header button[aria-label*="Notificaciones"]'],
+  ["persona", 'header button[aria-haspopup="menu"]:not([aria-label*="Notificaciones"])'],
+] as const) {
+  await p.locator(selector).last().click();
+  await p.waitForTimeout(400);
+
+  const caja = await p.locator('header [role="menu"]').last().boundingBox();
+  const ancho = p.viewportSize()?.width ?? 0;
+  const seSale = caja
+    ? Math.round(Math.max(0, -caja.x) + Math.max(0, caja.x + caja.width - ancho))
+    : -1;
+
+  check(
+    `El menú de ${nombre} no se sale de la pantalla`,
+    seSale === 0,
+    caja ? `x=${Math.round(caja.x)} ancho=${Math.round(caja.width)} en ${ancho}px` : "no abrió",
+  );
+
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
+}
+
+console.log("\n6. Sin conexión");
 await ctx.setOffline(true);
 await p.goto(`${BASE}/escritorio`, { waitUntil: "domcontentloaded" }).catch(() => {});
 await p.waitForTimeout(1000);
