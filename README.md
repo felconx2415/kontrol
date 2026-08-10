@@ -146,6 +146,38 @@ ADMIN alcanza cuatro áreas y ve el índice de `/configuracion`.
 En el teléfono no se esconde nada: el cajón lista todos los destinos en
 vertical, agrupados bajo «Mi trabajo», «Lo mío» y «Configuración».
 
+## App instalable (PWA)
+
+Kontrol se instala en el teléfono desde el propio navegador: se entra a
+`epp.rmsgestion.cl` con Chrome de Android y sale «Agregar a la pantalla de
+inicio». Queda con su icono, sin barra de direcciones y con la barra de estado
+del color de la app.
+
+Se eligió esto sobre una app nativa por cómo se usa: un solicitante puede pasar
+**meses** entre un pedido y el siguiente, y pedirle que instale desde Play Store
+—y mantenerla al día en veintitantos equipos— es una barrera alta para ese uso.
+Un enlace que se agrega a la pantalla de inicio, no.
+
+Las piezas son `app/manifest.ts`, `public/sw.js`, `public/sin-conexion.html` y
+`components/instalar-app.tsx`, que registra el service worker y ofrece instalar
+tras medio minuto dentro (no de entrada: quien recién entra viene a trabajar).
+
+**El service worker no guarda páginas ni datos, a propósito.** Kontrol es
+multiusuario y va detrás de sesión: en un teléfono que se presta —normal en una
+cuadrilla— una página cacheada podría mostrarle a alguien el equipamiento, el
+RUT o el acta de otro. Solo se guardan los estáticos con hash y la pantalla de
+sin conexión; las navegaciones van siempre a la red, y `/uploads` y `/api` ni se
+tocan. Consultar sin señal es un paso aparte, con su propia decisión sobre qué
+puede quedar escrito en el teléfono.
+
+Los iconos se generan desde `logo.png` recortando la marca; el *maskable* deja
+el 40% de margen porque Android recorta en círculo.
+
+> Si más adelante quieres un APK para Play Store, el camino es envolver esta PWA
+> en un TWA con Bubblewrap: genera un proyecto Gradle aparte que se abre en
+> Android Studio, sin duplicar código. Necesita además servir
+> `/.well-known/assetlinks.json` desde el dominio.
+
 ## API de consulta
 
 Para que otro sistema —un tablero, un ERP, un script— lea datos de Kontrol.
@@ -208,6 +240,7 @@ npm run db:escenario   # siembra (o reinicia) una segunda empresa de prueba
 npm run e2e:empresas   # separación por empresa, avisos, reservas y receptor
 npm run e2e:lote       # acciones en lote sobre las cuentas
 npm run e2e:api        # API de consulta: token, aislamiento y solo lectura
+npm run e2e:pwa        # manifiesto, service worker y pantalla sin conexión
 ```
 
 `e2e:lote` reparte gente entre las dos empresas, así que hay que volver a

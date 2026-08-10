@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sin conexión · Kontrol</title>
+    <!--
+      Página que muestra el service worker cuando no hay red. Es un archivo
+      suelto y no una ruta de Next a propósito: si dependiera del servidor, no
+      estaría disponible justo cuando hace falta.
+
+      Sin fuentes ni imágenes externas por lo mismo. Los colores y los tamaños
+      siguen los de la app: se lee bajo sol fuerte, que es donde va a aparecer.
+    -->
+    <style>
+      :root {
+        --lienzo: #f3f5f6;
+        --panel: #ffffff;
+        --tinta: #16212b;
+        --tinta-suave: #4a5764;
+        --marca: #0b5c8f;
+        --borde: #dde3e8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: var(--lienzo);
+        color: var(--tinta);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+      main {
+        max-width: 26rem;
+        width: 100%;
+        background: var(--panel);
+        border: 1px solid var(--borde);
+        border-radius: 0.75rem;
+        padding: 1.75rem;
+        text-align: center;
+      }
+      img { width: 7.5rem; height: auto; margin-bottom: 1.25rem; }
+      h1 { margin: 0 0 0.5rem; font-size: 1.375rem; }
+      p { margin: 0 0 1rem; color: var(--tinta-suave); }
+      ul {
+        margin: 0 0 1.5rem;
+        padding-left: 1.1rem;
+        text-align: left;
+        color: var(--tinta-suave);
+        font-size: 0.9375rem;
+      }
+      li { margin-bottom: 0.35rem; }
+      button {
+        width: 100%;
+        min-height: 2.75rem; /* se usa con guantes */
+        padding: 0 1rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--marca);
+        color: #fff;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button:hover { filter: brightness(1.08); }
+      button:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/iconos/kontrol-192.png" alt="Kontrol" />
+      <h1>Sin conexión</h1>
+      <p>
+        No hay señal para llegar a Kontrol. Lo que estabas haciendo no se perdió:
+        sigue guardado en el servidor.
+      </p>
+      <ul>
+        <li>Si estás en terreno, prueba a moverte unos metros.</li>
+        <li>Revisa que los datos móviles estén encendidos.</li>
+        <li>Cuando vuelva la señal, toca «Reintentar».</li>
+      </ul>
+      <button type="button" onclick="location.reload()">Reintentar</button>
+    </main>
+
+    <script>
+      // Si la señal vuelve sola, se recarga sin que nadie tenga que tocar nada:
+      // con el teléfono en el bolsillo, esa es la manera de que la app esté
+      // lista cuando se saque.
+      addEventListener("online", () => location.reload());
+    </script>
+  </body>
+</html>

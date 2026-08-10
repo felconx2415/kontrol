@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import InstalarApp from "@/components/instalar-app";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,6 +30,19 @@ export const metadata: Metadata = {
     type: "website",
     images: [{ url: "/og.png", width: 1200, height: 630, alt: "Kontrol" }],
   },
+  // Instalada, iOS no lee el manifiesto: necesita estas dos para abrirse a
+  // pantalla completa y poner bien el rótulo bajo el icono.
+  appleWebApp: { capable: true, title: "Kontrol", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  // Tiñe la barra de estado del color de la barra de la app. Es lo que hace que
+  // instalada no se vea como una web dentro de un marco ajeno.
+  themeColor: "#031a29",
+  // El zoom se deja libre a propósito: esto se lee bajo sol fuerte y con la
+  // vista cansada, y bloquearlo es de las cosas que más molestan en terreno.
+  initialScale: 1,
+  width: "device-width",
 };
 
 export default function RootLayout({
@@ -41,7 +55,13 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Registra el service worker y, más adelante, ofrece instalar. Va en
+            el layout raíz para que también cubra el login: quien instala desde
+            ahí se ahorra teclear la dirección la próxima vez. */}
+        <InstalarApp />
+      </body>
     </html>
   );
 }

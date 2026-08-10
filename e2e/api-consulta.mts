@@ -50,8 +50,14 @@ const consultar = (ruta: string, token?: string) =>
 const nav = await chromium.launch();
 const admin = await login(nav);
 
-const tokenTotal = await emitirToken(admin, "QA todas", null);
-const tokenSur = await emitirToken(admin, "QA Forestal Sur", "Forestal Sur");
+// Nombre único por corrida: los tokens revocados quedan en el listado —es su
+// gracia, no se borran— y dos con el mismo nombre harían ambiguo cuál revocar.
+const marca = `QA-${Date.now() % 100000}`;
+const NOMBRE_TOTAL = `${marca} todas`;
+const NOMBRE_SUR = `${marca} Forestal Sur`;
+
+const tokenTotal = await emitirToken(admin, NOMBRE_TOTAL, null);
+const tokenSur = await emitirToken(admin, NOMBRE_SUR, "Forestal Sur");
 
 console.log("\n1. Autenticación");
 check("Sin token responde 401", (await consultar("/api/v1")).status === 401);
@@ -150,7 +156,7 @@ for (const metodo of ["POST", "PUT", "PATCH", "DELETE"]) {
 console.log("\n6. Revocar corta el acceso");
 await admin.goto(`${BASE}/configuracion/api`, { waitUntil: "networkidle" });
 await admin
-  .locator('tr:has-text("QA Forestal Sur") button:has-text("Revocar")')
+  .locator(`tr:has-text("${NOMBRE_SUR}") button:has-text("Revocar")`)
   .first()
   .click();
 await admin.waitForTimeout(1500);
@@ -160,12 +166,14 @@ check(
 );
 check(
   "Y el listado lo marca como revocado",
-  (await admin.locator('tr:has-text("QA Forestal Sur")').innerText()).includes("Revocado"),
+  (await admin.locator(`tr:has-text("${NOMBRE_SUR}")`).first().innerText()).includes(
+    "Revocado",
+  ),
 );
 
 // Limpieza: el de alcance total no debe quedar vivo tras la prueba.
 await admin
-  .locator('tr:has-text("QA todas") button:has-text("Revocar")')
+  .locator(`tr:has-text("${NOMBRE_TOTAL}") button:has-text("Revocar")`)
   .first()
   .click();
 await admin.waitForTimeout(1200);
