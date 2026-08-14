@@ -78,18 +78,33 @@ export default async function Reportes({
         },
       },
     }),
-    db.asignacionBodega.findMany({
+    db.asignacionItem.findMany({
+      // La entrega llega a la empresa por el ítem de bodega que salió.
       where: {
         item: deMiEmpresa,
-        ...(rango ? { asignadoEn: rango } : {}),
-        ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
+        ...(rango || filtros.brigadaId
+          ? {
+              asignacion: {
+                ...(rango ? { asignadoEn: rango } : {}),
+                ...(filtros.brigadaId
+                  ? { usuario: { brigadaId: filtros.brigadaId } }
+                  : {}),
+              },
+            }
+          : {}),
       },
-      orderBy: { asignadoEn: "desc" },
+      orderBy: { asignacion: { asignadoEn: "desc" } },
       take: 200,
       include: {
         item: { select: { codigo: true, nombre: true, unidad: true } },
-        usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
-        asignadoPor: { select: { nombre: true } },
+        asignacion: {
+          select: {
+            asignadoEn: true,
+            notas: true,
+            usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+            asignadoPor: { select: { nombre: true } },
+          },
+        },
       },
     }),
   ]);
@@ -309,10 +324,10 @@ export default async function Reportes({
                 <Celda derecha mono>
                   {t.cantidad} {t.item.unidad}
                 </Celda>
-                <Celda>{t.usuario.nombre}</Celda>
-                <Celda tenue>{t.usuario.brigada?.nombre ?? "—"}</Celda>
-                <Celda tenue>{t.asignadoPor.nombre}</Celda>
-                <Celda tenue>{formatearFecha(t.asignadoEn)}</Celda>
+                <Celda>{t.asignacion.usuario.nombre}</Celda>
+                <Celda tenue>{t.asignacion.usuario.brigada?.nombre ?? "—"}</Celda>
+                <Celda tenue>{t.asignacion.asignadoPor.nombre}</Celda>
+                <Celda tenue>{formatearFecha(t.asignacion.asignadoEn)}</Celda>
               </Fila>
             ))}
           </Tabla>

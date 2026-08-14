@@ -332,7 +332,9 @@ export async function actaDeAsignacion(
   const asignacion = await db.asignacionBodega.findUnique({
     where: { id: asignacionId },
     include: {
-      item: { select: { codigo: true, nombre: true, unidad: true } },
+      items: {
+        include: { item: { select: { codigo: true, nombre: true, unidad: true } } },
+      },
       usuario: {
         select: {
           id: true,
@@ -350,7 +352,7 @@ export async function actaDeAsignacion(
   const fecha = fechaCorta(asignacion.asignadoEn);
 
   const html = await construirActaHtml({
-    titulo: `Acta de entrega ${asignacion.item.codigo} · Kontrol`,
+    titulo: `Acta de entrega ${asignacion.id.slice(-6).toUpperCase()} · Kontrol`,
     subtitulo: "Acta de entrega de equipamiento de bodega",
     folioRotulo: "Entrega N°",
     folio: asignacion.id.slice(-6).toUpperCase(),
@@ -373,16 +375,14 @@ export async function actaDeAsignacion(
       ],
     },
     itemsTitulo: "Equipamiento entregado",
-    items: [
-      {
-        articulo: asignacion.item.nombre,
-        codigo: asignacion.item.codigo,
-        serie: asignacion.numeroSerie,
-        cantidad: `${asignacion.cantidad} ${asignacion.item.unidad}`,
-        estado: null,
-        vence: null,
-      },
-    ],
+    items: asignacion.items.map((linea) => ({
+      articulo: linea.item.nombre,
+      codigo: linea.item.codigo,
+      serie: linea.numeroSerie,
+      cantidad: `${linea.cantidad} ${linea.item.unidad}`,
+      estado: null,
+      vence: null,
+    })),
     notas: asignacion.notas
       ? [{ rotulo: "Nota de la entrega", texto: asignacion.notas }]
       : [],

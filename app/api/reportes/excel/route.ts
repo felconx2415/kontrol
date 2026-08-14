@@ -61,17 +61,31 @@ export async function GET(request: Request) {
         prestadoPor: { select: { nombre: true } },
       },
     }),
-    db.asignacionBodega.findMany({
+    db.asignacionItem.findMany({
       where: {
         item: deMiEmpresa,
-        ...(rango ? { asignadoEn: rango } : {}),
-        ...(filtros.brigadaId ? { usuario: { brigadaId: filtros.brigadaId } } : {}),
+        ...(rango || filtros.brigadaId
+          ? {
+              asignacion: {
+                ...(rango ? { asignadoEn: rango } : {}),
+                ...(filtros.brigadaId
+                  ? { usuario: { brigadaId: filtros.brigadaId } }
+                  : {}),
+              },
+            }
+          : {}),
       },
-      orderBy: { asignadoEn: "desc" },
+      orderBy: { asignacion: { asignadoEn: "desc" } },
       include: {
         item: { select: { codigo: true, nombre: true, unidad: true } },
-        usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
-        asignadoPor: { select: { nombre: true } },
+        asignacion: {
+          select: {
+            asignadoEn: true,
+            notas: true,
+            usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+            asignadoPor: { select: { nombre: true } },
+          },
+        },
       },
     }),
   ]);
@@ -273,11 +287,11 @@ export async function GET(request: Request) {
       codigo: t.item.codigo,
       cantidad: t.cantidad,
       unidad: t.item.unidad,
-      usuario: t.usuario.nombre,
-      brigada: t.usuario.brigada?.nombre ?? "",
-      asigno: t.asignadoPor.nombre,
-      fecha: fechaParaExcel(t.asignadoEn),
-      nota: t.notas ?? "",
+      usuario: t.asignacion.usuario.nombre,
+      brigada: t.asignacion.usuario.brigada?.nombre ?? "",
+      asigno: t.asignacion.asignadoPor.nombre,
+      fecha: fechaParaExcel(t.asignacion.asignadoEn),
+      nota: t.asignacion.notas ?? "",
     });
   }
   hojaTraslados.getColumn("fecha").numFmt = "dd-mm-yyyy";

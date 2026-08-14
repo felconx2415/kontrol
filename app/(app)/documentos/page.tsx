@@ -41,8 +41,12 @@ export default async function MisDocumentos() {
       select: {
         id: true,
         asignadoEn: true,
-        cantidad: true,
-        item: { select: { nombre: true, unidad: true } },
+        items: {
+          select: {
+            cantidad: true,
+            item: { select: { nombre: true, unidad: true } },
+          },
+        },
       },
     }),
   ]);
@@ -76,7 +80,15 @@ export default async function MisDocumentos() {
     ...asignaciones.map((a) => ({
       clave: `a-${a.id}`,
       titulo: "Acta de entrega de bodega",
-      detalle: `${a.item.nombre} · ${cantidadConUnidad(a.cantidad, a.item.unidad)}`,
+      // Con un solo ítem se nombra; con varios manda el conteo y los nombres
+      // van detrás, que es como se reconoce el papel que se busca.
+      detalle:
+        a.items.length === 1
+          ? `${a.items[0].item.nombre} · ${cantidadConUnidad(
+              a.items[0].cantidad,
+              a.items[0].item.unidad,
+            )}`
+          : `${a.items.length} ítems · ${a.items.map((l) => l.item.nombre).join(", ")}`,
       fecha: a.asignadoEn,
       href: `/api/bodega/asignaciones/${a.id}/acta`,
       etiqueta: "Bodega",

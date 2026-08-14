@@ -196,9 +196,13 @@ export default async function PaginaBodega({
         where: { id: asignacion },
         select: {
           id: true,
-          cantidad: true,
           asignadoEn: true,
-          item: { select: { nombre: true, unidad: true } },
+          items: {
+            select: {
+              cantidad: true,
+              item: { select: { nombre: true, unidad: true } },
+            },
+          },
           usuario: { select: { nombre: true } },
         },
       })
@@ -280,12 +284,19 @@ export default async function PaginaBodega({
             Equipamiento entregado
           </h2>
           <p className="mt-1 text-sm text-tinta">
-            {recienAsignado.cantidad} {recienAsignado.item.unidad}
-            {recienAsignado.cantidad === 1 ? "" : "s"} de «
-            {recienAsignado.item.nombre}» a {recienAsignado.usuario.nombre} ·{" "}
-            {fechaHora(recienAsignado.asignadoEn)}
+            {recienAsignado.items.length} ítem
+            {recienAsignado.items.length === 1 ? "" : "s"} a{" "}
+            {recienAsignado.usuario.nombre} · {fechaHora(recienAsignado.asignadoEn)}
           </p>
-          <p className="mt-0.5 text-sm text-tinta-suave">
+          <ul className="mt-1 text-sm text-tinta-suave">
+            {recienAsignado.items.map((l, n) => (
+              <li key={n}>
+                · {l.cantidad} {l.item.unidad}
+                {l.cantidad === 1 ? "" : "s"} de «{l.item.nombre}»
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-sm text-tinta-suave">
             Entrega definitiva: el material queda a su nombre en «Mi
             equipamiento». Descarga el acta firmada como respaldo.
           </p>

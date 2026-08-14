@@ -578,10 +578,22 @@ export async function devolverPrestamo(
   redirect(`/bodega?tab=prestamos&acta=${prestamo.id}`);
 }
 
+/** Una línea de la asignación tal como llega del formulario. */
+type LineaAsignacion = {
+  itemId: string;
+  cantidad: number;
+  numeroSerie?: string | null;
+};
+
 /**
  * Asigna equipamiento de bodega a un usuario del sistema como entrega
  * definitiva: descuenta el stock y deja el registro a nombre del usuario (que
  * lo verá en «Mi equipamiento»). No vuelve a la bodega.
+ *
+ * Admite varias líneas por la misma razón que el préstamo: a quien se le
+ * habilita se le entrega casco, guantes y linterna en el mismo acto y firma
+ * una sola acta; una asignación por ítem obligaba a repetir el trámite —y la
+ * firma— tantas veces como cosas se entregaran.
  */
 export async function asignarItemBodega(
   _estado: EstadoBodega,
@@ -589,98 +601,139 @@ export async function asignarItemBodega(
 ): Promise<EstadoBodega> {
   const usuarioActual = await requerirRol(...ROLES_GESTION);
 
-  const itemId = String(formData.get("itemId") ?? "");
   const usuarioId = String(formData.get("usuarioId") ?? "");
-  const cantidad = leerCantidad(String(formData.get("cantidad") ?? ""));
   const notas = String(formData.get("notas") ?? "").trim() || null;
-  const numeroSerie = String(formData.get("numeroSerie") ?? "").trim() || null;
   const firma = bufferDesdeDataUrl(String(formData.get("firma") ?? ""));
 
-  if (cantidad === null) {
-    return { error: "La cantidad debe ser un número entero mayor que 0." };
-  }
   // La asignación es una entrega definitiva: sale de bodega y queda a nombre
   // de la persona, así que se firma igual que un préstamo.
   if (!firma) return { error: "Falta la firma de quien recibe el equipamiento." };
 
-  const [item, usuario] = await Promise.all([
-    db.itemBodega.findUnique({ where: { id: itemId } }),
+  let lineas: LineaAsignacion[];
+  try {
+    const crudo = JSON.parse(String(formData.get("items") ?? "[]"));
+    lineas = Array.isArray(crudo) ? crudo : [];
+  } catch {
+    return { error: "No se pudieron leer los ítems de la entrega." };
+  }
+
+  if (lineas.length === 0) return { error: "Agrega al menos un ítem a la entrega." };
+
+  const ids = lineas.map((l) => String(l.itemId ?? ""));
+  if (new Set(ids).size !== ids.length) {
+    return { error: "Hay un ítem repetido. Súmalo en una sola línea." };
+  }
+
+  const [items, usuario] = await Promise.all([
+    db.itemBodega.findMany({ where: { id: { in: ids } } }),
     db.usuario.findUnique({ where: { id: usuarioId } }),
   ]);
+  const porId = new Map(items.map((i) => [i.id, i]));
 
-  if (!item) return { error: "Ese ítem ya no existe en la bodega." };
-  if (!alcanza(usuarioActual.alcance, item.empresaId)) {
-    return { error: "Ese ítem pertenece a la bodega de otra empresa." };
-  }
-  if (!item.activo) return { error: "Ese ítem está inactivo. Actívalo antes de asignarlo." };
   if (!usuario || !usuario.activo) return { error: "Elige un usuario válido." };
   // El equipamiento sale de la bodega de una empresa y queda a nombre de
   // alguien: ese alguien tiene que ser de una empresa que se alcance.
   if (!alcanza(usuarioActual.alcance, usuario.empresaId)) {
     return { error: "Esa persona no pertenece a ninguna de las empresas que gestionas." };
   }
-  if (cantidad > item.stock) {
-    return {
-      error: `No hay stock suficiente: quedan ${item.stock} ${item.unidad}(s) de «${item.nombre}».`,
-    };
+
+  const ajeno = items.find((i) => !alcanza(usuarioActual.alcance, i.empresaId));
+  if (ajeno) {
+    return { error: `«${ajeno.nombre}» pertenece a la bodega de otra empresa.` };
+  }
+
+  // Se valida todo antes de tocar nada: una entrega a medias dejaría stock
+  // descontado sin acta que lo respalde.
+  for (const linea of lineas) {
+    const item = porId.get(linea.itemId);
+    if (!item) return { error: "Uno de los ítems ya no existe en la bodega." };
+    if (!item.activo) {
+      return { error: `«${item.nombre}» está inactivo. Actívalo antes de asignarlo.` };
+    }
+    if (!Number.isInteger(linea.cantidad) || linea.cantidad < 1) {
+      return { error: `Cantidad inválida para «${item.nombre}».` };
+    }
+    if (linea.cantidad > item.stock) {
+      return {
+        error: `No hay stock suficiente de «${item.nombre}»: quedan ${item.stock} ${item.unidad}(s).`,
+      };
+    }
   }
 
   const firmaPngUrl = await guardarImagen(firma, "image/png", "firmas");
-  const stockResultante = item.stock - cantidad;
 
   const asignacionId = await db.$transaction(async (tx) => {
-    await tx.itemBodega.update({
-      where: { id: item.id },
-      data: { stock: stockResultante },
-    });
     const asignacion = await tx.asignacionBodega.create({
       data: {
-        itemId: item.id,
         usuarioId: usuario.id,
-        cantidad,
-        numeroSerie,
         notas,
         asignadoPorId: usuarioActual.id,
         firmaPngUrl,
       },
     });
-    await tx.movimientoBodega.create({
-      data: {
-        itemId: item.id,
-        tipo: "ASIGNACION",
-        cantidad,
-        stockResultante,
-        persona: usuario.nombre,
-        notas,
-        usuarioId: usuarioActual.id,
-      },
-    });
+
+    for (const linea of lineas) {
+      const item = porId.get(linea.itemId)!;
+      const stockResultante = item.stock - linea.cantidad;
+
+      await tx.itemBodega.update({
+        where: { id: item.id },
+        data: { stock: stockResultante },
+      });
+      await tx.asignacionItem.create({
+        data: {
+          asignacionId: asignacion.id,
+          itemId: item.id,
+          cantidad: linea.cantidad,
+          numeroSerie: String(linea.numeroSerie ?? "").trim() || null,
+        },
+      });
+      await tx.movimientoBodega.create({
+        data: {
+          itemId: item.id,
+          tipo: "ASIGNACION",
+          cantidad: linea.cantidad,
+          stockResultante,
+          persona: usuario.nombre,
+          notas,
+          usuarioId: usuarioActual.id,
+        },
+      });
+    }
+
     return asignacion.id;
   });
 
   await registrarAuditoria({
     usuarioId: usuarioActual.id,
-    entidad: "ItemBodega",
-    entidadId: item.id,
+    entidad: "AsignacionBodega",
+    entidadId: asignacionId,
     accion: "MOV_ASIGNACION",
-    detalle: { cantidad, usuarioId: usuario.id, usuario: usuario.nombre, stockResultante },
+    detalle: { usuarioId: usuario.id, usuario: usuario.nombre, lineas: lineas.length },
   });
+
+  const primero = porId.get(lineas[0].itemId)!;
+  const resumen =
+    lineas.length === 1
+      ? `${lineas[0].cantidad} ${primero.unidad}(s) de «${primero.nombre}»`
+      : `${lineas.length} ítems`;
 
   // A quien recibió: el equipamiento quedó a su nombre y su acta ya existe.
   await notificar({
     destinatarios: [usuario.id],
     tipo: "BODEGA_ASIGNACION",
-    titulo: `Te asignaron ${item.nombre}`,
-    cuerpo: `${cantidad} ${item.unidad}(s) desde bodega. El acta firmada está en tus documentos.`,
+    titulo:
+      lineas.length === 1
+        ? `Te asignaron ${primero.nombre}`
+        : `Te asignaron ${lineas.length} ítems de bodega`,
+    cuerpo: `${resumen} desde bodega. El acta firmada está en tus documentos.`,
     url: "/documentos",
     excluir: usuarioActual.id,
   });
 
-  await dejarAviso(
-    `Asignadas ${cantidad} ${item.unidad}(s) de «${item.nombre}» a ${usuario.nombre} con firma.`,
-  );
+  await dejarAviso(`Asignados ${resumen} a ${usuario.nombre} con firma.`);
   revalidatePath("/bodega");
-  revalidatePath(`/bodega/${item.id}`);
+  for (const linea of lineas) revalidatePath(`/bodega/${linea.itemId}`);
   revalidatePath(`/historial/${usuario.id}`);
   // Igual que en el préstamo: el respaldo de la entrega se ofrece al entregar.
   redirect(`/bodega?asignacion=${asignacionId}`);

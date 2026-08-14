@@ -98,12 +98,22 @@ export default async function Historial({
   const historicos = entregados.filter((i) => i.reemplazadoEn !== null);
 
   // Equipamiento entregado desde la Bodega local (asignaciones definitivas).
-  const asignacionesBodega = await db.asignacionBodega.findMany({
-    where: { usuarioId },
-    orderBy: { asignadoEn: "desc" },
+  // Se listan las líneas, no las entregas: lo que la persona quiere ver es qué
+  // tiene a su nombre, aunque varias cosas hayan salido en la misma acta.
+  const asignacionesBodega = await db.asignacionItem.findMany({
+    where: { asignacion: { usuarioId } },
+    orderBy: { asignacion: { asignadoEn: "desc" } },
     include: {
       item: { select: { nombre: true, codigo: true, unidad: true } },
-      asignadoPor: { select: { nombre: true } },
+      asignacion: {
+        select: {
+          id: true,
+          asignadoEn: true,
+          notas: true,
+          firmaPngUrl: true,
+          asignadoPor: { select: { nombre: true } },
+        },
+      },
     },
   });
 
@@ -224,16 +234,17 @@ export default async function Historial({
                   <p className="text-xs text-tinta-tenue">
                     {a.item.codigo} ·{" "}
                     {cantidadConUnidad(a.cantidad, a.item.unidad)} · asignado{" "}
-                    {formatearFecha(a.asignadoEn)} por {a.asignadoPor.nombre}
-                    {a.notas ? ` · ${a.notas}` : ""}
+                    {formatearFecha(a.asignacion.asignadoEn)} por{" "}
+                    {a.asignacion.asignadoPor.nombre}
+                    {a.asignacion.notas ? ` · ${a.asignacion.notas}` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   {/* Solo las asignaciones firmadas tienen acta: las anteriores
                       a que se pidiera firma no pueden respaldar nada. */}
-                  {a.firmaPngUrl && (
+                  {a.asignacion.firmaPngUrl && (
                     <a
-                      href={`/api/bodega/asignaciones/${a.id}/acta`}
+                      href={`/api/bodega/asignaciones/${a.asignacion.id}/acta`}
                       className="foco-anillo rounded text-xs text-tinta-suave underline underline-offset-2 transition-colors duration-150 hover:text-tinta"
                     >
                       Acta de entrega

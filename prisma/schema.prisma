@@ -477,10 +477,10 @@ model ItemBodega {
   empresaId String?
   creadoEn  DateTime @default(now())
 
-  empresa        Empresa?           @relation(fields: [empresaId], references: [id])
-  movimientos    MovimientoBodega[]
-  lineasPrestamo PrestamoItem[]
-  asignaciones   AsignacionBodega[]
+  empresa         Empresa?           @relation(fields: [empresaId], references: [id])
+  movimientos     MovimientoBodega[]
+  lineasPrestamo  PrestamoItem[]
+  lineasAsignacion AsignacionItem[]
 
   // El código identifica el ítem dentro de su bodega. Deja de ser único en todo
   // el sistema porque cada empresa numera la suya y el mismo código de artículo
@@ -578,14 +578,15 @@ model PrestamoItem {
 /**
  * Entrega definitiva de equipamiento de bodega a un usuario del sistema: baja
  * el stock y queda a nombre del usuario (aparece en su «Mi equipamiento»).
+ *
+ * Agrupa varias líneas (AsignacionItem) por la misma razón que el préstamo: a
+ * una persona se le entregan casco, guantes y linterna de una vez y firma una
+ * sola acta; tratarlas como entregas sueltas obligaba a repetir el trámite y
+ * la firma tantas veces como ítems.
  */
 model AsignacionBodega {
   id            String   @id @default(cuid())
-  itemId        String
   usuarioId     String
-  cantidad      Int
-  // Serie o lote del equipo entregado, para el que lo tenga.
-  numeroSerie   String?
   notas         String?
   asignadoPorId String
   asignadoEn    DateTime @default(now())
@@ -595,10 +596,29 @@ model AsignacionBodega {
   // a que se pidiera firma.
   firmaPngUrl String?
 
-  item        ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  usuario     Usuario    @relation("EquipamientoAsignado", fields: [usuarioId], references: [id])
-  asignadoPor Usuario    @relation("AsignacionesHechas", fields: [asignadoPorId], references: [id])
+  usuario     Usuario          @relation("EquipamientoAsignado", fields: [usuarioId], references: [id])
+  asignadoPor Usuario          @relation("AsignacionesHechas", fields: [asignadoPorId], references: [id])
+  items       AsignacionItem[]
 
   @@index([usuarioId])
+}
+
+/**
+ * Una línea de la asignación: qué equipo se entregó y cuánto. No hay estado de
+ * vuelta como en el préstamo —la entrega es definitiva— así que la línea solo
+ * describe lo que salió.
+ */
+model AsignacionItem {
+  id           String  @id @default(cuid())
+  asignacionId String
+  itemId       String
+  cantidad     Int
+  // Serie o lote del equipo entregado, para el que lo tenga.
+  numeroSerie  String?
+
+  asignacion AsignacionBodega @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  item       ItemBodega       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([asignacionId])
   @@index([itemId])
 }

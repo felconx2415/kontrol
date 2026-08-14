@@ -29,19 +29,22 @@ export async function GET(
 
   const asignacion = await db.asignacionBodega.findUnique({
     where: { id },
-    select: { item: { select: { codigo: true, empresaId: true } } },
+    select: {
+      items: { select: { item: { select: { empresaId: true } } } },
+    },
   });
 
   // Gestión tampoco alcanza la bodega de otra empresa; el dueño del
-  // equipamiento sí conserva su acta.
+  // equipamiento sí conserva su acta. La entrega llega a la empresa por los
+  // ítems que salieron de bodega.
   if (
     acta.usuarioId !== usuario.id &&
-    !alcanza(usuario.alcance, asignacion?.item.empresaId ?? null)
+    !(asignacion?.items ?? []).some((l) => alcanza(usuario.alcance, l.item.empresaId))
   ) {
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
   }
 
-  const nombreArchivo = `acta-entrega-${asignacion?.item.codigo ?? "bodega"}-${id.slice(0, 6)}.pdf`;
+  const nombreArchivo = `acta-entrega-bodega-${id.slice(-6).toLowerCase()}.pdf`;
 
   return new NextResponse(acta.pdf as unknown as BodyInit, {
     headers: {

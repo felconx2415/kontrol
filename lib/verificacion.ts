@@ -77,7 +77,11 @@ export async function verificarDocumento(
   if (prefijo === PREFIJO.asignacion) {
     const asignacion = await db.asignacionBodega.findUnique({
       where: { id },
-      select: { asignadoEn: true, firmaPngUrl: true },
+      select: {
+        asignadoEn: true,
+        firmaPngUrl: true,
+        _count: { select: { items: true } },
+      },
     });
     if (!asignacion) return null;
     return {
@@ -85,7 +89,7 @@ export async function verificarDocumento(
       etiquetaTipo: "Acta de entrega de equipamiento de bodega",
       numero: id.slice(-6).toUpperCase(),
       emitidoEn: asignacion.asignadoEn,
-      totalItems: 1,
+      totalItems: asignacion._count.items,
       firmado: Boolean(asignacion.firmaPngUrl),
       nota: "Entrega definitiva",
     };
@@ -94,7 +98,12 @@ export async function verificarDocumento(
   if (prefijo === PREFIJO.prestamo) {
     const prestamo = await db.prestamo.findUnique({
       where: { id },
-      select: { prestadoEn: true, firmaSalidaUrl: true, devueltoEn: true },
+      select: {
+        prestadoEn: true,
+        firmaSalidaUrl: true,
+        devueltoEn: true,
+        _count: { select: { items: true } },
+      },
     });
     if (!prestamo) return null;
     return {
@@ -102,7 +111,7 @@ export async function verificarDocumento(
       etiquetaTipo: "Acta de préstamo de bodega",
       numero: id.slice(-6).toUpperCase(),
       emitidoEn: prestamo.prestadoEn,
-      totalItems: 1,
+      totalItems: prestamo._count.items,
       firmado: Boolean(prestamo.firmaSalidaUrl),
       nota: prestamo.devueltoEn ? "Material devuelto" : "Devolución pendiente",
     };
