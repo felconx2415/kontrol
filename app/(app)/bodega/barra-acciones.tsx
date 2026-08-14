@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { clasesBoton } from "@/components/ui/boton";
+import { BotonEnlace, clasesBoton } from "@/components/ui/boton";
 
 type Panel = "item" | "catalogo" | "movimiento";
 
@@ -14,10 +14,13 @@ export default function BarraAcciones({
   formularioItem,
   formularioCatalogo,
   formularioMovimiento,
+  puedeAsignar,
 }: {
   formularioItem: ReactNode;
   formularioCatalogo: ReactNode | null;
   formularioMovimiento: ReactNode | null;
+  /** Hay algo con stock que entregar. Sin eso la página de asignar sale vacía. */
+  puedeAsignar: boolean;
 }) {
   const [abierto, setAbierto] = useState<Panel | null>(null);
   const alternar = (p: Panel) => setAbierto((a) => (a === p ? null : p));
@@ -39,6 +42,17 @@ export default function BarraAcciones({
         {boton("item", "+ Agregar ítem")}
         {formularioCatalogo && boton("catalogo", "Desde el catálogo")}
         {formularioMovimiento && boton("movimiento", "Registrar movimiento")}
+
+        {/* Entregar material a nombre de alguien no es administrar el
+            inventario: va en primario, como su gemelo «Nuevo préstamo», para
+            que no se lea como un cuarto formulario de los de al lado. Antes
+            solo se llegaba por el menú «⋯» de un ítem, que tenía sentido
+            cuando la entrega era de una cosa; ahora se parte por la persona. */}
+        {puedeAsignar && (
+          <BotonEnlace href="/bodega/asignar" tamano="sm">
+            Asignar equipamiento
+          </BotonEnlace>
+        )}
       </div>
 
       {abierto === "item" && <div className="panel-expandible">{formularioItem}</div>}

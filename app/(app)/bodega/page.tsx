@@ -330,6 +330,7 @@ export default async function PaginaBodega({
         formularioMovimiento={
           opciones.length > 0 ? <FormularioMovimiento items={opciones} /> : null
         }
+        puedeAsignar={opciones.some((i) => i.stock > 0)}
       />
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
