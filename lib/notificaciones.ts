@@ -168,4 +168,6 @@ export const ROLES_A_AVISAR: Partial<Record<TipoNotificacion, Rol[]>> = {
   SOLICITUD_APROBADA: ["GESTOR", "ADMIN"],
   // El material llegó a bodega: hay que citar a la persona y entregárselo.
   SOLICITUD_RECIBIDA: ["GESTOR", "ADMIN"],
+  // Una cancelada que vuelve al flujo reaparece en la cola de alguien.
+  SOLICITUD_RETOMADA: ["GESTOR", "ADMIN"],
 };

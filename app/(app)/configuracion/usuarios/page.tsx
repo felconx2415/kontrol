@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ROLES_ADMIN } from "@/lib/solicitud-estado";
-import { Aviso } from "@/components/ui/superficie";
+import { ETIQUETA_ROL, ROLES_ADMIN } from "@/lib/solicitud-estado";
+import { buscador } from "@/lib/busqueda";
+import { Aviso, Vacio } from "@/components/ui/superficie";
+import Buscador from "@/components/ui/buscador";
 import Paginacion from "@/components/ui/paginacion";
 import FormularioUsuario from "./formulario-usuario";
 import ListaUsuarios from "./lista-usuarios";
@@ -14,17 +16,18 @@ const POR_PAGINA = 10;
 export default async function AdminUsuarios({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; q?: string }>;
 }) {
   // Administrar cuentas es exclusivo de ADMIN, más estricto que el layout de
   // la sección de configuración, que solo exige un rol de gestión.
   const actual = await requerirRol(...ROLES_ADMIN);
 
-  const { page } = await searchParams;
-  const pagina = Math.max(1, Number(page) || 1);
+  const { page, q } = await searchParams;
 
-  const [total, usuarios, brigadas, empresas] = await Promise.all([
-    db.usuario.count(),
+  const [usuarios, brigadas, empresas] = await Promise.all([
+    // Todas las cuentas y no una página: buscarlas sin tropezar con las tildes
+    // —«perez» tiene que encontrar a «Pérez»— exige filtrarlas en JS, y la
+    // paginación se aplica después sobre lo que quedó. Ver lib/busqueda.ts.
     db.usuario.findMany({
       orderBy: [{ activo: "desc" }, { nombre: "asc" }],
       include: {
@@ -32,8 +35,6 @@ export default async function AdminUsuarios({
         empresa: { select: { nombre: true } },
         empresasGestionadas: { select: { id: true } },
       },
-      skip: (pagina - 1) * POR_PAGINA,
-      take: POR_PAGINA,
     }),
     // Todas las brigadas, con su empresa: el formulario filtra en el cliente
     // según la empresa elegida, sin ir y volver al servidor en cada cambio.
@@ -54,7 +55,30 @@ export default async function AdminUsuarios({
       select: { id: true, nombre: true, activa: true },
     }),
   ]);
-  const totalPaginas = Math.ceil(total / POR_PAGINA);
+
+  // Se busca por lo que identifica a una persona en la tabla: cómo se llama,
+  // con qué entra, su RUT, y dónde está encasillada (rol, empresa, brigada).
+  const coincide = buscador(q);
+  const filtrados = usuarios.filter((u) =>
+    coincide(
+      u.nombre,
+      u.username,
+      u.rut,
+      ETIQUETA_ROL[u.rol],
+      u.empresa?.nombre,
+      u.brigada?.nombre,
+    ),
+  );
+  const buscando = Boolean(q?.trim());
+
+  // La página se acota a las que existen tras filtrar: quien venía en la 4 y
+  // busca un apellido que cabe en una no debe encontrarse una lista vacía.
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const pagina = Math.min(Math.max(1, Number(page) || 1), totalPaginas);
+  const enPantalla = filtrados.slice(
+    (pagina - 1) * POR_PAGINA,
+    pagina * POR_PAGINA,
+  );
 
   return (
     <div className="space-y-6">
@@ -79,34 +103,53 @@ export default async function AdminUsuarios({
         </Aviso>
       )}
 
-      <ListaUsuarios
-        idActual={actual.id}
-        empresas={empresas}
-        brigadas={brigadas.map((b) => ({
-          id: b.id,
-          nombre: b.nombre,
-          empresaId: b.empresaId,
-          miembros: b._count.miembros,
-        }))}
-        usuarios={usuarios.map((u) => ({
-          id: u.id,
-          nombre: u.nombre,
-          username: u.username,
-          rut: u.rut,
-          rol: u.rol,
-          brigadaId: u.brigadaId,
-          brigadaNombre: u.brigada?.nombre ?? null,
-          empresaId: u.empresaId,
-          empresaNombre: u.empresa?.nombre ?? null,
-          empresasGestionadas: u.empresasGestionadas.map((e) => e.id),
-          activo: u.activo,
-        }))}
+      <Buscador
+        etiqueta="Buscar cuenta"
+        placeholder="Nombre, usuario, RUT, empresa o brigada…"
+        valor={q ?? ""}
+        accion="/configuracion/usuarios"
+        resumen={
+          buscando ? `${filtrados.length} de ${usuarios.length} cuentas` : undefined
+        }
       />
+
+      {enPantalla.length === 0 ? (
+        <Vacio mensaje="Ninguna cuenta coincide con esa búsqueda. Prueba con parte del nombre, el usuario o el RUT." />
+      ) : (
+        <ListaUsuarios
+          idActual={actual.id}
+          empresas={empresas}
+          brigadas={brigadas.map((b) => ({
+            id: b.id,
+            nombre: b.nombre,
+            empresaId: b.empresaId,
+            miembros: b._count.miembros,
+          }))}
+          usuarios={enPantalla.map((u) => ({
+            id: u.id,
+            nombre: u.nombre,
+            username: u.username,
+            rut: u.rut,
+            rol: u.rol,
+            brigadaId: u.brigadaId,
+            brigadaNombre: u.brigada?.nombre ?? null,
+            empresaId: u.empresaId,
+            empresaNombre: u.empresa?.nombre ?? null,
+            empresasGestionadas: u.empresasGestionadas.map((e) => e.id),
+            activo: u.activo,
+          }))}
+        />
+      )}
 
       <Paginacion
         paginaActual={pagina}
         totalPaginas={totalPaginas}
-        href={(p) => `/configuracion/usuarios?page=${p}`}
+        href={(p) =>
+          `/configuracion/usuarios?${new URLSearchParams({
+            ...(q ? { q } : {}),
+            page: String(p),
+          })}`
+        }
       />
     </div>
   );

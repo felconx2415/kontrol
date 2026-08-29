@@ -7,9 +7,9 @@ import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
 import BuscadorArticulo, {
-  normalizar,
   type OpcionBuscador,
 } from "@/components/buscador-articulo";
+import { normalizar } from "@/lib/busqueda";
 
 type ItemOpcion = {
   id: string;

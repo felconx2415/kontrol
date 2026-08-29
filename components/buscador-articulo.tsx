@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useRef, useState } from "react";
 import { CONTROL } from "@/components/ui/campo";
+import { normalizar } from "@/lib/busqueda";
 
 export type OpcionBuscador = {
   id: string;
@@ -14,14 +15,6 @@ export type OpcionBuscador = {
 };
 
 const LIMITE = 40;
-
-/** Quita tildes y pasa a minúsculas para buscar sin importar acentos. */
-export function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
 
 /**
  * Buscador de artículos con filtrado en vivo. Reemplaza al <select> nativo, que

@@ -8,6 +8,7 @@ import { formatearFecha, formatearFechaHora } from "@/lib/vencimientos";
 import {
   accionesDisponibles,
   CECO_ALMACEN,
+  estadoAlRetomar,
   DIAS_ETAPA_ESTANCADA,
   entroAlEstadoEn,
   CECO_RESERVA_PROPIA,
@@ -98,7 +99,16 @@ export default async function DetalleSolicitud({
 
   // A este punto un solicitante solo puede ser el dueño: el redirect de
   // arriba ya descartó el resto.
-  const acciones = accionesDisponibles(solicitud.estado, usuario.rol);
+  const acciones = accionesDisponibles(
+    solicitud.estado,
+    usuario.rol,
+    solicitud.estadoPrevio,
+  );
+
+  // Retomar devuelve la solicitud al estado en que se canceló, y ese destino
+  // hay que decirlo antes de pulsar: no es lo mismo revivirla en «Pendiente»
+  // que en «En gestión con el almacén».
+  const destinoAlRetomar = estadoAlRetomar(solicitud);
 
   // Ajustar el pedido solo tiene sentido antes de aprobarlo: después, el
   // pedido al almacén ya se hizo sobre esas cantidades.
@@ -155,13 +165,31 @@ export default async function DetalleSolicitud({
     })),
   );
 
-  // Ajustes hechos por quien aprueba. Se leen de la auditoría, que ya guarda
-  // el detalle exacto de cada cambio.
-  const registrosAjuste = await db.auditoria.findMany({
-    where: { entidadId: solicitud.id, entidad: "Solicitud", accion: "EDITADA" },
+  // Ajustes hechos por quien aprueba y cancelaciones deshechas. Se leen de la
+  // auditoría, que ya guarda el detalle exacto de cada cambio; en el caso de lo
+  // retomado es además el único registro que queda, porque revivir la solicitud
+  // borra de ella la marca de la cancelación.
+  const registros = await db.auditoria.findMany({
+    where: {
+      entidadId: solicitud.id,
+      entidad: "Solicitud",
+      accion: { in: ["EDITADA", "RETOMADA"] },
+    },
     orderBy: { creadoEn: "asc" },
     include: { usuario: { select: { nombre: true } } },
   });
+
+  const registrosAjuste = registros.filter((r) => r.accion === "EDITADA");
+  const retomadas: HitoTimeline[] = registros
+    .filter((r) => r.accion === "RETOMADA")
+    .map((r) => ({
+      clave: `retomada-${r.id}`,
+      titulo: "Cancelada y retomada",
+      fecha: r.creadoEn,
+      responsable: r.usuario.nombre,
+      nota: "Se había cancelado; volvió al flujo donde estaba.",
+      evento: true,
+    }));
 
   const ajustes: HitoTimeline[] = registrosAjuste.map((r, i) => {
     let detalles: string[] = [];
@@ -289,6 +317,7 @@ export default async function DetalleSolicitud({
       evento: true,
       alerta: true,
     },
+    ...retomadas,
     {
       clave: "CANCELADA",
       titulo: ETIQUETA_ESTADO.CANCELADA,
@@ -383,6 +412,10 @@ export default async function DetalleSolicitud({
             <AccionesSolicitud
               solicitudId={solicitud.id}
               acciones={acciones.map((a) => ({ hacia: a.hacia, texto: a.accion }))}
+              retomando={solicitud.estado === "CANCELADA"}
+              destinoAlRetomar={
+                destinoAlRetomar ? ETIQUETA_ESTADO[destinoAlRetomar] : null
+              }
               puedeEntregar={puedeEntregar}
               retiroPropio={!esGestion(usuario.rol)}
               items={solicitud.items.map((item) => ({

@@ -2,17 +2,25 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ROLES_ADMIN } from "@/lib/solicitud-estado";
+import { buscador } from "@/lib/busqueda";
 import { Tabla } from "@/components/ui/tabla";
-import { Aviso } from "@/components/ui/superficie";
+import { Aviso, Vacio } from "@/components/ui/superficie";
+import Buscador from "@/components/ui/buscador";
 import FormularioBrigada from "./formulario-brigada";
 import FilaBrigada from "./fila-brigada";
 
 export const metadata = { title: "Brigadas · Kontrol" };
 
-export default async function AdminBrigadas() {
+export default async function AdminBrigadas({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   // Las brigadas definen a quién supervisa quién, así que se administran con el
   // mismo requisito que las cuentas: exclusivo de ADMIN.
   await requerirRol(...ROLES_ADMIN);
+
+  const { q } = await searchParams;
 
   const [brigadas, supervisores, empresas] = await Promise.all([
     db.brigada.findMany({
@@ -41,6 +49,15 @@ export default async function AdminBrigadas() {
 
   const hayEmpresas = empresas.some((e) => e.activa);
 
+  // Se busca también por empresa y por supervisor: «las brigadas de Forestal
+  // Sur» y «las que lleva Rojas» son las dos preguntas que se hacen aquí, y
+  // ambas columnas están a la vista en la tabla.
+  const coincide = buscador(q);
+  const filtradas = brigadas.filter((b) =>
+    coincide(b.nombre, b.empresa.nombre, b.supervisor?.nombre),
+  );
+  const buscando = Boolean(q?.trim());
+
   return (
     <div className="space-y-6">
       <div>
@@ -62,37 +79,59 @@ export default async function AdminBrigadas() {
         </Aviso>
       )}
 
-      <Tabla
-        encabezados={[
-          "Brigada",
-          "Empresa",
-          "Tipo",
-          "Supervisor",
-          "Miembros",
-          "Solicitudes",
-          { texto: "Acciones", alineado: "der" },
-        ]}
-        anchoMinimo="56rem"
-      >
-        {brigadas.map((b) => (
-          <FilaBrigada
-            key={b.id}
-            brigada={{
-              id: b.id,
-              nombre: b.nombre,
-              tipo: b.tipo,
-              empresaId: b.empresaId,
-              empresaNombre: b.empresa.nombre,
-              supervisorId: b.supervisorId,
-              supervisorNombre: b.supervisor?.nombre ?? null,
-              miembros: b._count.miembros,
-              solicitudes: b._count.solicitudes,
-            }}
-            supervisores={supervisores}
-            empresas={empresas}
-          />
-        ))}
-      </Tabla>
+      <Buscador
+        etiqueta="Buscar brigada"
+        placeholder="Nombre, empresa o supervisor…"
+        valor={q ?? ""}
+        accion="/configuracion/brigadas"
+        resumen={
+          buscando
+            ? `${filtradas.length} de ${brigadas.length} brigadas`
+            : undefined
+        }
+      />
+
+      {filtradas.length === 0 ? (
+        <Vacio
+          mensaje={
+            buscando
+              ? "Ninguna brigada coincide con esa búsqueda. Prueba con parte del nombre, la empresa o el supervisor."
+              : "Todavía no hay brigadas. Crea la primera para poder asignarle gente."
+          }
+        />
+      ) : (
+        <Tabla
+          encabezados={[
+            "Brigada",
+            "Empresa",
+            "Tipo",
+            "Supervisor",
+            "Miembros",
+            "Solicitudes",
+            { texto: "Acciones", alineado: "der" },
+          ]}
+          anchoMinimo="56rem"
+        >
+          {filtradas.map((b) => (
+            <FilaBrigada
+              key={b.id}
+              brigada={{
+                id: b.id,
+                nombre: b.nombre,
+                tipo: b.tipo,
+                empresaId: b.empresaId,
+                empresaNombre: b.empresa.nombre,
+                supervisorId: b.supervisorId,
+                supervisorNombre: b.supervisor?.nombre ?? null,
+                miembros: b._count.miembros,
+                solicitudes: b._count.solicitudes,
+              }}
+              supervisores={supervisores}
+              empresas={empresas}
+            />
+          ))}
+        </Tabla>
+      )}
     </div>
   );
 }

@@ -57,8 +57,63 @@ export const TRANSICIONES: Transicion[] = [
   { desde: "RECIBIDA", hacia: "CANCELADA", roles: ["GESTOR", "ADMIN"], accion: "Cancelar" },
 ];
 
-/** Estados finales: ya no admiten ninguna transición. */
-export const ESTADOS_FINALES: EstadoSolicitud[] = ["ENTREGADA", "RECHAZADA", "CANCELADA"];
+/**
+ * Etiqueta de la única acción que admite una cancelada. No es una fila de
+ * TRANSICIONES a propósito: ver `puedeRetomar`.
+ */
+export const ACCION_RETOMAR = "Retomar solicitud";
+
+/**
+ * Estados desde los que se puede cancelar y, por tanto, a los que se puede
+ * volver al retomar. Se deriva de la tabla para que un estado nuevo que admita
+ * cancelación admita también la vuelta, sin acordarse de tocar dos listas.
+ */
+const ESTADOS_CANCELABLES: EstadoSolicitud[] = TRANSICIONES.filter(
+  (t) => t.hacia === "CANCELADA",
+).map((t) => t.desde);
+
+/**
+ * Estados finales: ya no admiten ninguna transición.
+ *
+ * CANCELADA no está: es reversible desde que gestión puede retomarla.
+ */
+export const ESTADOS_FINALES: EstadoSolicitud[] = ["ENTREGADA", "RECHAZADA"];
+
+/**
+ * A qué estado vuelve una solicitud cancelada al retomarla.
+ *
+ * Al de antes de la cancelación, que es donde el trámite iba. Las canceladas
+ * anteriores a que se guardara ese dato no lo tienen: vuelven a PENDIENTE, que
+ * es el único punto seguro —se revisa y se aprueba de nuevo— sin inventar un
+ * avance que no consta.
+ */
+export function estadoAlRetomar(solicitud: {
+  estado: EstadoSolicitud;
+  estadoPrevio: EstadoSolicitud | null;
+}): EstadoSolicitud | null {
+  if (solicitud.estado !== "CANCELADA") return null;
+  const previo = solicitud.estadoPrevio;
+  if (previo && ESTADOS_CANCELABLES.includes(previo)) return previo;
+  return "PENDIENTE";
+}
+
+/**
+ * Si este rol puede devolver al flujo una solicitud cancelada.
+ *
+ * Se cancela por error o cambia la decisión, y sin esto la única salida era
+ * rehacer el pedido entero y perder folio, reserva y trazabilidad. Solo gestión
+ * y administración: deshacer un desenlace no es del solicitante ni del
+ * aprobador.
+ *
+ * Va aparte de TRANSICIONES —y no como seis filas «CANCELADA → cada estado
+ * cancelable»— porque el destino no se deduce del par (desde, hacia) sino del
+ * dato guardado al cancelar, y porque meterlo en la tabla abriría de par en par
+ * todo lo que pregunta `puedeTransicionar`: aprobar en lote, marcar recibida y
+ * los demás atajos empezarían a aceptar solicitudes canceladas.
+ */
+export function puedeRetomar(estado: EstadoSolicitud, rol: Rol): boolean {
+  return estado === "CANCELADA" && esGestion(rol);
+}
 
 export function puedeTransicionar(
   desde: EstadoSolicitud,
@@ -94,11 +149,23 @@ export function puedeActuarSobre(
   return alcanza(usuario.alcance, solicitud.empresaId);
 }
 
-/** Transiciones disponibles para un rol desde el estado actual. */
+/**
+ * Transiciones disponibles para un rol desde el estado actual.
+ *
+ * De una cancelada sale una sola —retomarla— y no vive en TRANSICIONES, así que
+ * se agrega aquí: es lo que la pantalla necesita ofrecer.
+ */
 export function accionesDisponibles(
   estado: EstadoSolicitud,
   rol: Rol,
+  estadoPrevio: EstadoSolicitud | null = null,
 ): Transicion[] {
+  if (puedeRetomar(estado, rol)) {
+    const hacia = estadoAlRetomar({ estado, estadoPrevio });
+    return hacia
+      ? [{ desde: estado, hacia, roles: ROLES_GESTION, accion: ACCION_RETOMAR }]
+      : [];
+  }
   return TRANSICIONES.filter((t) => t.desde === estado && t.roles.includes(rol));
 }
 

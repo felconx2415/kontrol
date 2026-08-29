@@ -8,12 +8,15 @@ import { formatearFolio, siguienteFolio } from "@/lib/folio";
 import {
   CECO_ALMACEN,
   esGestion,
+  estadoAlRetomar,
+  ETIQUETA_ESTADO,
   faltaReserva,
   lineasConReserva,
   lineasDeAlmacen,
   MAXIMO_BENEFICIARIOS,
   motivosDe,
   puedeActuarSobre,
+  puedeRetomar,
   puedeTransicionar,
 } from "@/lib/solicitud-estado";
 import { dejarAviso } from "@/lib/avisos";
@@ -452,6 +455,52 @@ async function avisarCambioDeEstado(
   });
 }
 
+/**
+ * Avisa de que una solicitud cancelada volvió al ruedo.
+ *
+ * No cabe en avisarCambioDeEstado() porque ahí el texto se elige por el estado
+ * al que se llega, y aquí ese estado es el de vuelta: anunciarle al
+ * beneficiario «solicitud aprobada» cuando lo que pasó es que se revivió una
+ * cancelada contaría otra historia. Gestión se entera además porque la
+ * solicitud vuelve a su cola con un paso pendiente.
+ */
+async function avisarSolicitudRetomada(
+  solicitud: {
+    id: string;
+    folio: number;
+    solicitanteId: string;
+    empresaId: string | null;
+  },
+  estadoRetomado: EstadoSolicitud,
+  autorId: string,
+): Promise<void> {
+  const folio = formatearFolio(solicitud.folio);
+  const titulo = `Solicitud ${folio} retomada`;
+  const cuerpo = `Ya no está cancelada: sigue en «${ETIQUETA_ESTADO[estadoRetomado]}».`;
+  const url = `/solicitudes/${solicitud.id}`;
+
+  await notificar({
+    destinatarios: [solicitud.solicitanteId],
+    tipo: "SOLICITUD_RETOMADA",
+    titulo,
+    cuerpo,
+    url,
+    excluir: autorId,
+  });
+
+  await notificar({
+    destinatarios: await destinatariosPorRol(
+      ROLES_A_AVISAR.SOLICITUD_RETOMADA ?? ["GESTOR", "ADMIN"],
+      solicitud.empresaId,
+    ),
+    tipo: "SOLICITUD_RETOMADA",
+    titulo,
+    cuerpo,
+    url,
+    excluir: autorId,
+  });
+}
+
 export type CambioItem = {
   itemId: string;
   cantidad: number;
@@ -602,7 +651,21 @@ export async function cambiarEstado(
   const solicitud = await db.solicitud.findUnique({ where: { id: solicitudId } });
   if (!solicitud) return { error: "La solicitud no existe." };
 
-  if (!puedeTransicionar(solicitud.estado, nuevoEstado, usuario.rol)) {
+  // Retomar una cancelada no es una transición más: no avanza el trámite, lo
+  // devuelve al punto donde se cortó, y por eso se valida por su propia vía. El
+  // destino tampoco lo elige quien pulsa —el formulario podría mandar cualquier
+  // estado— sino el que quedó guardado al cancelar.
+  const retomando = solicitud.estado === "CANCELADA";
+  if (retomando) {
+    if (!puedeRetomar(solicitud.estado, usuario.rol)) {
+      return { error: "No puedes retomar una solicitud cancelada." };
+    }
+    if (nuevoEstado !== estadoAlRetomar(solicitud)) {
+      return {
+        error: "Esta solicitud solo puede retomarse en el estado en que se canceló.",
+      };
+    }
+  } else if (!puedeTransicionar(solicitud.estado, nuevoEstado, usuario.rol)) {
     return { error: "No puedes realizar esa acción sobre esta solicitud." };
   }
 
@@ -617,9 +680,11 @@ export async function cambiarEstado(
   // Gestionar con el almacén exige que cada línea lleve su reserva: es el dato
   // con que el almacén identifica el pedido. Se valida sobre la mezcla de lo
   // ya guardado con lo que llega del formulario, para no perder lo registrado
-  // en un paso anterior.
+  // en un paso anterior. Al retomar no se revisa: la solicitud ya pasó por ahí
+  // con sus reservas puestas, y volver a exigirlas dejaría atrapada en cancelada
+  // una solicitud que solo hay que reactivar.
   let reservasAEscribir: ItemReserva[] = [];
-  if (nuevoEstado === "EN_GESTION") {
+  if (nuevoEstado === "EN_GESTION" && !retomando) {
     const items = await db.solicitudItem.findMany({
       where: { solicitudId },
       select: {
@@ -658,32 +723,43 @@ export async function cambiarEstado(
   const ahora = new Date();
   const datos: Record<string, unknown> = { estado: nuevoEstado };
 
-  switch (nuevoEstado) {
-    case "APROBADA":
-      datos.aprobadorId = usuario.id;
-      datos.aprobadaEn = ahora;
-      break;
-    case "RECHAZADA":
-      datos.aprobadorId = usuario.id;
-      datos.aprobadaEn = ahora;
-      datos.motivoRechazo = extra?.motivoRechazo?.trim();
-      break;
-    case "RESERVA_SOLICITADA":
-      datos.gestorId = usuario.id;
-      datos.reservaSolicitadaEn = ahora;
-      break;
-    case "EN_GESTION":
-      datos.gestorId = usuario.id;
-      datos.enGestionEn = ahora;
-      break;
-    case "RECIBIDA":
-      // Ver marcarRecibida(): recibir no reasigna el gestor del pedido.
-      if (esGestion(usuario.rol)) datos.gestorId = usuario.id;
-      datos.recibidaEn = ahora;
-      break;
-    case "CANCELADA":
-      datos.canceladaEn = ahora;
-      break;
+  // Al retomar se reponen el estado y nada más: las marcas de tiempo de las
+  // etapas ya vividas —quién aprobó y cuándo, cuándo se gestionó— son historia y
+  // reescribirlas fingiría que el trámite se hizo hoy. Se borran las dos huellas
+  // de la cancelación, que es justo lo que se deshace.
+  if (retomando) {
+    datos.canceladaEn = null;
+    datos.estadoPrevio = null;
+  } else {
+    switch (nuevoEstado) {
+      case "APROBADA":
+        datos.aprobadorId = usuario.id;
+        datos.aprobadaEn = ahora;
+        break;
+      case "RECHAZADA":
+        datos.aprobadorId = usuario.id;
+        datos.aprobadaEn = ahora;
+        datos.motivoRechazo = extra?.motivoRechazo?.trim();
+        break;
+      case "RESERVA_SOLICITADA":
+        datos.gestorId = usuario.id;
+        datos.reservaSolicitadaEn = ahora;
+        break;
+      case "EN_GESTION":
+        datos.gestorId = usuario.id;
+        datos.enGestionEn = ahora;
+        break;
+      case "RECIBIDA":
+        // Ver marcarRecibida(): recibir no reasigna el gestor del pedido.
+        if (esGestion(usuario.rol)) datos.gestorId = usuario.id;
+        datos.recibidaEn = ahora;
+        break;
+      case "CANCELADA":
+        datos.canceladaEn = ahora;
+        // De dónde viene, para poder devolverla ahí si se retoma.
+        datos.estadoPrevio = solicitud.estado;
+        break;
+    }
   }
 
   // Las reservas y el cambio de estado son un solo hecho: una solicitud en
@@ -701,20 +777,28 @@ export async function cambiarEstado(
     await tx.solicitud.update({ where: { id: solicitudId }, data: datos });
   });
 
+  // Al retomar, la cancelación deja de constar en la solicitud (canceladaEn
+  // vuelve a null): la auditoría es lo único que guarda que se canceló y que
+  // alguien la revivió, así que se registra como hecho propio y no como el
+  // estado al que vuelve.
   await registrarAuditoria({
     usuarioId: usuario.id,
     entidad: "Solicitud",
     entidadId: solicitudId,
-    accion: nuevoEstado,
-    detalle: extra,
+    accion: retomando ? "RETOMADA" : nuevoEstado,
+    detalle: retomando ? { hacia: nuevoEstado } : extra,
   });
 
-  await avisarCambioDeEstado(
-    solicitud,
-    nuevoEstado,
-    usuario.id,
-    extra?.motivoRechazo,
-  );
+  if (retomando) {
+    await avisarSolicitudRetomada(solicitud, nuevoEstado, usuario.id);
+  } else {
+    await avisarCambioDeEstado(
+      solicitud,
+      nuevoEstado,
+      usuario.id,
+      extra?.motivoRechazo,
+    );
+  }
 
   const CONFIRMACION: Partial<Record<EstadoSolicitud, string>> = {
     APROBADA: "Solicitud aprobada.",
@@ -724,7 +808,9 @@ export async function cambiarEstado(
     RECIBIDA: "Marcada como recibida en bodega.",
     CANCELADA: "Solicitud cancelada.",
   };
-  const confirmacion = CONFIRMACION[nuevoEstado];
+  const confirmacion = retomando
+    ? `Solicitud retomada en «${ETIQUETA_ESTADO[nuevoEstado]}».`
+    : CONFIRMACION[nuevoEstado];
   if (confirmacion) await dejarAviso(confirmacion);
 
   revalidatePath(`/solicitudes/${solicitudId}`);

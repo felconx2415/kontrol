@@ -450,6 +450,8 @@ export default function AccionesSolicitud({
   items,
   lineasReserva,
   reservasRecientes = [],
+  retomando = false,
+  destinoAlRetomar = null,
 }: {
   solicitudId: string;
   acciones: Accion[];
@@ -461,6 +463,15 @@ export default function AccionesSolicitud({
   lineasReserva: LineaReservaUI[];
   /** Últimas reservas usadas, como atajo al registrarlas. */
   reservasRecientes?: ReservaRecienteUI[];
+  /**
+   * La solicitud está cancelada: la única acción es revivirla, y el destino de
+   * esa transición es un estado del flujo normal. Sin esta marca, un retomar
+   * hacia RECIBIDA abriría el formulario de recepción y uno hacia EN_GESTION el
+   * de reservas, que es lo que corresponde al avanzar pero no al volver.
+   */
+  retomando?: boolean;
+  /** Etiqueta del estado al que vuelve, para decirlo antes de pulsar. */
+  destinoAlRetomar?: string | null;
 }) {
   const [rechazando, setRechazando] = useState(false);
 
@@ -482,8 +493,29 @@ export default function AccionesSolicitud({
         </BotonEnlace>
       )}
 
+      {retomando && destinoAlRetomar && (
+        <p className="text-sm text-tinta-suave">
+          Se canceló, pero el trámite puede continuar donde quedó: al retomarla
+          vuelve a «{destinoAlRetomar}».
+        </p>
+      )}
+
       {acciones.map((accion) => {
         if (accion.hacia === "ENTREGADA") return null;
+
+        // Retomar no es avanzar: va antes que cualquier trato especial por
+        // estado de destino, porque esos formularios son los del camino de ida.
+        if (retomando) {
+          return (
+            <form key={accion.hacia} action={accionCambiarEstado}>
+              <input type="hidden" name="solicitudId" value={solicitudId} />
+              <input type="hidden" name="nuevoEstado" value={accion.hacia} />
+              <Boton type="submit" bloque textoPendiente="Guardando…">
+                {accion.texto}
+              </Boton>
+            </form>
+          );
+        }
 
         // Pedir el número de reserva y esperar es el trámite del almacén. Si la
         // reserva la crea el propio gestor ese paso no existe, y ofrecerlo solo

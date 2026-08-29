@@ -14,9 +14,9 @@ import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Etiqueta, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
 import BuscadorArticulo, {
-  normalizar,
   type OpcionBuscador,
 } from "@/components/buscador-articulo";
+import { normalizar } from "@/lib/busqueda";
 
 type Articulo = {
   id: string;

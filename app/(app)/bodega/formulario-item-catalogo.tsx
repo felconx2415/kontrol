@@ -6,9 +6,9 @@ import {
   type EstadoBodega,
 } from "@/actions/bodega";
 import BuscadorArticulo, {
-  normalizar,
   type OpcionBuscador,
 } from "@/components/buscador-articulo";
+import { normalizar } from "@/lib/busqueda";
 import Boton from "@/components/ui/boton";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";

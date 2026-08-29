@@ -103,6 +103,7 @@ enum TipoNotificacion {
   SOLICITUD_RECIBIDA
   SOLICITUD_ENTREGADA
   SOLICITUD_CANCELADA
+  SOLICITUD_RETOMADA
   SOLICITUD_EDITADA
   PRESTAMO_REGISTRADO
   PRESTAMO_DEVUELTO
@@ -329,6 +330,11 @@ model Solicitud {
   recibidaEn       DateTime?
 
   canceladaEn DateTime?
+  // En qué estado estaba justo antes de cancelarse. Existe para poder retomar
+  // una solicitud cancelada dejándola donde iba: una cancelada en gestión
+  // vuelve a gestión, no al principio. Null mientras no se ha cancelado, y se
+  // vuelve a poner en null al retomarla.
+  estadoPrevio EstadoSolicitud?
 
   solicitante Usuario  @relation("Solicitante", fields: [solicitanteId], references: [id])
   creadaPor   Usuario? @relation("CreadorSolicitud", fields: [creadaPorId], references: [id])
