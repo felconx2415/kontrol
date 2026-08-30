@@ -7,18 +7,22 @@ import {
   etiquetaEmpresa,
   type EmpresaOpcion,
 } from "../empresas/formulario-empresa";
+import { etiquetaCargo, type CargoOpcion } from "../cargos/formulario-cargo";
 import type { Rol } from "@/generated/prisma/enums";
 
 export type BrigadaOpcion = { id: string; nombre: string; empresaId: string };
 
 /**
- * Rol, empresa y brigada de una cuenta. Van en un solo componente porque se
- * condicionan entre sí y separarlos obligaría a sincronizar tres estados:
+ * Rol, cargo, empresa y brigada de una cuenta. Van en un solo componente porque
+ * se condicionan entre sí y separarlos obligaría a sincronizar tres estados:
  *
  * - El **rol** decide si hay que elegir empresa (el ADMIN no se circunscribe a
  *   ninguna) y si aparece la lista de empresas que atiende (solo el gestor).
  * - La **empresa** acota las brigadas: una brigada vive dentro de una empresa,
  *   y ofrecer las de otra solo produciría un error al guardar.
+ *
+ * El **cargo** no depende de nada: es lo que la persona hace en terreno y vale
+ * igual en cualquier empresa.
  *
  * Lo usan por igual el alta y el panel de edición, así que las dos pantallas
  * aplican las mismas reglas sin repetirlas.
@@ -26,20 +30,24 @@ export type BrigadaOpcion = { id: string; nombre: string; empresaId: string };
 export default function CamposCuenta({
   empresas,
   brigadas,
+  cargos,
   idPrefijo,
   rolInicial = "SOLICITANTE",
   empresaInicial = null,
   brigadaInicial = null,
+  cargoInicial = null,
   gestionadasIniciales = [],
   /** El ADMIN no puede cambiar su propio rol; el select queda fijo. */
   rolBloqueado = false,
 }: {
   empresas: EmpresaOpcion[];
   brigadas: BrigadaOpcion[];
+  cargos: CargoOpcion[];
   idPrefijo: string;
   rolInicial?: Rol;
   empresaInicial?: string | null;
   brigadaInicial?: string | null;
+  cargoInicial?: string | null;
   gestionadasIniciales?: string[];
   rolBloqueado?: boolean;
 }) {
@@ -51,6 +59,10 @@ export default function CamposCuenta({
   const empresasVisibles = empresas.filter(
     (e) => e.activa || e.id === empresaInicial,
   );
+
+  // Mismo trato para el cargo actual: si se desactivó después de asignarlo,
+  // sigue en la lista para que guardar otro cambio no lo borre sin querer.
+  const cargosVisibles = cargos.filter((c) => c.activo || c.id === cargoInicial);
 
   // Sin empresa elegida no hay brigadas que ofrecer: son de una empresa.
   const brigadasVisibles = empresaId
@@ -75,6 +87,30 @@ export default function CamposCuenta({
         </Seleccion>
         {/* Un select deshabilitado no se envía; conserva el rol actual. */}
         {rolBloqueado && <input type="hidden" name="rol" value={rol} />}
+      </Campo>
+
+      <Campo
+        etiqueta="Cargo"
+        htmlFor={`cargo-${idPrefijo}`}
+        pista={
+          cargosVisibles.length === 0
+            ? "Todavía no hay cargos en el catálogo."
+            : "Qué hace en terreno; sale en el acta de entrega."
+        }
+      >
+        <Seleccion
+          id={`cargo-${idPrefijo}`}
+          name="cargoId"
+          defaultValue={cargoInicial ?? ""}
+          disabled={cargosVisibles.length === 0}
+        >
+          <option value="">Sin cargo</option>
+          {cargosVisibles.map((c) => (
+            <option key={c.id} value={c.id}>
+              {etiquetaCargo(c)}
+            </option>
+          ))}
+        </Seleccion>
       </Campo>
 
       <Campo

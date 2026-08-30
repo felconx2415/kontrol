@@ -15,10 +15,11 @@ export default async function PaginaConfiguracion() {
   // Cuánto hay en cada área. El número no es adorno: dice si algo está sin
   // configurar antes de entrar a mirarlo —una empresa sin brigadas, un catálogo
   // vacío— y por eso el índice existe en vez de ser cuatro enlaces.
-  const [articulos, usuarios, brigadas, empresas] = await Promise.all([
+  const [articulos, usuarios, brigadas, cargos, empresas] = await Promise.all([
     db.articulo.count({ where: { activo: true } }),
     db.usuario.count({ where: { activo: true } }),
     db.brigada.count(),
+    db.cargo.count({ where: { activo: true } }),
     db.empresa.count({ where: { activa: true } }),
   ]);
 
@@ -26,6 +27,7 @@ export default async function PaginaConfiguracion() {
     catalogo: { valor: articulos, unidad: ["artículo activo", "artículos activos"] },
     usuarios: { valor: usuarios, unidad: ["cuenta activa", "cuentas activas"] },
     brigadas: { valor: brigadas, unidad: ["brigada", "brigadas"] },
+    cargos: { valor: cargos, unidad: ["cargo activo", "cargos activos"] },
     empresas: { valor: empresas, unidad: ["empresa activa", "empresas activas"] },
   };
 

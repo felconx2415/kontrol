@@ -36,7 +36,10 @@ export default async function Historial({
 
   const persona = await db.usuario.findUnique({
     where: { id: usuarioId },
-    include: { brigada: { select: { nombre: true } } },
+    include: {
+      brigada: { select: { id: true, nombre: true } },
+      cargo: { select: { nombre: true } },
+    },
   });
 
   if (!persona) notFound();
@@ -124,8 +127,21 @@ export default async function Historial({
           {esMio ? "Mi equipamiento" : persona.nombre}
         </h1>
         <p className="text-sm text-tinta-suave">
-          {persona.brigada?.nombre ?? "Sin brigada"} · {vigentes.length} ítem
-          {vigentes.length === 1 ? "" : "s"} asignado
+          {/* La brigada enlaza a su equipamiento: lo de la cuadrilla no sale en
+              esta lista —no es de esta persona— pero es lo primero que se busca
+              desde aquí cuando falta algo. */}
+          {persona.brigada ? (
+            <Link
+              href={`/historial/brigada/${persona.brigada.id}`}
+              className="foco-anillo rounded underline underline-offset-2"
+            >
+              {persona.brigada.nombre}
+            </Link>
+          ) : (
+            "Sin brigada"
+          )}
+          {persona.cargo ? ` · ${persona.cargo.nombre}` : ""} · {vigentes.length}{" "}
+          ítem{vigentes.length === 1 ? "" : "s"} asignado
           {vigentes.length === 1 ? "" : "s"}
         </p>
       </div>

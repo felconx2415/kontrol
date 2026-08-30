@@ -64,6 +64,7 @@ const DESTINOS: Destino[] = [
   { id: "catalogo", href: "/configuracion/catalogo", texto: "Catálogo", icono: "catalogo", grupo: "configuracion", roles: GESTION },
   { id: "usuarios", href: "/configuracion/usuarios", texto: "Usuarios", icono: "usuarios", grupo: "configuracion", roles: SOLO_ADMIN },
   { id: "brigadas", href: "/configuracion/brigadas", texto: "Brigadas", icono: "brigadas", grupo: "configuracion", roles: SOLO_ADMIN },
+  { id: "cargos", href: "/configuracion/cargos", texto: "Cargos", icono: "cargos", grupo: "configuracion", roles: SOLO_ADMIN },
   { id: "empresas", href: "/configuracion/empresas", texto: "Empresas", icono: "empresas", grupo: "configuracion", roles: SOLO_ADMIN },
   { id: "api", href: "/configuracion/api", texto: "API", icono: "api", grupo: "configuracion", roles: SOLO_ADMIN },
 ];
@@ -182,6 +183,7 @@ export const DESCRIPCION_AREA: Record<string, string> = {
   catalogo: "Artículos que se pueden solicitar, con su CECO y vida útil.",
   usuarios: "Cuentas, roles, empresa y brigada de cada persona.",
   brigadas: "Cuadrillas de cada empresa y quién las supervisa.",
+  cargos: "Qué hace cada persona en terreno: liniero, prevencionista, jefe de zona.",
   empresas: "Las organizaciones que separan los datos del sistema.",
   api: "Tokens para que otro sistema consulte los datos, solo lectura.",
 };

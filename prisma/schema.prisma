@@ -83,7 +83,9 @@ enum EstadoPrestamo {
   DEVUELTO
 }
 
-/** Con qué condición volvió cada ítem prestado. */
+/**
+ * Con qué condición volvió cada ítem prestado.
+ */
 enum EstadoDevolucion {
   BUENO // vuelve al stock sin novedad
   DANADO // vuelve, pero con daños que hay que revisar antes de reutilizarlo
@@ -114,7 +116,6 @@ enum TipoNotificacion {
 /**
  * Empresa a la que pertenece la gente y sus datos. Es la unidad de separación:
  * un usuario ve lo de su empresa y nada más.
- *
  * La excepción es el gestor, que puede atender **una o varias** —una misma
  * persona lleva la logística de dos contratistas— y por eso su alcance vive en
  * la relación `gestores` en vez de en `Usuario.empresaId`. El ADMIN no se
@@ -142,19 +143,24 @@ model Empresa {
  * Credencial para consultar la API desde fuera de Kontrol (un tablero, un ERP,
  * un script). La API es de **solo lectura**, así que un token no puede cambiar
  * nada: lo único que decide es qué se alcanza a leer.
- *
  * Del token solo se guarda su `hash`; el valor completo se muestra una vez al
  * crearlo y no vuelve a existir en ninguna parte. Si se pierde, se revoca y se
  * emite otro. `prefijo` son los primeros caracteres, que sí se guardan en claro
  * para poder reconocerlo en pantalla («¿cuál de los tres es el de Power BI?»).
  */
 model TokenApi {
-  id     String @id @default(cuid())
-  /** Para qué es, escrito por quien lo crea: «Tablero de gerencia». */
-  nombre String
-  /** Primeros caracteres del token, para identificarlo sin revelarlo. */
+  id      String @id @default(cuid())
+  /**
+   * Para qué es, escrito por quien lo crea: «Tablero de gerencia».
+   */
+  nombre  String
+  /**
+   * Primeros caracteres del token, para identificarlo sin revelarlo.
+   */
   prefijo String @unique
-  /** SHA-256 del token completo. Ver lib/api-token.ts. */
+  /**
+   * SHA-256 del token completo. Ver lib/api-token.ts.
+   */
   hash    String @unique
 
   // A qué empresa alcanza. Null = todas, y solo un ADMIN puede emitirlo así:
@@ -163,9 +169,13 @@ model TokenApi {
 
   creadoPorId String
   creadoEn    DateTime  @default(now())
-  /** Última vez que se usó, para poder retirar los que ya nadie llama. */
+  /**
+   * Última vez que se usó, para poder retirar los que ya nadie llama.
+   */
   ultimoUsoEn DateTime?
-  /** Revocado: deja de servir sin borrarse, para no perder el rastro. */
+  /**
+   * Revocado: deja de servir sin borrarse, para no perder el rastro.
+   */
   revocadoEn  DateTime?
 
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
@@ -177,7 +187,6 @@ model TokenApi {
 /**
  * Aviso dirigido a una persona concreta. Se guarda en base y no se manda por
  * ningún canal externo: la campana de la barra es el único destino.
- *
  * Cada destinatario tiene su propia fila aunque el hecho sea el mismo, porque
  * «leída» es de cada uno.
  */
@@ -187,7 +196,9 @@ model Notificacion {
   tipo      TipoNotificacion
   titulo    String
   cuerpo    String
-  /** A dónde lleva al tocarla; normalmente el detalle de la solicitud. */
+  /**
+   * A dónde lleva al tocarla; normalmente el detalle de la solicitud.
+   */
   url       String?
   leidaEn   DateTime?
   creadaEn  DateTime         @default(now())
@@ -206,6 +217,10 @@ model Usuario {
   nombre       String
   rut          String?
   rol          Rol      @default(SOLICITANTE)
+  // Qué hace la persona en terreno (liniero, prevencionista, jefe de zona).
+  // Es distinto del rol, que dice qué puede hacer dentro de Kontrol: dos
+  // linieros y un prevencionista son los tres SOLICITANTE.
+  cargoId      String?
   // Firma registrada en el perfil, como PNG en /uploads. Quien entrega
   // material no puede firmar a mano cada acta que emite, así que deja su firma
   // una vez y el sistema la estampa en los documentos que genera.
@@ -218,11 +233,12 @@ model Usuario {
   activo       Boolean  @default(true)
   creadoEn     DateTime @default(now())
 
-  empresa Empresa? @relation("MiembrosEmpresa", fields: [empresaId], references: [id])
+  empresa             Empresa?  @relation("MiembrosEmpresa", fields: [empresaId], references: [id])
   // Las empresas que este gestor atiende: una, varias o ninguna. Solo tiene
   // sentido en cuentas GESTOR; en el resto queda vacía.
   empresasGestionadas Empresa[] @relation("GestoresEmpresa")
 
+  cargo                Cargo?    @relation(fields: [cargoId], references: [id])
   brigada              Brigada?  @relation("MiembrosBrigada", fields: [brigadaId], references: [id])
   brigadasSupervisadas Brigada[] @relation("SupervisorBrigada")
 
@@ -245,9 +261,11 @@ model Usuario {
   prestamosRegistrados     Prestamo[]
   equipamientoBodega       AsignacionBodega[] @relation("EquipamientoAsignado")
   asignacionesBodegaHechas AsignacionBodega[] @relation("AsignacionesHechas")
+  asignacionesRetiradas    AsignacionBodega[] @relation("AsignacionesRetiradas")
 
   @@index([rol])
   @@index([empresaId])
+  @@index([cargoId])
 }
 
 model Brigada {
@@ -259,27 +277,49 @@ model Brigada {
   empresaId    String
   supervisorId String?
 
-  empresa     Empresa     @relation(fields: [empresaId], references: [id])
-  supervisor  Usuario?    @relation("SupervisorBrigada", fields: [supervisorId], references: [id])
-  miembros    Usuario[]   @relation("MiembrosBrigada")
-  solicitudes Solicitud[]
+  empresa      Empresa            @relation(fields: [empresaId], references: [id])
+  supervisor   Usuario?           @relation("SupervisorBrigada", fields: [supervisorId], references: [id])
+  miembros     Usuario[]          @relation("MiembrosBrigada")
+  solicitudes  Solicitud[]
+  // Equipamiento de bodega que es de la brigada, no de ninguno de sus
+  // miembros: la motosierra, la carpa, el botiquín.
+  equipamiento AsignacionBodega[] @relation("EquipamientoBrigada")
 
   // El nombre es único dentro de la empresa, no en todo el sistema: dos
   // empresas pueden tener cada una su «Brigada Norte».
   @@unique([empresaId, nombre])
 }
 
+/**
+ * Cargo del personal: liniero, prevencionista de riesgo, jefe de zona.
+ * Es catálogo y no texto libre en la ficha porque su razón de ser es agrupar:
+ * «el EPP de los linieros», «lo que lleva prevención». Escrito a mano, la misma
+ * función acaba siendo «prevencionista», «Prev. de riesgo» y «PdR», y agrupar
+ * deja de funcionar.
+ * No pertenece a ninguna empresa: un liniero es un liniero en cualquiera de
+ * ellas, y duplicar la lista por empresa solo obligaría a mantenerla dos veces.
+ * Lo administra el ADMIN, que tampoco se circunscribe a ninguna.
+ */
+model Cargo {
+  id       String   @id @default(cuid())
+  nombre   String   @unique
+  activo   Boolean  @default(true)
+  creadoEn DateTime @default(now())
+
+  personas Usuario[]
+}
+
 model Articulo {
-  id            String    @id @default(cuid())
-  codigo        String    @unique
-  nombre        String
-  categoria     Categoria
-  unidad        String    @default("unidad")
+  id           String    @id @default(cuid())
+  codigo       String    @unique
+  nombre       String
+  categoria    Categoria
+  unidad       String    @default("unidad")
   // Centro de costo (CECO) del codigario; opcional para ítems creados a mano.
-  ceco          String?
+  ceco         String?
   // Días de vida útil del EPP; si es null el ítem no vence.
-  vidaUtilDias  Int?
-  activo        Boolean   @default(true)
+  vidaUtilDias Int?
+  activo       Boolean   @default(true)
 
   items SolicitudItem[]
 
@@ -287,8 +327,8 @@ model Articulo {
 }
 
 model Solicitud {
-  id String @id @default(cuid())
-  folio Int @unique
+  id            String          @id @default(cuid())
+  folio         Int             @unique
   // Beneficiario: para quién es el equipamiento. Es quien firma al recibir y
   // en cuyo «Mi equipamiento» queda el ítem, aunque no haya tecleado él la
   // solicitud (ver creadaPorId).
@@ -315,21 +355,21 @@ model Solicitud {
 
   // Ajuste hecho por el aprobador antes de aprobar. Se guarda aparte de la
   // auditoría para poder mostrarle al solicitante que su pedido cambió.
-  editadaEn   DateTime?
+  editadaEn    DateTime?
   editadaPorId String?
 
-  gestorId         String?
+  gestorId            String?
   // Referencia manual del pedido hecho al almacén externo. Heredado: el número
   // de reserva vive ahora por línea (SolicitudItem.numeroReserva), porque una
   // solicitud mixta lleva una reserva de EPP y otra de equipamiento. Se
   // conserva para no perder lo registrado antes de ese cambio.
-  pedidoExternoRef String?
+  pedidoExternoRef    String?
   // Cuándo se pidió el número de reserva (estado RESERVA_SOLICITADA).
   reservaSolicitadaEn DateTime?
-  enGestionEn      DateTime?
-  recibidaEn       DateTime?
+  enGestionEn         DateTime?
+  recibidaEn          DateTime?
 
-  canceladaEn DateTime?
+  canceladaEn  DateTime?
   // En qué estado estaba justo antes de cancelarse. Existe para poder retomar
   // una solicitud cancelada dejándola donde iba: una cancelada en gestión
   // vuelve a gestión, no al principio. Null mientras no se ha cancelado, y se
@@ -354,10 +394,10 @@ model Solicitud {
 }
 
 model SolicitudItem {
-  id          String  @id @default(cuid())
-  solicitudId String
-  articuloId  String
-  cantidad    Int     @default(1)
+  id               String @id @default(cuid())
+  solicitudId      String
+  articuloId       String
+  cantidad         Int    @default(1)
   // Cantidad realmente recibida del almacén al marcar la solicitud como
   // recibida. Puede ser menor a la pedida (a veces no llega todo). Null
   // mientras no se ha recibido; al marcar recibida se fija por ítem.
@@ -367,13 +407,13 @@ model SolicitudItem {
   // por solicitud porque una solicitud mixta se gestiona con dos reservas: la
   // del EPP y la del equipamiento. La posición es la línea dentro de esa
   // reserva («0010», «0020»…) y es el dato clave del equipamiento.
-  numeroReserva    String?
-  posicionReserva  String?
+  numeroReserva   String?
+  posicionReserva String?
 
   // Motivo del ítem (todas las solicitudes lo llevan; ver enum Motivo).
-  motivo           Motivo?
-  detalleReemplazo String?
-  fotoEvidenciaUrl String?
+  motivo                Motivo?
+  detalleReemplazo      String?
+  fotoEvidenciaUrl      String?
   // Trazabilidad: el EntregaItem que este ítem viene a reemplazar.
   entregaAnteriorItemId String? @unique
 
@@ -483,9 +523,9 @@ model ItemBodega {
   empresaId String?
   creadoEn  DateTime @default(now())
 
-  empresa         Empresa?           @relation(fields: [empresaId], references: [id])
-  movimientos     MovimientoBodega[]
-  lineasPrestamo  PrestamoItem[]
+  empresa          Empresa?           @relation(fields: [empresaId], references: [id])
+  movimientos      MovimientoBodega[]
+  lineasPrestamo   PrestamoItem[]
   lineasAsignacion AsignacionItem[]
 
   // El código identifica el ítem dentro de su bodega. Deja de ser único en todo
@@ -497,22 +537,22 @@ model ItemBodega {
 }
 
 model MovimientoBodega {
-  id       String         @id @default(cuid())
-  itemId   String
-  tipo     TipoMovimiento
+  id              String         @id @default(cuid())
+  itemId          String
+  tipo            TipoMovimiento
   // Unidades del movimiento. Para AJUSTE guarda el nuevo stock absoluto; para
   // el resto es siempre positivo y el signo lo determina `tipo`.
-  cantidad Int
+  cantidad        Int
   // Stock del ítem tras aplicar el movimiento (foto para auditoría).
   stockResultante Int
   // A quién se entregó o prestó. Texto libre: puede no ser usuario del sistema.
-  persona    String?
-  notas      String?
+  persona         String?
+  notas           String?
   // Quién registró el movimiento en Kontrol.
-  usuarioId  String
+  usuarioId       String
   // Préstamo asociado, cuando el movimiento es PRESTAMO o DEVOLUCION.
-  prestamoId String?
-  creadoEn   DateTime @default(now())
+  prestamoId      String?
+  creadoEn        DateTime       @default(now())
 
   item     ItemBodega @relation(fields: [itemId], references: [id], onDelete: Cascade)
   usuario  Usuario    @relation(fields: [usuarioId], references: [id])
@@ -541,11 +581,11 @@ model Prestamo {
   // Acta firmada: la firma de salida se toma al prestar y la de devolución al
   // recibir de vuelta. Ambas son PNG guardados como archivo. Nullable para no
   // romper préstamos previos al acta.
-  firmaSalidaUrl        String?
-  firmaDevolucionUrl    String?
+  firmaSalidaUrl          String?
+  firmaDevolucionUrl      String?
   observacionesDevolucion String?
   // Fotos de daños al devolver, como arreglo JSON de rutas públicas.
-  fotosDevolucion       String?
+  fotosDevolucion         String?
 
   prestadoPor Usuario            @relation(fields: [prestadoPorId], references: [id])
   items       PrestamoItem[]
@@ -582,9 +622,13 @@ model PrestamoItem {
 }
 
 /**
- * Entrega definitiva de equipamiento de bodega a un usuario del sistema: baja
- * el stock y queda a nombre del usuario (aparece en su «Mi equipamiento»).
- *
+ * Entrega definitiva de equipamiento de bodega: baja el stock y queda a nombre
+ * de quien lo recibe. No vuelve a la bodega.
+ * El dueño es **una persona o una brigada**, nunca las dos y nunca ninguna. Hay
+ * material que no es de nadie en particular —la motosierra, la carpa, el
+ * botiquín de la BBOO 2169— y ponerlo a nombre del liniero que ese día fue a
+ * buscarlo falseaba el registro: al mes siguiente el liniero cambia de cuadrilla
+ * y la motosierra se va con él en el papel, no en la realidad.
  * Agrupa varias líneas (AsignacionItem) por la misma razón que el préstamo: a
  * una persona se le entregan casco, guantes y linterna de una vez y firma una
  * sola acta; tratarlas como entregas sueltas obligaba a repetir el trámite y
@@ -592,7 +636,10 @@ model PrestamoItem {
  */
 model AsignacionBodega {
   id            String   @id @default(cuid())
-  usuarioId     String
+  // A nombre de quién queda. Va uno de los dos y solo uno: lo garantiza
+  // `asignarItemBodega`, porque SQLite no tiene dónde declararlo.
+  usuarioId     String?
+  brigadaId     String?
   notas         String?
   asignadoPorId String
   asignadoEn    DateTime @default(now())
@@ -602,11 +649,26 @@ model AsignacionBodega {
   // a que se pidiera firma.
   firmaPngUrl String?
 
-  usuario     Usuario          @relation("EquipamientoAsignado", fields: [usuarioId], references: [id])
+  // Quién retiró y firmó, cuando no es el propio dueño. Una brigada no tiene
+  // manos: siempre va alguien a buscar el material, y es su firma la que queda
+  // en el acta, así que el acta tiene que nombrarlo. Si tiene cuenta se guarda
+  // el id y su nombre sale de ella; si no —un externo, alguien de otra faena—
+  // se anota a mano. Nunca los dos. Es el mismo trato que `Entrega.recibidoPor`.
+  retiradoPorId     String?
+  retiradoPorNombre String?
+  retiradoPorRut    String?
+
+  // Restrict y no SetNull —el defecto de Prisma en una relación opcional—
+  // porque una asignación sin dueño no es un registro degradado, es un registro
+  // roto: hay stock que salió de bodega y un acta firmada que no apunta a nadie.
+  usuario     Usuario?         @relation("EquipamientoAsignado", fields: [usuarioId], references: [id], onDelete: Restrict)
+  brigada     Brigada?         @relation("EquipamientoBrigada", fields: [brigadaId], references: [id], onDelete: Restrict)
   asignadoPor Usuario          @relation("AsignacionesHechas", fields: [asignadoPorId], references: [id])
+  retiradoPor Usuario?         @relation("AsignacionesRetiradas", fields: [retiradoPorId], references: [id])
   items       AsignacionItem[]
 
   @@index([usuarioId])
+  @@index([brigadaId])
 }
 
 /**

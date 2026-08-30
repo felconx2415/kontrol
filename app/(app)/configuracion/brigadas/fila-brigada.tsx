@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   editarBrigada,
@@ -54,7 +55,14 @@ export default function FilaBrigada({
     <>
       <tr className="transition-colors duration-150 hover:bg-panel-suave">
         <td data-label="Brigada" className="px-4 py-2.5 font-medium">
-          {brigada.nombre}
+          {/* Al equipamiento de la brigada, igual que el nombre de una cuenta
+              lleva al suyo. */}
+          <Link
+            href={`/historial/brigada/${brigada.id}`}
+            className="foco-anillo inline-flex min-h-6 items-center rounded underline underline-offset-2"
+          >
+            {brigada.nombre}
+          </Link>
         </td>
         <td data-label="Empresa" className="px-4 py-2.5 text-tinta-suave">
           {brigada.empresaNombre}

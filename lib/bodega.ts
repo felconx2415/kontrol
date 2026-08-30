@@ -62,3 +62,33 @@ export const REQUIERE_PERSONA: TipoMovimiento[] = ["SALIDA"];
  * si más adelante hace falta un mínimo por ítem, se mueve al modelo.
  */
 export const UMBRAL_STOCK_BAJO = 3;
+
+/**
+ * A nombre de quién quedó una asignación de bodega, resuelto para pantalla.
+ *
+ * El dueño es una persona o una brigada, así que todo lo que muestre una
+ * asignación —el listado de reportes, el aviso al entregar, la planilla— tiene
+ * que resolver el mismo «¿de quién es esto?». Se hace una sola vez aquí para
+ * que las tres superficies digan lo mismo y enlacen al mismo sitio.
+ */
+export function duenoAsignacion(asignacion: {
+  usuario: { id: string; nombre: string } | null;
+  brigada: { id: string; nombre: string } | null;
+}): { nombre: string; href: string | null; esBrigada: boolean } {
+  if (asignacion.brigada) {
+    return {
+      nombre: asignacion.brigada.nombre,
+      href: `/historial/brigada/${asignacion.brigada.id}`,
+      esBrigada: true,
+    };
+  }
+  if (asignacion.usuario) {
+    return {
+      nombre: asignacion.usuario.nombre,
+      href: `/historial/${asignacion.usuario.id}`,
+      esBrigada: false,
+    };
+  }
+  // No debería ocurrir: `asignarItemBodega` exige uno de los dos.
+  return { nombre: "—", href: null, esBrigada: false };
+}

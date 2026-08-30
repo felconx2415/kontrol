@@ -16,6 +16,7 @@ import Insignia from "@/components/ui/insignia";
 import { Aviso } from "@/components/ui/superficie";
 import CamposCuenta, { type BrigadaOpcion } from "./campos-cuenta";
 import type { EmpresaOpcion } from "../empresas/formulario-empresa";
+import type { CargoOpcion } from "../cargos/formulario-cargo";
 import type { Rol } from "@/generated/prisma/enums";
 
 export type UsuarioFila = {
@@ -26,6 +27,8 @@ export type UsuarioFila = {
   rol: Rol;
   brigadaId: string | null;
   brigadaNombre: string | null;
+  cargoId: string | null;
+  cargoNombre: string | null;
   empresaId: string | null;
   empresaNombre: string | null;
   /** Las que atiende, si es gestor. Vacío en el resto de los roles. */
@@ -44,6 +47,7 @@ export default function FilaUsuario({
   usuario,
   brigadas,
   empresas,
+  cargos,
   esUsuarioActual,
   marcada,
   onMarcar,
@@ -51,6 +55,7 @@ export default function FilaUsuario({
   usuario: UsuarioFila;
   brigadas: BrigadaOpcion[];
   empresas: EmpresaOpcion[];
+  cargos: CargoOpcion[];
   esUsuarioActual: boolean;
   /** Seleccionada para una acción en lote. */
   marcada: boolean;
@@ -87,6 +92,13 @@ export default function FilaUsuario({
           >
             {usuario.nombre}
           </Link>
+          {/* Bajo el nombre y no en columna propia: la tabla ya lleva ocho y
+              el cargo se lee junto a la persona, no comparado entre filas. */}
+          {usuario.cargoNombre && (
+            <span className="block text-xs text-tinta-tenue">
+              {usuario.cargoNombre}
+            </span>
+          )}
         </td>
         <td
           data-label="Usuario"
@@ -169,6 +181,7 @@ export default function FilaUsuario({
                 usuario={usuario}
                 brigadas={brigadas}
                 empresas={empresas}
+                cargos={cargos}
                 esUsuarioActual={esUsuarioActual}
                 onCerrar={cerrar}
               />
@@ -218,12 +231,14 @@ function PanelEditar({
   usuario,
   brigadas,
   empresas,
+  cargos,
   esUsuarioActual,
   onCerrar,
 }: {
   usuario: UsuarioFila;
   brigadas: BrigadaOpcion[];
   empresas: EmpresaOpcion[];
+  cargos: CargoOpcion[];
   esUsuarioActual: boolean;
   onCerrar: () => void;
 }) {
@@ -267,9 +282,11 @@ function PanelEditar({
         idPrefijo={usuario.id}
         empresas={empresas}
         brigadas={brigadas}
+        cargos={cargos}
         rolInicial={usuario.rol}
         empresaInicial={usuario.empresaId}
         brigadaInicial={usuario.brigadaId}
+        cargoInicial={usuario.cargoId}
         gestionadasIniciales={usuario.empresasGestionadas}
         rolBloqueado={esUsuarioActual}
       />

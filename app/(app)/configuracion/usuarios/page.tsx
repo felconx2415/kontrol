@@ -24,7 +24,7 @@ export default async function AdminUsuarios({
 
   const { page, q } = await searchParams;
 
-  const [usuarios, brigadas, empresas] = await Promise.all([
+  const [usuarios, brigadas, empresas, cargos] = await Promise.all([
     // Todas las cuentas y no una página: buscarlas sin tropezar con las tildes
     // —«perez» tiene que encontrar a «Pérez»— exige filtrarlas en JS, y la
     // paginación se aplica después sobre lo que quedó. Ver lib/busqueda.ts.
@@ -33,6 +33,7 @@ export default async function AdminUsuarios({
       include: {
         brigada: { select: { nombre: true } },
         empresa: { select: { nombre: true } },
+        cargo: { select: { nombre: true } },
         empresasGestionadas: { select: { id: true } },
       },
     }),
@@ -54,6 +55,11 @@ export default async function AdminUsuarios({
       orderBy: { nombre: "asc" },
       select: { id: true, nombre: true, activa: true },
     }),
+    // El cargo no se acota por empresa: vale igual en todas.
+    db.cargo.findMany({
+      orderBy: { nombre: "asc" },
+      select: { id: true, nombre: true, activo: true },
+    }),
   ]);
 
   // Se busca por lo que identifica a una persona en la tabla: cómo se llama,
@@ -67,6 +73,7 @@ export default async function AdminUsuarios({
       ETIQUETA_ROL[u.rol],
       u.empresa?.nombre,
       u.brigada?.nombre,
+      u.cargo?.nombre,
     ),
   );
   const buscando = Boolean(q?.trim());
@@ -91,7 +98,11 @@ export default async function AdminUsuarios({
       </div>
 
       {empresas.some((e) => e.activa) ? (
-        <FormularioUsuario brigadas={brigadas} empresas={empresas} />
+        <FormularioUsuario
+          brigadas={brigadas}
+          empresas={empresas}
+          cargos={cargos}
+        />
       ) : (
         <Aviso tono="espera">
           Antes de crear cuentas necesitas al menos una empresa activa: cada
@@ -105,7 +116,7 @@ export default async function AdminUsuarios({
 
       <Buscador
         etiqueta="Buscar cuenta"
-        placeholder="Nombre, usuario, RUT, empresa o brigada…"
+        placeholder="Nombre, usuario, RUT, empresa, brigada o cargo…"
         valor={q ?? ""}
         accion="/configuracion/usuarios"
         resumen={
@@ -119,6 +130,7 @@ export default async function AdminUsuarios({
         <ListaUsuarios
           idActual={actual.id}
           empresas={empresas}
+          cargos={cargos}
           brigadas={brigadas.map((b) => ({
             id: b.id,
             nombre: b.nombre,
@@ -133,6 +145,8 @@ export default async function AdminUsuarios({
             rol: u.rol,
             brigadaId: u.brigadaId,
             brigadaNombre: u.brigada?.nombre ?? null,
+            cargoId: u.cargoId,
+            cargoNombre: u.cargo?.nombre ?? null,
             empresaId: u.empresaId,
             empresaNombre: u.empresa?.nombre ?? null,
             empresasGestionadas: u.empresasGestionadas.map((e) => e.id),

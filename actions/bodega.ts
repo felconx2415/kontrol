@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { registrarAuditoria, requerirRol } from "@/lib/auth";
-import { alcanza, empresaParaCrear } from "@/lib/alcance";
+import { alcanza, empresaParaCrear, type Alcance } from "@/lib/alcance";
 import { destinatariosPorRol, notificar } from "@/lib/notificaciones";
 import { bufferDesdeDataUrl, guardarImagen } from "@/lib/archivos";
 import { dejarAviso } from "@/lib/avisos";
@@ -585,10 +585,133 @@ type LineaAsignacion = {
   numeroSerie?: string | null;
 };
 
+/** A nombre de quién queda el equipamiento: una persona o una brigada. */
+type Destino =
+  | { tipo: "usuario"; id: string; nombre: string; empresaId: string | null }
+  | { tipo: "brigada"; id: string; nombre: string; empresaId: string | null };
+
 /**
- * Asigna equipamiento de bodega a un usuario del sistema como entrega
- * definitiva: descuenta el stock y deja el registro a nombre del usuario (que
- * lo verá en «Mi equipamiento»). No vuelve a la bodega.
+ * Lee el destino del formulario y comprueba que se alcanza.
+ *
+ * El equipamiento sale de la bodega de una empresa: quien lo recibe —persona o
+ * brigada— tiene que ser de una empresa que se gestione, o el material cruzaría
+ * la frontera que separa a los contratistas.
+ */
+async function leerDestino(
+  formData: FormData,
+  alcance: Alcance,
+): Promise<{ destino: Destino; error?: undefined } | { destino?: undefined; error: string }> {
+  if (String(formData.get("destino") ?? "usuario") === "brigada") {
+    const id = String(formData.get("brigadaId") ?? "");
+    const brigada = await db.brigada.findUnique({ where: { id } });
+    if (!brigada) return { error: "Elige una brigada válida." };
+    if (!alcanza(alcance, brigada.empresaId)) {
+      return { error: "Esa brigada no pertenece a ninguna de las empresas que gestionas." };
+    }
+    return {
+      destino: {
+        tipo: "brigada",
+        id: brigada.id,
+        nombre: brigada.nombre,
+        empresaId: brigada.empresaId,
+      },
+    };
+  }
+
+  const id = String(formData.get("usuarioId") ?? "");
+  const persona = await db.usuario.findUnique({ where: { id } });
+  if (!persona || !persona.activo) return { error: "Elige un usuario válido." };
+  if (!alcanza(alcance, persona.empresaId)) {
+    return { error: "Esa persona no pertenece a ninguna de las empresas que gestionas." };
+  }
+  return {
+    destino: {
+      tipo: "usuario",
+      id: persona.id,
+      nombre: persona.nombre,
+      empresaId: persona.empresaId,
+    },
+  };
+}
+
+/** Los tres campos de quién retiró, tal como se guardan. */
+type Retiro = {
+  retiradoPorId: string | null;
+  retiradoPorNombre: string | null;
+  retiradoPorRut: string | null;
+};
+
+/** El dueño retiró él mismo: no hay tercero que nombrar en el acta. */
+const RETIRO_DEL_DUENO: Retiro = {
+  retiradoPorId: null,
+  retiradoPorNombre: null,
+  retiradoPorRut: null,
+};
+
+/**
+ * Quién vino a buscar el material y firmó.
+ *
+ * Cuando el dueño es una brigada esto no es opcional: una brigada no tiene
+ * manos, siempre va alguien, y la firma del acta es de esa persona. Si no se
+ * nombra, la firma no correspondería a nadie.
+ */
+async function leerRetiro(
+  formData: FormData,
+  destino: Destino,
+  alcance: Alcance,
+): Promise<{ retiro: Retiro; error?: undefined } | { retiro?: undefined; error: string }> {
+  const modo = String(formData.get("retiroModo") ?? "dueno");
+
+  if (modo === "dueno") {
+    if (destino.tipo === "brigada") {
+      return { error: "Indica quién retira el equipamiento de la brigada." };
+    }
+    return { retiro: RETIRO_DEL_DUENO };
+  }
+
+  if (modo === "usuario") {
+    const id = String(formData.get("retiradoPorId") ?? "");
+    if (!id) return { error: "Elige quién retira el equipamiento." };
+
+    // Retirar «en nombre de sí mismo» no es un caso: es la entrega normal.
+    if (destino.tipo === "usuario" && id === destino.id) {
+      return { retiro: RETIRO_DEL_DUENO };
+    }
+
+    const persona = await db.usuario.findUnique({ where: { id } });
+    if (!persona || !persona.activo) {
+      return { error: "Esa persona ya no existe o está desactivada." };
+    }
+    if (!alcanza(alcance, persona.empresaId)) {
+      return { error: "Esa persona no pertenece a una empresa que gestiones." };
+    }
+    return {
+      retiro: {
+        retiradoPorId: persona.id,
+        retiradoPorNombre: null,
+        retiradoPorRut: null,
+      },
+    };
+  }
+
+  const nombre = String(formData.get("retiradoPorNombre") ?? "").trim();
+  const rut = String(formData.get("retiradoPorRut") ?? "").trim() || null;
+  if (nombre.length < 3) {
+    return { error: "Indica el nombre completo de quien retira." };
+  }
+  return {
+    retiro: { retiradoPorId: null, retiradoPorNombre: nombre, retiradoPorRut: rut },
+  };
+}
+
+/**
+ * Asigna equipamiento de bodega como entrega definitiva: descuenta el stock y
+ * deja el registro a nombre de quien lo recibe. No vuelve a la bodega.
+ *
+ * El dueño es una persona —lo verá en «Mi equipamiento»— o una **brigada**: hay
+ * material que es de la cuadrilla y no de nadie en particular, y ponerlo a
+ * nombre del que ese día fue a buscarlo lo hacía viajar con él al cambiar de
+ * brigada, en el papel pero no en la realidad.
  *
  * Admite varias líneas por la misma razón que el préstamo: a quien se le
  * habilita se le entrega casco, guantes y linterna en el mismo acto y firma
@@ -601,12 +724,11 @@ export async function asignarItemBodega(
 ): Promise<EstadoBodega> {
   const usuarioActual = await requerirRol(...ROLES_GESTION);
 
-  const usuarioId = String(formData.get("usuarioId") ?? "");
   const notas = String(formData.get("notas") ?? "").trim() || null;
   const firma = bufferDesdeDataUrl(String(formData.get("firma") ?? ""));
 
   // La asignación es una entrega definitiva: sale de bodega y queda a nombre
-  // de la persona, así que se firma igual que un préstamo.
+  // de alguien, así que se firma igual que un préstamo.
   if (!firma) return { error: "Falta la firma de quien recibe el equipamiento." };
 
   let lineas: LineaAsignacion[];
@@ -624,18 +746,18 @@ export async function asignarItemBodega(
     return { error: "Hay un ítem repetido. Súmalo en una sola línea." };
   }
 
-  const [items, usuario] = await Promise.all([
-    db.itemBodega.findMany({ where: { id: { in: ids } } }),
-    db.usuario.findUnique({ where: { id: usuarioId } }),
-  ]);
-  const porId = new Map(items.map((i) => [i.id, i]));
+  // Se comprueba el dato y no el error: un `error` de tipo string admite la
+  // cadena vacía, y con ella TypeScript no descartaría la rama fallida.
+  const elegido = await leerDestino(formData, usuarioActual.alcance);
+  if (!elegido.destino) return { error: elegido.error };
+  const destino = elegido.destino;
 
-  if (!usuario || !usuario.activo) return { error: "Elige un usuario válido." };
-  // El equipamiento sale de la bodega de una empresa y queda a nombre de
-  // alguien: ese alguien tiene que ser de una empresa que se alcance.
-  if (!alcanza(usuarioActual.alcance, usuario.empresaId)) {
-    return { error: "Esa persona no pertenece a ninguna de las empresas que gestionas." };
-  }
+  const retirado = await leerRetiro(formData, destino, usuarioActual.alcance);
+  if (!retirado.retiro) return { error: retirado.error };
+  const retiro = retirado.retiro;
+
+  const items = await db.itemBodega.findMany({ where: { id: { in: ids } } });
+  const porId = new Map(items.map((i) => [i.id, i]));
 
   const ajeno = items.find((i) => !alcanza(usuarioActual.alcance, i.empresaId));
   if (ajeno) {
@@ -665,10 +787,13 @@ export async function asignarItemBodega(
   const asignacionId = await db.$transaction(async (tx) => {
     const asignacion = await tx.asignacionBodega.create({
       data: {
-        usuarioId: usuario.id,
+        // Uno de los dos y solo uno; el otro queda en null.
+        usuarioId: destino.tipo === "usuario" ? destino.id : null,
+        brigadaId: destino.tipo === "brigada" ? destino.id : null,
         notas,
         asignadoPorId: usuarioActual.id,
         firmaPngUrl,
+        ...retiro,
       },
     });
 
@@ -694,7 +819,7 @@ export async function asignarItemBodega(
           tipo: "ASIGNACION",
           cantidad: linea.cantidad,
           stockResultante,
-          persona: usuario.nombre,
+          persona: destino.nombre,
           notas,
           usuarioId: usuarioActual.id,
         },
@@ -709,7 +834,12 @@ export async function asignarItemBodega(
     entidad: "AsignacionBodega",
     entidadId: asignacionId,
     accion: "MOV_ASIGNACION",
-    detalle: { usuarioId: usuario.id, usuario: usuario.nombre, lineas: lineas.length },
+    detalle: {
+      destino: destino.tipo,
+      destinoId: destino.id,
+      destinoNombre: destino.nombre,
+      lineas: lineas.length,
+    },
   });
 
   const primero = porId.get(lineas[0].itemId)!;
@@ -718,23 +848,50 @@ export async function asignarItemBodega(
       ? `${lineas[0].cantidad} ${primero.unidad}(s) de «${primero.nombre}»`
       : `${lineas.length} ítems`;
 
-  // A quien recibió: el equipamiento quedó a su nombre y su acta ya existe.
-  await notificar({
-    destinatarios: [usuario.id],
-    tipo: "BODEGA_ASIGNACION",
-    titulo:
-      lineas.length === 1
-        ? `Te asignaron ${primero.nombre}`
-        : `Te asignaron ${lineas.length} ítems de bodega`,
-    cuerpo: `${resumen} desde bodega. El acta firmada está en tus documentos.`,
-    url: "/documentos",
-    excluir: usuarioActual.id,
-  });
+  if (destino.tipo === "usuario") {
+    // A quien recibió: el equipamiento quedó a su nombre y su acta ya existe.
+    await notificar({
+      destinatarios: [destino.id],
+      tipo: "BODEGA_ASIGNACION",
+      titulo:
+        lineas.length === 1
+          ? `Te asignaron ${primero.nombre}`
+          : `Te asignaron ${lineas.length} ítems de bodega`,
+      cuerpo: `${resumen} desde bodega. El acta firmada está en tus documentos.`,
+      url: "/documentos",
+      excluir: usuarioActual.id,
+    });
+  } else {
+    // Al supervisor: el material es de su brigada y él responde por él. Quien
+    // lo retiró no necesita aviso —estuvo ahí y firmó—, y avisar a la cuadrilla
+    // entera convertiría cada guante en una notificación para seis personas.
+    const brigada = await db.brigada.findUnique({
+      where: { id: destino.id },
+      select: { supervisorId: true },
+    });
+    if (brigada?.supervisorId) {
+      await notificar({
+        destinatarios: [brigada.supervisorId],
+        tipo: "BODEGA_ASIGNACION",
+        titulo:
+          lineas.length === 1
+            ? `${destino.nombre} recibió ${primero.nombre}`
+            : `${destino.nombre} recibió ${lineas.length} ítems de bodega`,
+        cuerpo: `${resumen} quedaron a nombre de la brigada.`,
+        url: `/historial/brigada/${destino.id}`,
+        excluir: usuarioActual.id,
+      });
+    }
+  }
 
-  await dejarAviso(`Asignados ${resumen} a ${usuario.nombre} con firma.`);
+  await dejarAviso(`Asignados ${resumen} a ${destino.nombre} con firma.`);
   revalidatePath("/bodega");
   for (const linea of lineas) revalidatePath(`/bodega/${linea.itemId}`);
-  revalidatePath(`/historial/${usuario.id}`);
+  revalidatePath(
+    destino.tipo === "usuario"
+      ? `/historial/${destino.id}`
+      : `/historial/brigada/${destino.id}`,
+  );
   // Igual que en el préstamo: el respaldo de la entrega se ofrece al entregar.
   redirect(`/bodega?asignacion=${asignacionId}`);
 }

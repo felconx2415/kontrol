@@ -17,7 +17,7 @@ export default async function PaginaAsignar({
   const { item: itemPreseleccionado } = await searchParams;
   const deMiEmpresa = filtroEmpresa(usuario.alcance);
 
-  const [items, usuarios] = await Promise.all([
+  const [items, usuarios, brigadas] = await Promise.all([
     db.itemBodega.findMany({
       where: { ...deMiEmpresa, activo: true, stock: { gt: 0 } },
       orderBy: { nombre: "asc" },
@@ -26,7 +26,23 @@ export default async function PaginaAsignar({
     db.usuario.findMany({
       where: { ...deMiEmpresa, activo: true },
       orderBy: { nombre: "asc" },
-      select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+      select: {
+        id: true,
+        nombre: true,
+        brigada: { select: { nombre: true } },
+        cargo: { select: { nombre: true } },
+      },
+    }),
+    // Con cuántos: al elegir a quién entregar, «BBOO 2169 · 6 personas» dice
+    // más que el nombre solo, sobre todo entre brigadas de nombre parecido.
+    db.brigada.findMany({
+      where: deMiEmpresa,
+      orderBy: { nombre: "asc" },
+      select: {
+        id: true,
+        nombre: true,
+        _count: { select: { miembros: true } },
+      },
     }),
   ]);
 
@@ -41,8 +57,9 @@ export default async function PaginaAsignar({
         </Link>
         <h1 className="titulo-pagina mt-2">Asignar equipamiento</h1>
         <p className="text-sm text-tinta-suave">
-          Entrega definitiva a un usuario: baja el stock de la bodega y queda a su
-          nombre (lo verá en «Mi equipamiento»).
+          Entrega definitiva: baja el stock de la bodega y queda a nombre de una
+          persona —lo verá en «Mi equipamiento»— o de una brigada entera, cuando
+          el material es de la cuadrilla y no de nadie en particular.
         </p>
       </div>
 
@@ -56,6 +73,12 @@ export default async function PaginaAsignar({
             id: u.id,
             nombre: u.nombre,
             brigada: u.brigada?.nombre ?? null,
+            cargo: u.cargo?.nombre ?? null,
+          }))}
+          brigadas={brigadas.map((b) => ({
+            id: b.id,
+            nombre: b.nombre,
+            miembros: b._count.miembros,
           }))}
         />
       )}

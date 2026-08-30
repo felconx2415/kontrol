@@ -6,6 +6,7 @@ import FirmaCanvas from "@/components/firma-canvas";
 import Boton from "@/components/ui/boton";
 import { AreaTexto, Campo, Entrada, Etiqueta, Seleccion } from "@/components/ui/campo";
 import { Aviso, Tarjeta } from "@/components/ui/superficie";
+import OpcionTarjeta from "@/components/opcion-tarjeta";
 import { cantidadConUnidad } from "@/lib/unidades";
 
 type Item = {
@@ -120,22 +121,26 @@ export default function FormularioEntrega({
           </p>
 
           <div className="mt-3 space-y-2">
-            <OpcionReceptor
+            <OpcionTarjeta
+              grupo="receptorModoVisible"
               valor="destinatario"
               actual={modo}
               onElegir={setModo}
               titulo={destinatarioNombre}
               detalle="El destinatario retira y firma."
             />
-            <OpcionReceptor
+            <OpcionTarjeta
+              grupo="receptorModoVisible"
               valor="usuario"
               actual={modo}
               onElegir={setModo}
               titulo="Otra persona con cuenta"
               detalle="Un compañero o supervisor registrado en Kontrol."
               deshabilitado={personas.length === 0}
+              detalleDeshabilitado="No hay otras cuentas en esta empresa."
             />
-            <OpcionReceptor
+            <OpcionTarjeta
+              grupo="receptorModoVisible"
               valor="manual"
               actual={modo}
               onElegir={setModo}
@@ -222,60 +227,5 @@ export default function FormularioEntrega({
         {retiroPropio ? "Confirmar recepción" : "Confirmar entrega"}
       </Boton>
     </form>
-  );
-}
-
-/**
- * Una de las tres formas de recibir, como tarjeta pulsable.
- *
- * Radios en vez de un `<select>`: son tres opciones con consecuencias distintas
- * y conviene verlas todas a la vez. El área pulsable es la tarjeta entera, no
- * el círculo, porque esto se usa en terreno y con guantes.
- */
-function OpcionReceptor({
-  valor,
-  actual,
-  onElegir,
-  titulo,
-  detalle,
-  deshabilitado = false,
-}: {
-  valor: ReceptorModo;
-  actual: ReceptorModo;
-  onElegir: (v: ReceptorModo) => void;
-  titulo: string;
-  detalle: string;
-  deshabilitado?: boolean;
-}) {
-  const elegida = actual === valor;
-
-  return (
-    <label
-      className={`flex min-h-11 items-start gap-3 rounded-lg border p-3 transition-colors duration-150 ${
-        deshabilitado
-          ? "cursor-not-allowed border-borde opacity-60"
-          : `cursor-pointer ${
-              elegida
-                ? "border-marca-600 bg-marca-50"
-                : "border-borde hover:bg-panel-suave"
-            }`
-      }`}
-    >
-      <input
-        type="radio"
-        name="receptorModoVisible"
-        value={valor}
-        checked={elegida}
-        disabled={deshabilitado}
-        onChange={() => onElegir(valor)}
-        className="foco-anillo mt-0.5 size-5 shrink-0 cursor-pointer accent-marca-600"
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-tinta">{titulo}</span>
-        <span className="block text-xs text-tinta-suave">
-          {deshabilitado ? "No hay otras cuentas en esta empresa." : detalle}
-        </span>
-      </span>
-    </label>
   );
 }

@@ -12,6 +12,7 @@ import Paginacion from "@/components/ui/paginacion";
 import {
   cantidadConSigno,
   COLOR_MOVIMIENTO,
+  duenoAsignacion,
   ETIQUETA_MOVIMIENTO,
   UMBRAL_STOCK_BAJO,
 } from "@/lib/bodega";
@@ -203,7 +204,8 @@ export default async function PaginaBodega({
               item: { select: { nombre: true, unidad: true } },
             },
           },
-          usuario: { select: { nombre: true } },
+          usuario: { select: { id: true, nombre: true } },
+          brigada: { select: { id: true, nombre: true } },
         },
       })
     : null;
@@ -286,7 +288,8 @@ export default async function PaginaBodega({
           <p className="mt-1 text-sm text-tinta">
             {recienAsignado.items.length} ítem
             {recienAsignado.items.length === 1 ? "" : "s"} a{" "}
-            {recienAsignado.usuario.nombre} · {fechaHora(recienAsignado.asignadoEn)}
+            {duenoAsignacion(recienAsignado).nombre} ·{" "}
+            {fechaHora(recienAsignado.asignadoEn)}
           </p>
           <ul className="mt-1 text-sm text-tinta-suave">
             {recienAsignado.items.map((l, n) => (
@@ -297,8 +300,23 @@ export default async function PaginaBodega({
             ))}
           </ul>
           <p className="mt-1.5 text-sm text-tinta-suave">
-            Entrega definitiva: el material queda a su nombre en «Mi
-            equipamiento». Descarga el acta firmada como respaldo.
+            Entrega definitiva:{" "}
+            {duenoAsignacion(recienAsignado).esBrigada ? (
+              <>
+                el material queda a nombre de la brigada, no de quien lo retiró, y
+                se suma a{" "}
+                <Link
+                  href={duenoAsignacion(recienAsignado).href ?? "/bodega"}
+                  className="foco-anillo rounded font-medium underline underline-offset-2"
+                >
+                  su equipamiento
+                </Link>
+                .
+              </>
+            ) : (
+              "el material queda a su nombre en «Mi equipamiento»."
+            )}{" "}
+            Descarga el acta firmada como respaldo.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <a

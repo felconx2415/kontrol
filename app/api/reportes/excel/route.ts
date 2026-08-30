@@ -11,6 +11,7 @@ import {
 import { esGestion, ETIQUETA_ESTADO, ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
 import { LOGO_ALTO, LOGO_ANCHO, LOGO_PNG_BASE64 } from "@/lib/logo";
 import { filtroEmpresa } from "@/lib/alcance";
+import { duenoAsignacion } from "@/lib/bodega";
 import { fechaParaExcel, formatearFechaHora } from "@/lib/vencimientos";
 
 export async function GET(request: Request) {
@@ -68,8 +69,16 @@ export async function GET(request: Request) {
           ? {
               asignacion: {
                 ...(rango ? { asignadoEn: rango } : {}),
+                // Lo de la brigada es lo que tiene su gente **y** lo que es de
+                // la brigada misma: filtrar solo por sus miembros dejaría fuera
+                // la motosierra que es de la cuadrilla.
                 ...(filtros.brigadaId
-                  ? { usuario: { brigadaId: filtros.brigadaId } }
+                  ? {
+                      OR: [
+                        { usuario: { brigadaId: filtros.brigadaId } },
+                        { brigadaId: filtros.brigadaId },
+                      ],
+                    }
                   : {}),
               },
             }
@@ -82,7 +91,10 @@ export async function GET(request: Request) {
           select: {
             asignadoEn: true,
             notas: true,
-            usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+            usuario: {
+              select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+            },
+            brigada: { select: { id: true, nombre: true } },
             asignadoPor: { select: { nombre: true } },
           },
         },
@@ -275,6 +287,10 @@ export async function GET(request: Request) {
     { header: "Cantidad", key: "cantidad", width: 10 },
     { header: "Unidad", key: "unidad", width: 10 },
     { header: "Asignado a", key: "usuario", width: 24 },
+    // Persona o brigada: en una columna aparte para poder filtrar la hoja por
+    // ella. Sin esto, «BBOO 2169» en la columna de nombres no se distingue de
+    // una persona.
+    { header: "Destinatario", key: "destinatario", width: 14 },
     { header: "Brigada", key: "brigada", width: 18 },
     { header: "Asignó", key: "asigno", width: 22 },
     { header: "Fecha", key: "fecha", width: 14 },
@@ -287,8 +303,10 @@ export async function GET(request: Request) {
       codigo: t.item.codigo,
       cantidad: t.cantidad,
       unidad: t.item.unidad,
-      usuario: t.asignacion.usuario.nombre,
-      brigada: t.asignacion.usuario.brigada?.nombre ?? "",
+      usuario: duenoAsignacion(t.asignacion).nombre,
+      destinatario: duenoAsignacion(t.asignacion).esBrigada ? "Brigada" : "Persona",
+      brigada:
+        t.asignacion.brigada?.nombre ?? t.asignacion.usuario?.brigada?.nombre ?? "",
       asigno: t.asignacion.asignadoPor.nombre,
       fecha: fechaParaExcel(t.asignacion.asignadoEn),
       nota: t.asignacion.notas ?? "",

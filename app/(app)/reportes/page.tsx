@@ -17,6 +17,7 @@ import {
   type FiltrosReporte,
 } from "@/lib/reportes";
 import { filtroEmpresa } from "@/lib/alcance";
+import { duenoAsignacion } from "@/lib/bodega";
 import type { EstadoSolicitud } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Reportes · Kontrol" };
@@ -86,8 +87,16 @@ export default async function Reportes({
           ? {
               asignacion: {
                 ...(rango ? { asignadoEn: rango } : {}),
+                // Lo de la brigada es lo que tiene su gente **y** lo que es de
+                // la brigada misma: filtrar solo por sus miembros dejaría fuera
+                // la motosierra que es de la cuadrilla.
                 ...(filtros.brigadaId
-                  ? { usuario: { brigadaId: filtros.brigadaId } }
+                  ? {
+                      OR: [
+                        { usuario: { brigadaId: filtros.brigadaId } },
+                        { brigadaId: filtros.brigadaId },
+                      ],
+                    }
                   : {}),
               },
             }
@@ -101,7 +110,10 @@ export default async function Reportes({
           select: {
             asignadoEn: true,
             notas: true,
-            usuario: { select: { nombre: true, brigada: { select: { nombre: true } } } },
+            usuario: {
+              select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+            },
+            brigada: { select: { id: true, nombre: true } },
             asignadoPor: { select: { nombre: true } },
           },
         },
@@ -324,8 +336,21 @@ export default async function Reportes({
                 <Celda derecha mono>
                   {t.cantidad} {t.item.unidad}
                 </Celda>
-                <Celda>{t.asignacion.usuario.nombre}</Celda>
-                <Celda tenue>{t.asignacion.usuario.brigada?.nombre ?? "—"}</Celda>
+                <Celda>
+                  {duenoAsignacion(t.asignacion).nombre}
+                  {/* Lo de la brigada no es de nadie en particular, y en una
+                      lista de nombres propios eso hay que decirlo. */}
+                  {duenoAsignacion(t.asignacion).esBrigada && (
+                    <span className="block text-xs text-tinta-tenue">
+                      equipamiento de la brigada
+                    </span>
+                  )}
+                </Celda>
+                <Celda tenue>
+                  {t.asignacion.brigada?.nombre ??
+                    t.asignacion.usuario?.brigada?.nombre ??
+                    "—"}
+                </Celda>
                 <Celda tenue>{t.asignacion.asignadoPor.nombre}</Celda>
                 <Celda tenue>{formatearFecha(t.asignacion.asignadoEn)}</Celda>
               </Fila>

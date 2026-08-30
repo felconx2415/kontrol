@@ -14,6 +14,7 @@ export type IconoNav =
   | "catalogo"
   | "usuarios"
   | "brigadas"
+  | "cargos"
   | "empresas"
   | "notificaciones"
   | "perfil"
@@ -28,7 +29,8 @@ export type EnlaceNav = { href: string; texto: string; icono: IconoNav };
  * herede el color del enlace, así sigue al estado activo/inactivo sin código
  * extra. Distinción deliberada: Usuarios es una persona (cuenta), Brigadas un
  * grupo (cuadrilla) y Empresas un edificio (la organización que las contiene);
- * el casco marca "Mi equipamiento" en una app de EPP. La persona dentro de un
+ * el maletín es el cargo —lo que la persona hace, no dónde está—, y el casco
+ * marca "Mi equipamiento" en una app de EPP. La persona dentro de un
  * círculo es el perfil propio, para no confundirla con Usuarios.
  */
 const TRAZOS: Record<IconoNav, ReactNode> = {
@@ -101,6 +103,12 @@ const TRAZOS: Record<IconoNav, ReactNode> = {
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  cargos: (
+    <>
+      <path d="M16 20V6a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v14" />
+      <rect width="20" height="14" x="2" y="6" rx="2" />
     </>
   ),
   empresas: (

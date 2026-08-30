@@ -22,8 +22,16 @@ export async function GET(
     return NextResponse.json({ error: "La asignación no existe." }, { status: 404 });
   }
 
+  // El acta es de quien la firmó y de quien es el material. Cuando el dueño es
+  // una brigada eso alcanza a toda la cuadrilla: el equipo es suyo y cualquiera
+  // de ellos puede tener que mostrar el papel.
+  const esSuya =
+    acta.usuarioId === usuario.id ||
+    acta.retiradoPorId === usuario.id ||
+    (acta.brigadaId !== null && acta.brigadaId === usuario.brigadaId);
+
   // Gestión ve cualquier acta; el resto, solo la de su propio equipamiento.
-  if (!esGestion(usuario.rol) && acta.usuarioId !== usuario.id) {
+  if (!esGestion(usuario.rol) && !esSuya) {
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });
   }
 
@@ -38,7 +46,7 @@ export async function GET(
   // equipamiento sí conserva su acta. La entrega llega a la empresa por los
   // ítems que salieron de bodega.
   if (
-    acta.usuarioId !== usuario.id &&
+    !esSuya &&
     !(asignacion?.items ?? []).some((l) => alcanza(usuario.alcance, l.item.empresaId))
   ) {
     return NextResponse.json({ error: "Sin permiso." }, { status: 403 });

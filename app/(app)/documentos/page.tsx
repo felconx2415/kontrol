@@ -36,11 +36,17 @@ export default async function MisDocumentos() {
       },
     }),
     db.asignacionBodega.findMany({
-      where: { usuarioId: usuario.id, firmaPngUrl: { not: null } },
+      // Lo que quedó a su nombre y, además, lo que retiró y firmó para otro o
+      // para su brigada: la firma del acta es suya y tiene que poder mostrarla.
+      where: {
+        OR: [{ usuarioId: usuario.id }, { retiradoPorId: usuario.id }],
+        firmaPngUrl: { not: null },
+      },
       orderBy: { asignadoEn: "desc" },
       select: {
         id: true,
         asignadoEn: true,
+        brigada: { select: { nombre: true } },
         items: {
           select: {
             cantidad: true,
@@ -79,7 +85,11 @@ export default async function MisDocumentos() {
     })),
     ...asignaciones.map((a) => ({
       clave: `a-${a.id}`,
-      titulo: "Acta de entrega de bodega",
+      // Se dice de quién es el material cuando no es suyo: un acta a nombre de
+      // la brigada que él fue a retirar no es «su» equipamiento.
+      titulo: a.brigada
+        ? `Acta de entrega de bodega · ${a.brigada.nombre}`
+        : "Acta de entrega de bodega",
       // Con un solo ítem se nombra; con varios manda el conteo y los nombres
       // van detrás, que es como se reconoce el papel que se busca.
       detalle:

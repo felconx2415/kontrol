@@ -77,12 +77,31 @@ async function prepararBase() {
     update: {},
   });
 
+  // Cargos: qué hace cada quien en terreno, distinto del rol de Kontrol. La
+  // demo lleva uno sin brigada —el prevencionista— porque ese es justo el caso
+  // que el cargo viene a cubrir: gente que no se identifica por su cuadrilla.
+  const cargos: Record<string, string> = {};
+  for (const nombre of [
+    "Liniero",
+    "Motosierrista",
+    "Jefe de brigada",
+    "Prevencionista de riesgo",
+  ]) {
+    const cargo = await db.cargo.upsert({
+      where: { nombre },
+      create: { nombre },
+      update: {},
+    });
+    cargos[nombre] = cargo.id;
+  }
+
   const usuarios = [
-    { username: "gestor", nombre: "Camila Rojas", rol: "GESTOR" as const, brigadaId: null },
-    { username: "aprobador", nombre: "Luis Fuentes", rol: "APROBADOR" as const, brigadaId: brigadaNorte.id },
-    { username: "jperez", nombre: "Juan Pérez", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
-    { username: "msoto", nombre: "María Soto", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id },
-    { username: "pmunoz", nombre: "Pedro Muñoz", rol: "SOLICITANTE" as const, brigadaId: brigadaSur.id },
+    { username: "gestor", nombre: "Camila Rojas", rol: "GESTOR" as const, brigadaId: null, cargoId: null },
+    { username: "aprobador", nombre: "Luis Fuentes", rol: "APROBADOR" as const, brigadaId: brigadaNorte.id, cargoId: cargos["Jefe de brigada"] },
+    { username: "jperez", nombre: "Juan Pérez", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id, cargoId: cargos["Liniero"] },
+    { username: "msoto", nombre: "María Soto", rol: "SOLICITANTE" as const, brigadaId: brigadaNorte.id, cargoId: cargos["Liniero"] },
+    { username: "pmunoz", nombre: "Pedro Muñoz", rol: "SOLICITANTE" as const, brigadaId: brigadaSur.id, cargoId: cargos["Motosierrista"] },
+    { username: "bdiaz", nombre: "Bruno Díaz", rol: "SOLICITANTE" as const, brigadaId: null, cargoId: cargos["Prevencionista de riesgo"] },
   ];
   for (const u of usuarios) {
     await db.usuario.upsert({
@@ -92,6 +111,7 @@ async function prepararBase() {
         nombre: u.nombre,
         rol: u.rol,
         brigadaId: u.brigadaId,
+        cargoId: u.cargoId,
         empresaId: empresa.id,
       },
     });

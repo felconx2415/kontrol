@@ -31,7 +31,9 @@ Todas usan la contraseña `kontrol123`:
 | `gestor`    | Gestor        | Todo lo anterior + gestión, entrega, reportes y catálogo |
 | `admin`     | Administrador | Todo lo anterior + administración de cuentas             |
 
-También existen `msoto` y `pmunoz` como solicitantes.
+También existen `msoto`, `pmunoz` y `bdiaz` como solicitantes. `bdiaz` es
+prevencionista de riesgo y no está en ninguna brigada: es el caso que el
+**cargo** viene a cubrir (ver «Brigadas y cargos»).
 
 > `kontrol123` es solo para desarrollo. Antes de cualquier despliegue, cambia
 > la contraseña de `admin` y elimina o desactiva el resto de estas cuentas.
@@ -63,6 +65,39 @@ ese nombre, las cuentas se enganchan a esa en vez de duplicarla.
 Las empresas se administran en `/configuracion/empresas`. No se eliminan —sus
 solicitudes, actas y bodega apuntan a ellas—, se desactivan: dejan de ofrecerse
 al crear cuentas y brigadas sin tocar el historial.
+
+### Brigadas y cargos
+
+Quien recibe equipamiento no siempre es una persona ni siempre está en una
+cuadrilla. Dos piezas cubren esos dos huecos:
+
+- **El equipamiento puede ser de la brigada.** La motosierra, la carpa o el
+  botiquín de la BBOO 2169 son de la cuadrilla, no del liniero que ese día fue
+  a buscarlos. Ponerlos a su nombre los hacía viajar con él al cambiar de
+  brigada —en el papel, no en la realidad—. Al asignar desde bodega se elige
+  entre **una persona** y **una brigada**; lo de la brigada vive en
+  `/historial/brigada/<id>` y no aparece en el «Mi equipamiento» de nadie.
+
+  Una brigada no tiene manos, así que en ese caso siempre hay que decir **quién
+  retira**: con cuenta o anotado a mano si es un externo. Es su firma la que
+  queda en el acta, y el acta lo nombra. Es el mismo trato que ya recibía el
+  receptor de una solicitud.
+
+- **La gente sin brigada se identifica por su cargo.** Bruno Díaz es
+  prevencionista de riesgo; Ciro Fredericksen, jefe de zona. El cargo es un
+  catálogo (`/configuracion/cargos`) y no un texto en la ficha porque su razón
+  de ser es agrupar: escrito a mano, la misma función acaba siendo
+  «prevencionista», «Prev. de riesgo» y «PdR». No pertenece a ninguna empresa
+  —un liniero es un liniero en todas— y sale en el acta de entrega, donde antes
+  se imprimía el rol de Kontrol a falta de algo mejor.
+
+El **cargo** no es el **rol**: el rol dice qué se puede hacer dentro de Kontrol
+(pedir, aprobar, gestionar, administrar) y el cargo qué hace la persona en
+terreno. Dos linieros y un prevencionista son los tres `SOLICITANTE`.
+
+Un cargo con gente asignada no se elimina, se desactiva: deja de ofrecerse en
+las fichas sin tocar las actas que ya lo nombran. Una brigada con equipamiento
+a su nombre tampoco se elimina, por lo mismo.
 
 ### Roles
 
@@ -136,11 +171,11 @@ app/(auth)/login          Ingreso
 app/(app)/escritorio      Panel, distinto según rol
 app/(app)/solicitudes     Listado, wizard de creación, detalle y entrega
 app/(app)/bodega          Inventario propio, préstamos y asignaciones
-app/(app)/historial       Qué tiene asignado cada trabajador
+app/(app)/historial       Qué tiene asignado cada trabajador y cada brigada
 app/(app)/documentos      Actas firmadas de cada persona
 app/(app)/notificaciones  Avisos de cada persona
 app/(app)/reportes        Filtros y exportación a Excel
-app/(app)/configuracion   Catálogo, usuarios, brigadas y empresas
+app/(app)/configuracion   Catálogo, usuarios, brigadas, cargos y empresas
 app/api/v1                API de consulta (solo lectura, con token)
 app/api                   Actas PDF, subida de imágenes, exportación Excel
 actions/                  Server Actions
@@ -259,6 +294,7 @@ npm run db:escenario   # siembra (o reinicia) una segunda empresa de prueba
 npm run e2e:empresas   # separación por empresa, avisos, reservas y receptor
 npm run e2e:lote       # acciones en lote sobre las cuentas
 npm run e2e:api        # API de consulta: token, aislamiento y solo lectura
+npm run e2e:brigada    # equipamiento a nombre de una brigada y cargos
 npm run e2e:pwa        # manifiesto, service worker y pantalla sin conexión
 ```
 

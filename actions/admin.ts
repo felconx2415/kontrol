@@ -51,6 +51,7 @@ async function validarDatosUsuario(
   rol: Rol,
   empresas: EmpresasDeCuenta,
   brigadaId: string | null,
+  cargoId: string | null,
   idActual?: string,
 ): Promise<string | null> {
   if (!/^[a-z0-9._-]{3,}$/.test(username)) {
@@ -97,6 +98,13 @@ async function validarDatosUsuario(
     }
   }
 
+  // El cargo no se ata a ninguna empresa: un liniero es un liniero en todas.
+  // Solo se comprueba que siga existiendo.
+  if (cargoId) {
+    const cargo = await db.cargo.findUnique({ where: { id: cargoId } });
+    if (!cargo) return "Ese cargo ya no existe.";
+  }
+
   return null;
 }
 
@@ -111,6 +119,7 @@ export async function crearUsuario(
   const rut = String(formData.get("rut") ?? "").trim() || null;
   const rol = String(formData.get("rol") ?? "") as Rol;
   const brigadaId = String(formData.get("brigadaId") ?? "") || null;
+  const cargoId = String(formData.get("cargoId") ?? "") || null;
   const password = String(formData.get("password") ?? "");
   const empresas = leerEmpresas(formData, rol);
 
@@ -120,6 +129,7 @@ export async function crearUsuario(
     rol,
     empresas,
     brigadaId,
+    cargoId,
   );
   if (error) return { error };
   if (password.length < 8) {
@@ -133,6 +143,7 @@ export async function crearUsuario(
       rut,
       rol,
       brigadaId,
+      cargoId,
       empresaId: empresas.empresaId,
       empresasGestionadas: {
         connect: empresas.empresasGestionadas.map((id) => ({ id })),
@@ -188,6 +199,7 @@ export async function editarUsuario(
   const rut = String(formData.get("rut") ?? "").trim() || null;
   const rol = String(formData.get("rol") ?? "") as Rol;
   const brigadaId = String(formData.get("brigadaId") ?? "") || null;
+  const cargoId = String(formData.get("cargoId") ?? "") || null;
   const empresas = leerEmpresas(formData, rol);
 
   const error = await validarDatosUsuario(
@@ -196,6 +208,7 @@ export async function editarUsuario(
     rol,
     empresas,
     brigadaId,
+    cargoId,
     id,
   );
   if (error) return { error };
@@ -212,6 +225,7 @@ export async function editarUsuario(
   if (usuario.rut !== rut) cambios.rut = [usuario.rut, rut];
   if (usuario.rol !== rol) cambios.rol = [usuario.rol, rol];
   if (usuario.brigadaId !== brigadaId) cambios.brigadaId = [usuario.brigadaId, brigadaId];
+  if (usuario.cargoId !== cargoId) cambios.cargoId = [usuario.cargoId, cargoId];
   if (usuario.empresaId !== empresas.empresaId) {
     cambios.empresaId = [usuario.empresaId, empresas.empresaId];
   }
@@ -234,6 +248,7 @@ export async function editarUsuario(
       rut,
       rol,
       brigadaId,
+      cargoId,
       empresaId: empresas.empresaId,
       // `set` y no `connect`: la lista del formulario es la definitiva, así que
       // quitar una empresa de la selección tiene que quitarla de verdad.
@@ -273,10 +288,22 @@ export async function eliminarUsuario(
           solicitudesAprobadas: true,
           solicitudesGestionadas: true,
           solicitudesEditadas: true,
+          solicitudesRegistradas: true,
           entregasRecibidas: true,
           entregasHechas: true,
+          entregasRetiradas: true,
           auditorias: true,
           brigadasSupervisadas: true,
+          // Bodega local: el equipamiento que tiene a su nombre, el que
+          // entregó y el que retiró firmando por otro. Todo eso apunta a la
+          // cuenta con RESTRICT, así que sin contarlo aquí el borrado no se
+          // rechazaba con un mensaje sino que reventaba contra la base.
+          equipamientoBodega: true,
+          asignacionesBodegaHechas: true,
+          asignacionesRetiradas: true,
+          movimientosBodega: true,
+          prestamosRegistrados: true,
+          tokensApi: true,
         },
       },
     },
@@ -497,9 +524,19 @@ export async function eliminarBrigada(
 
   const brigada = await db.brigada.findUnique({
     where: { id },
-    include: { _count: { select: { miembros: true, solicitudes: true } } },
+    include: {
+      _count: { select: { miembros: true, solicitudes: true, equipamiento: true } },
+    },
   });
   if (!brigada) return { error: "Esa brigada ya no existe." };
+
+  // El equipamiento a nombre de la brigada tiene acta firmada: borrarla
+  // dejaría entregas sin dueño. Antes hay que traspasarlo o darlo de baja.
+  if (brigada._count.equipamiento > 0) {
+    return {
+      error: `«${brigada.nombre}» tiene ${brigada._count.equipamiento} entrega(s) de bodega a su nombre y no puede eliminarse sin perder ese registro.`,
+    };
+  }
 
   // Las solicitudes apuntan a la brigada sin cascada: borrarla dejaría el
   // historial huérfano. Los miembros deben reasignarse antes a mano.
@@ -777,6 +814,149 @@ export async function alternarEmpresa(formData: FormData) {
   revalidatePath("/configuracion/empresas");
   revalidatePath("/configuracion/usuarios");
   revalidatePath("/configuracion/brigadas");
+}
+
+// ── Cargos ────────────────────────────────────────────────────────────────
+// Qué hace cada persona en terreno: liniero, prevencionista de riesgo, jefe de
+// zona. Es catálogo y no texto libre en la ficha porque su razón de ser es
+// agrupar —«el EPP de los linieros»—, y escrito a mano la misma función acaba
+// siendo «prevencionista», «Prev. de riesgo» y «PdR».
+//
+// No pertenece a ninguna empresa: un liniero es un liniero en todas, y duplicar
+// la lista obligaría a mantenerla dos veces.
+
+async function validarCargo(nombre: string, idActual?: string): Promise<string | null> {
+  if (nombre.length < 3) return "Indica el nombre del cargo.";
+
+  const existente = await db.cargo.findUnique({ where: { nombre } });
+  if (existente && existente.id !== idActual) {
+    return `«${nombre}» ya está en la lista de cargos.`;
+  }
+  return null;
+}
+
+export async function crearCargo(
+  _estado: EstadoAdmin,
+  formData: FormData,
+): Promise<EstadoAdmin> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+
+  const nombre = String(formData.get("nombre") ?? "").trim();
+
+  const error = await validarCargo(nombre);
+  if (error) return { error };
+
+  const cargo = await db.cargo.create({ data: { nombre } });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "Cargo",
+    entidadId: cargo.id,
+    accion: "CREADO",
+    detalle: { nombre },
+  });
+
+  revalidatePath("/configuracion/cargos");
+  revalidatePath("/configuracion/usuarios");
+  return { ok: `«${nombre}» creado. Ya puedes asignarlo en la ficha de cada cuenta.` };
+}
+
+export async function editarCargo(
+  _estado: EstadoAdmin,
+  formData: FormData,
+): Promise<EstadoAdmin> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+  const id = String(formData.get("cargoId") ?? "");
+
+  const cargo = await db.cargo.findUnique({ where: { id } });
+  if (!cargo) return { error: "Ese cargo ya no existe." };
+
+  const nombre = String(formData.get("nombre") ?? "").trim();
+
+  const error = await validarCargo(nombre, id);
+  if (error) return { error };
+
+  if (cargo.nombre === nombre) return { ok: "Sin cambios que guardar." };
+
+  await db.cargo.update({ where: { id }, data: { nombre } });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "Cargo",
+    entidadId: id,
+    accion: "EDITADO",
+    detalle: { nombre: [cargo.nombre, nombre] },
+  });
+
+  revalidatePath("/configuracion/cargos");
+  revalidatePath("/configuracion/usuarios");
+  return { ok: `«${nombre}» actualizado.` };
+}
+
+/**
+ * Desactiva o reactiva un cargo. Desactivado deja de ofrecerse al dar de alta
+ * o editar cuentas, pero quien ya lo tiene lo conserva: cambiar de nombre lo
+ * que dice un acta emitida no sería corregir el catálogo sino reescribir el
+ * pasado.
+ */
+export async function alternarCargo(formData: FormData) {
+  const admin = await requerirRol(...ROLES_ADMIN);
+  const id = String(formData.get("cargoId") ?? "");
+
+  const cargo = await db.cargo.findUnique({ where: { id } });
+  if (!cargo) return;
+
+  await db.cargo.update({ where: { id }, data: { activo: !cargo.activo } });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "Cargo",
+    entidadId: id,
+    accion: cargo.activo ? "DESACTIVADO" : "ACTIVADO",
+    detalle: { nombre: cargo.nombre },
+  });
+
+  revalidatePath("/configuracion/cargos");
+  revalidatePath("/configuracion/usuarios");
+}
+
+/**
+ * Elimina un cargo que nadie llegó a usar. Con gente asignada se desactiva en
+ * vez de borrarse, por lo mismo que las empresas: las actas ya emitidas lo
+ * nombran.
+ */
+export async function eliminarCargo(
+  _estado: EstadoAdmin,
+  formData: FormData,
+): Promise<EstadoAdmin> {
+  const admin = await requerirRol(...ROLES_ADMIN);
+  const id = String(formData.get("cargoId") ?? "");
+
+  const cargo = await db.cargo.findUnique({
+    where: { id },
+    include: { _count: { select: { personas: true } } },
+  });
+  if (!cargo) return { error: "Ese cargo ya no existe." };
+
+  if (cargo._count.personas > 0) {
+    return {
+      error: `«${cargo.nombre}» lo tienen ${cargo._count.personas} persona(s). Desactívalo en vez de eliminarlo, o cámbiales el cargo primero.`,
+    };
+  }
+
+  await db.cargo.delete({ where: { id } });
+
+  await registrarAuditoria({
+    usuarioId: admin.id,
+    entidad: "Cargo",
+    entidadId: id,
+    accion: "ELIMINADO",
+    detalle: { nombre: cargo.nombre },
+  });
+
+  revalidatePath("/configuracion/cargos");
+  revalidatePath("/configuracion/usuarios");
+  return { ok: `«${cargo.nombre}» eliminado.` };
 }
 
 // ── Cuentas en lote ───────────────────────────────────────────────────────

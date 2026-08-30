@@ -12,6 +12,7 @@ import { Aviso } from "@/components/ui/superficie";
 import FilaUsuario, { type UsuarioFila } from "./fila-usuario";
 import type { BrigadaOpcion } from "./campos-cuenta";
 import type { EmpresaOpcion } from "../empresas/formulario-empresa";
+import type { CargoOpcion } from "../cargos/formulario-cargo";
 
 /** La brigada, con cuántos miembros tiene en total. Ver `avisoBrigadas`. */
 export type BrigadaConMiembros = BrigadaOpcion & { miembros: number };
@@ -29,11 +30,13 @@ export default function ListaUsuarios({
   usuarios,
   brigadas,
   empresas,
+  cargos,
   idActual,
 }: {
   usuarios: UsuarioFila[];
   brigadas: BrigadaConMiembros[];
   empresas: EmpresaOpcion[];
+  cargos: CargoOpcion[];
   /** Quién está mirando: su cuenta no puede desactivarse a sí misma. */
   idActual: string;
 }) {
@@ -277,6 +280,7 @@ export default function ListaUsuarios({
                 usuario={u}
                 brigadas={brigadas}
                 empresas={empresas}
+                cargos={cargos}
                 esUsuarioActual={u.id === idActual}
                 marcada={elegidas.includes(u.id)}
                 onMarcar={() => alternarUna(u.id)}

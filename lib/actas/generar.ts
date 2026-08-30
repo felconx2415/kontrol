@@ -325,10 +325,22 @@ const DECLARACION_ASIGNACION =
   "pérdida, y restituirlo al término de la faena o de la relación laboral, conforme a la " +
   "Ley N° 16.744 y a la normativa vigente de seguridad y salud en el trabajo.";
 
+/**
+ * Acta de una asignación de bodega.
+ *
+ * Devuelve además a quién alcanza el documento, que es lo que la ruta necesita
+ * para decidir quién puede descargarlo: el dueño (una persona o los miembros de
+ * una brigada) y quien lo retiró firmando.
+ */
 export async function actaDeAsignacion(
   asignacionId: string,
   origen: string | null = null,
-): Promise<{ pdf: Uint8Array; usuarioId: string } | null> {
+): Promise<{
+  pdf: Uint8Array;
+  usuarioId: string | null;
+  brigadaId: string | null;
+  retiradoPorId: string | null;
+} | null> {
   const asignacion = await db.asignacionBodega.findUnique({
     where: { id: asignacionId },
     include: {
@@ -341,8 +353,20 @@ export async function actaDeAsignacion(
           nombre: true,
           rut: true,
           rol: true,
+          cargo: { select: { nombre: true } },
           brigada: { select: { nombre: true } },
         },
+      },
+      brigada: {
+        select: {
+          id: true,
+          nombre: true,
+          empresa: { select: { nombre: true } },
+          supervisor: { select: { nombre: true } },
+        },
+      },
+      retiradoPor: {
+        select: { nombre: true, rut: true, cargo: { select: { nombre: true } } },
       },
       asignadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
     },
@@ -350,6 +374,53 @@ export async function actaDeAsignacion(
   if (!asignacion) return null;
 
   const fecha = fechaCorta(asignacion.asignadoEn);
+
+  // A nombre de quién queda el material. La brigada manda cuando la hay: el
+  // equipo es de la cuadrilla y quien haya ido a buscarlo no lo vuelve suyo.
+  const recibe = asignacion.brigada
+    ? {
+        nombre: asignacion.brigada.nombre,
+        campos: [
+          { rotulo: "Tipo", valor: "Brigada" },
+          { rotulo: "Empresa", valor: asignacion.brigada.empresa.nombre },
+          { rotulo: "Supervisor", valor: asignacion.brigada.supervisor?.nombre ?? null },
+        ],
+      }
+    : {
+        nombre: asignacion.usuario?.nombre ?? "—",
+        campos: [
+          { rotulo: "RUT", valor: asignacion.usuario?.rut ?? null, dato: true },
+          { rotulo: "Brigada", valor: asignacion.usuario?.brigada?.nombre ?? null },
+          {
+            rotulo: "Cargo",
+            // El cargo del catálogo dice qué hace en terreno, que es lo que
+            // importa en un acta de EPP. El rol de Kontrol solo se usa cuando
+            // no hay cargo puesto, para no dejar el campo en blanco.
+            valor:
+              asignacion.usuario?.cargo?.nombre ??
+              (asignacion.usuario ? ETIQUETA_ROL[asignacion.usuario.rol] : null),
+          },
+        ],
+      };
+
+  // Quién firma el recibo. Cuando retira un tercero —siempre, si el dueño es
+  // una brigada— la firma es suya y el acta tiene que nombrarlo, o la firma no
+  // correspondería a nadie.
+  const firmante = {
+    nombre:
+      asignacion.retiradoPor?.nombre ??
+      asignacion.retiradoPorNombre ??
+      asignacion.usuario?.nombre ??
+      "—",
+    rut:
+      asignacion.retiradoPor?.rut ??
+      asignacion.retiradoPorRut ??
+      asignacion.usuario?.rut ??
+      null,
+  };
+  const retiraUnTercero = Boolean(
+    asignacion.retiradoPor || asignacion.retiradoPorNombre,
+  );
 
   const html = await construirActaHtml({
     titulo: `Acta de entrega ${asignacion.id.slice(-6).toUpperCase()} · Kontrol`,
@@ -359,14 +430,7 @@ export async function actaDeAsignacion(
     emitidoEn: fechaHora(asignacion.asignadoEn),
     tipoRotulo: "Tipo de salida",
     tipoValor: "Entrega definitiva (no se devuelve a bodega)",
-    recibe: {
-      nombre: asignacion.usuario.nombre,
-      campos: [
-        { rotulo: "RUT", valor: asignacion.usuario.rut, dato: true },
-        { rotulo: "Brigada", valor: asignacion.usuario.brigada?.nombre ?? null },
-        { rotulo: "Cargo", valor: ETIQUETA_ROL[asignacion.usuario.rol] },
-      ],
-    },
+    recibe,
     entrega: {
       nombre: asignacion.asignadoPor.nombre,
       campos: [
@@ -383,17 +447,33 @@ export async function actaDeAsignacion(
       estado: null,
       vence: null,
     })),
-    notas: asignacion.notas
-      ? [{ rotulo: "Nota de la entrega", texto: asignacion.notas }]
-      : [],
+    notas: [
+      ...(retiraUnTercero
+        ? [
+            {
+              rotulo: "Retira",
+              texto: `${firmante.nombre}${
+                firmante.rut ? ` · ${firmante.rut}` : ""
+              }${
+                asignacion.retiradoPor?.cargo?.nombre
+                  ? ` · ${asignacion.retiradoPor.cargo.nombre}`
+                  : ""
+              }`,
+            },
+          ]
+        : []),
+      ...(asignacion.notas
+        ? [{ rotulo: "Nota de la entrega", texto: asignacion.notas }]
+        : []),
+    ],
     declaracion: DECLARACION_ASIGNACION,
     firmas: [
       {
         imagen: await subidaComoDataUri(asignacion.firmaPngUrl),
-        nombre: asignacion.usuario.nombre,
-        rut: asignacion.usuario.rut,
+        nombre: firmante.nombre,
+        rut: firmante.rut,
         fecha,
-        rol: "Firma del receptor",
+        rol: retiraUnTercero ? "Firma de quien retira" : "Firma del receptor",
       },
       {
         imagen: await subidaComoDataUri(asignacion.asignadoPor.firmaPngUrl),
@@ -407,5 +487,10 @@ export async function actaDeAsignacion(
     qr: await qrDe(origen, "asignacion", asignacion.id),
   });
 
-  return { pdf: await htmlAPdf(html), usuarioId: asignacion.usuario.id };
+  return {
+    pdf: await htmlAPdf(html),
+    usuarioId: asignacion.usuarioId,
+    brigadaId: asignacion.brigadaId,
+    retiradoPorId: asignacion.retiradoPorId,
+  };
 }

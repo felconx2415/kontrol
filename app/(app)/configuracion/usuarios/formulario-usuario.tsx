@@ -7,13 +7,16 @@ import { Campo, Entrada } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
 import CamposCuenta, { type BrigadaOpcion } from "./campos-cuenta";
 import type { EmpresaOpcion } from "../empresas/formulario-empresa";
+import type { CargoOpcion } from "../cargos/formulario-cargo";
 
 export default function FormularioUsuario({
   brigadas,
   empresas,
+  cargos,
 }: {
   brigadas: BrigadaOpcion[];
   empresas: EmpresaOpcion[];
+  cargos: CargoOpcion[];
 }) {
   const [estado, accion] = useActionState<EstadoAdmin, FormData>(crearUsuario, {});
 
@@ -44,7 +47,12 @@ export default function FormularioUsuario({
         <Entrada id="rut" name="rut" placeholder="12.345.678-9" />
       </Campo>
 
-      <CamposCuenta idPrefijo="nuevo" empresas={empresas} brigadas={brigadas} />
+      <CamposCuenta
+        idPrefijo="nuevo"
+        empresas={empresas}
+        brigadas={brigadas}
+        cargos={cargos}
+      />
 
       <Campo
         etiqueta="Contraseña inicial"
