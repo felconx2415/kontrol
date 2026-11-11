@@ -72,7 +72,13 @@ export async function actaDeEntrega(
     where: { id: entregaId },
     include: {
       receptor: {
-        select: { nombre: true, rut: true, rol: true, brigada: { select: { nombre: true } } },
+        select: {
+          nombre: true,
+          rut: true,
+          rol: true,
+          brigada: { select: { nombre: true } },
+          cargo: { select: { nombre: true } },
+        },
       },
       entregadoPor: { select: { nombre: true, rut: true, firmaPngUrl: true } },
       recibidoPor: { select: { nombre: true, rut: true } },
@@ -149,7 +155,13 @@ export async function actaDeEntrega(
           rotulo: "Brigada",
           valor: entrega.solicitud.brigada?.nombre ?? entrega.receptor.brigada?.nombre ?? null,
         },
-        { rotulo: "Cargo", valor: ETIQUETA_ROL[entrega.receptor.rol] },
+        // Igual que en el acta de asignación: el cargo del catálogo dice qué
+        // hace en terreno; el rol de Kontrol («Solicitante») solo entra cuando
+        // no hay cargo puesto, para no dejar el campo en blanco.
+        {
+          rotulo: "Cargo",
+          valor: entrega.receptor.cargo?.nombre ?? ETIQUETA_ROL[entrega.receptor.rol],
+        },
         // Solo aparece cuando hubo un tercero: en el caso normal, una línea
         // «Retira: él mismo» sería puro ruido en el documento.
         ...(retiro
