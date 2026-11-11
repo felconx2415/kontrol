@@ -146,7 +146,7 @@ export default async function Reportes({
       </div>
 
       <Tarjeta>
-        <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <Campo etiqueta="Desde" htmlFor="desde">
             <Entrada id="desde" type="date" name="desde" defaultValue={filtros.desde ?? ""} />
           </Campo>
@@ -193,7 +193,7 @@ export default async function Reportes({
             </Seleccion>
           </Campo>
 
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-5">
+          <div className="col-span-2 flex gap-2 lg:col-span-5">
             <Boton type="submit">Aplicar filtros</Boton>
             <Link
               href="/reportes"
@@ -221,7 +221,7 @@ export default async function Reportes({
         >
           {solicitudes.map((s) => (
             <Fila key={s.id}>
-              <Celda mono>
+              <Celda principal etiqueta="Folio" mono>
                 <Link
                   href={`/solicitudes/${s.id}`}
                   className="foco-anillo inline-flex min-h-6 items-center rounded text-tinta-suave underline underline-offset-2"
@@ -229,12 +229,12 @@ export default async function Reportes({
                   {formatearFolio(s.folio)}
                 </Link>
               </Celda>
-              <Celda>{s.solicitante.nombre}</Celda>
-              <Celda tenue>{s.brigada?.nombre ?? "—"}</Celda>
-              <Celda tenue>{s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"}</Celda>
-              <Celda mono>{s._count.items}</Celda>
-              <Celda tenue>{formatearFecha(s.creadaEn)}</Celda>
-              <Celda>
+              <Celda etiqueta="Solicitante">{s.solicitante.nombre}</Celda>
+              <Celda etiqueta="Brigada" tenue>{s.brigada?.nombre ?? "—"}</Celda>
+              <Celda etiqueta="Tipo" tenue>{s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"}</Celda>
+              <Celda etiqueta="Ítems" mono>{s._count.items}</Celda>
+              <Celda etiqueta="Creada" tenue>{formatearFecha(s.creadaEn)}</Celda>
+              <Celda etiqueta="Estado">
                 <EstadoBadge estado={s.estado} />
               </Celda>
             </Fila>
@@ -273,15 +273,15 @@ export default async function Reportes({
           >
             {prestamos.map((l) => (
               <Fila key={l.id}>
-                <Celda>{l.item.nombre}</Celda>
-                <Celda mono tenue>
+                <Celda principal etiqueta="Ítem">{l.item.nombre}</Celda>
+                <Celda etiqueta="Código" mono tenue>
                   {l.item.codigo}
                 </Celda>
-                <Celda derecha mono>
+                <Celda etiqueta="Cantidad" derecha mono>
                   {l.cantidad} {l.item.unidad}
                 </Celda>
-                <Celda>{l.prestamo.persona}</Celda>
-                <Celda>
+                <Celda etiqueta="Prestado a">{l.prestamo.persona}</Celda>
+                <Celda etiqueta="Estado">
                   <Insignia
                     clases={
                       l.estadoDevolucion === "DANADO" || l.estadoDevolucion === "PERDIDO"
@@ -300,9 +300,9 @@ export default async function Reportes({
                           : "En préstamo"}
                   </Insignia>
                 </Celda>
-                <Celda tenue>{l.prestamo.prestadoPor.nombre}</Celda>
-                <Celda tenue>{formatearFecha(l.prestamo.prestadoEn)}</Celda>
-                <Celda tenue>{l.devueltoEn ? formatearFecha(l.devueltoEn) : "—"}</Celda>
+                <Celda etiqueta="Registró" tenue>{l.prestamo.prestadoPor.nombre}</Celda>
+                <Celda etiqueta="Salida" tenue>{formatearFecha(l.prestamo.prestadoEn)}</Celda>
+                <Celda etiqueta="Devuelto" tenue>{l.devueltoEn ? formatearFecha(l.devueltoEn) : "—"}</Celda>
               </Fila>
             ))}
           </Tabla>
@@ -329,14 +329,14 @@ export default async function Reportes({
           >
             {traslados.map((t) => (
               <Fila key={t.id}>
-                <Celda>{t.item.nombre}</Celda>
-                <Celda mono tenue>
+                <Celda principal etiqueta="Ítem">{t.item.nombre}</Celda>
+                <Celda etiqueta="Código" mono tenue>
                   {t.item.codigo}
                 </Celda>
-                <Celda derecha mono>
+                <Celda etiqueta="Cantidad" derecha mono>
                   {t.cantidad} {t.item.unidad}
                 </Celda>
-                <Celda>
+                <Celda etiqueta="Asignado a">
                   {duenoAsignacion(t.asignacion).nombre}
                   {/* Lo de la brigada no es de nadie en particular, y en una
                       lista de nombres propios eso hay que decirlo. */}
@@ -346,13 +346,13 @@ export default async function Reportes({
                     </span>
                   )}
                 </Celda>
-                <Celda tenue>
+                <Celda etiqueta="Brigada" tenue>
                   {t.asignacion.brigada?.nombre ??
                     t.asignacion.usuario?.brigada?.nombre ??
                     "—"}
                 </Celda>
-                <Celda tenue>{t.asignacion.asignadoPor.nombre}</Celda>
-                <Celda tenue>{formatearFecha(t.asignacion.asignadoEn)}</Celda>
+                <Celda etiqueta="Asignó" tenue>{t.asignacion.asignadoPor.nombre}</Celda>
+                <Celda etiqueta="Fecha" tenue>{formatearFecha(t.asignacion.asignadoEn)}</Celda>
               </Fila>
             ))}
           </Tabla>

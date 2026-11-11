@@ -6,6 +6,7 @@ import { Tabla } from "@/components/ui/tabla";
 import { Vacio } from "@/components/ui/superficie";
 import Buscador from "@/components/ui/buscador";
 import FormularioCargo from "./formulario-cargo";
+import DesplegableAlta from "@/components/ui/desplegable-alta";
 import FilaCargo from "./fila-cargo";
 
 export const metadata = { title: "Cargos · Kontrol" };
@@ -42,7 +43,9 @@ export default async function AdminCargos({
         </p>
       </div>
 
-      <FormularioCargo />
+      <DesplegableAlta texto="Nuevo cargo" abierto={cargos.length === 0}>
+        <FormularioCargo />
+      </DesplegableAlta>
 
       <Buscador
         etiqueta="Buscar cargo"

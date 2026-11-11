@@ -11,12 +11,12 @@ export default function TarjetaKpi({ kpi }: { kpi: Kpi }) {
   return (
     <Link
       href={kpi.href}
-      className={`foco-anillo flex flex-col justify-between rounded-xl border bg-panel p-4 transition-colors duration-150 hover:bg-panel-suave ${
+      className={`foco-anillo flex flex-col justify-between rounded-xl border bg-panel p-3 sm:p-4 transition-colors duration-150 hover:bg-panel-suave ${
         kpi.alerta ? "border-espera-borde" : "border-borde"
       }`}
     >
       <p className="text-sm text-tinta-suave">{kpi.etiqueta}</p>
-      <p className="dato-grande mt-2 text-tinta">{kpi.valor}</p>
+      <p className="dato-grande mt-1 text-tinta sm:mt-2">{kpi.valor}</p>
       <p
         className={`mt-1 text-xs ${kpi.alerta ? "font-medium text-espera" : "text-tinta-tenue"}`}
       >

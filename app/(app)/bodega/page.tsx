@@ -357,7 +357,7 @@ export default async function PaginaBodega({
           { t: "Unidades en stock", v: totalUnidades },
           { t: "Prestadas", v: totalPrestado },
         ].map((k) => (
-          <div key={k.t} className="rounded-xl border border-borde bg-panel p-4">
+          <div key={k.t} className="rounded-xl border border-borde bg-panel p-3 sm:p-4">
             <dt className="text-xs text-tinta-tenue">{k.t}</dt>
             <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-tinta">
               {k.v}
@@ -366,7 +366,7 @@ export default async function PaginaBodega({
         ))}
         <Link
           href="/bodega?tab=inventario&stock=bajo"
-          className={`foco-anillo rounded-xl border p-4 transition-colors duration-150 ${
+          className={`foco-anillo rounded-xl border p-3 transition-colors duration-150 sm:p-4 ${
             stockBajo > 0
               ? "border-espera-borde bg-espera-fondo hover:bg-espera-fondo/70"
               : "border-borde bg-panel hover:bg-panel-suave"
@@ -409,9 +409,11 @@ export default async function PaginaBodega({
 
       {tab === "inventario" && (
         <div className="space-y-4">
-          <form className="flex flex-wrap items-end gap-3 rounded-xl border border-borde bg-panel p-4">
+          {/* Dos columnas en el teléfono, como en solicitudes: búsqueda arriba
+              a todo el ancho y los tres filtros más el botón de a pares. */}
+          <form className="grid grid-cols-2 items-end gap-3 rounded-xl border border-borde bg-panel p-4 sm:flex sm:flex-wrap">
             <input type="hidden" name="tab" value="inventario" />
-            <Campo etiqueta="Buscar" htmlFor="q" className="min-w-0 flex-1">
+            <Campo etiqueta="Buscar" htmlFor="q" className="col-span-2 min-w-0 sm:flex-1">
               <Entrada
                 id="q"
                 type="search"
@@ -443,7 +445,7 @@ export default async function PaginaBodega({
                 <option value="bajo">Stock bajo</option>
               </Seleccion>
             </Campo>
-            <Boton type="submit" variante="secundario" className="mb-0.5">
+            <Boton type="submit" variante="secundario" className="mb-0.5 w-full sm:w-auto">
               Filtrar
             </Boton>
           </form>
@@ -523,7 +525,7 @@ export default async function PaginaBodega({
                 <Fila key={p.id}>
                   {/* Un préstamo puede llevar varias cosas: se listan todas,
                       que es lo que hay que devolver. */}
-                  <Celda etiqueta="Material">
+                  <Celda principal etiqueta="Material">
                     <ul className="space-y-0.5">
                       {p.items.map((l) => (
                         <li key={l.id}>
@@ -595,7 +597,7 @@ export default async function PaginaBodega({
                     <Celda etiqueta="Fecha" tenue>
                       {fechaHora(m.creadoEn)}
                     </Celda>
-                    <Celda etiqueta="Ítem">
+                    <Celda principal etiqueta="Ítem">
                       <Link
                         href={`/bodega/${m.item.id}`}
                         className="foco-anillo rounded font-medium text-marca-700 underline-offset-2 hover:underline"

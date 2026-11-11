@@ -18,6 +18,17 @@ function check(nombre: string, condicion: boolean, detalle = "") {
   if (!condicion) fallos.push(nombre);
 }
 
+/**
+ * Despliega el formulario de alta de una página de Configuración. Viene
+ * plegado salvo con la lista vacía, así que solo se abre si está cerrado.
+ */
+async function abrirAlta(pagina: Page) {
+  const alta = pagina.locator("details:has(form)").first();
+  if ((await alta.getAttribute("open")) === null) {
+    await alta.locator("summary").click();
+  }
+}
+
 async function verTexto(pagina: Page, texto: string | RegExp, ms = 10000) {
   try {
     await pagina.getByText(texto).first().waitFor({ state: "visible", timeout: ms });
@@ -71,6 +82,8 @@ try {
   await admin.goto(`${BASE}/configuracion/cargos`);
   check("El ADMIN entra a Cargos", (await admin.locator("h1").innerText()) === "Cargos");
 
+  // El alta viene plegada tras «Nuevo cargo» cuando ya hay cargos.
+  await abrirAlta(admin);
   await admin.fill("#nombre", CARGO);
   await admin.click('button[type="submit"]');
   check("Se crea un cargo", await verTexto(admin, CARGO));

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DesplegableAlta from "@/components/ui/desplegable-alta";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ETIQUETA_ROL, ROLES_ADMIN } from "@/lib/solicitud-estado";
@@ -98,11 +99,13 @@ export default async function AdminUsuarios({
       </div>
 
       {empresas.some((e) => e.activa) ? (
-        <FormularioUsuario
-          brigadas={brigadas}
-          empresas={empresas}
-          cargos={cargos}
-        />
+        <DesplegableAlta texto="Nueva cuenta" abierto={usuarios.length <= 1}>
+          <FormularioUsuario
+            brigadas={brigadas}
+            empresas={empresas}
+            cargos={cargos}
+          />
+        </DesplegableAlta>
       ) : (
         <Aviso tono="espera">
           Antes de crear cuentas necesitas al menos una empresa activa: cada

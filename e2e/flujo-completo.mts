@@ -10,6 +10,17 @@ function check(nombre: string, condicion: boolean, detalle = "") {
 }
 
 /** Espera a que un texto aparezca; devuelve false si no llega a tiempo. */
+/**
+ * Despliega el formulario de alta de una página de Configuración. Viene
+ * plegado salvo con la lista vacía, así que solo se abre si está cerrado.
+ */
+async function abrirAlta(pagina: Page) {
+  const alta = pagina.locator("details:has(form)").first();
+  if ((await alta.getAttribute("open")) === null) {
+    await alta.locator("summary").click();
+  }
+}
+
 async function verTexto(pagina: Page, texto: string | RegExp, ms = 10000) {
   try {
     await pagina.getByText(texto).first().waitFor({ state: "visible", timeout: ms });
@@ -408,6 +419,7 @@ try {
   console.log("\n11. Administración");
   await gestor.goto(`${BASE}/configuracion/catalogo`);
   const codigoArticulo = `EPP-TEST-${Date.now() % 10000}`;
+  await abrirAlta(gestor);
   await gestor.fill('input[name="codigo"]', codigoArticulo);
   await gestor.fill('input[name="nombre"]', "Guantes anticorte");
   await gestor.fill('input[name="vidaUtilDias"]', "120");
@@ -425,6 +437,7 @@ try {
   const cuenta = `qa${Date.now() % 100000}`;
 
   await admin.goto(`${BASE}/configuracion/usuarios`);
+  await abrirAlta(admin);
   await admin.fill("#nombre", "Cuenta De Prueba");
   await admin.fill("#username", cuenta);
   await admin.fill("#password", "kontrol123");

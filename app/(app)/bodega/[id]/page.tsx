@@ -137,7 +137,7 @@ export default async function DetalleItem({
           >
             {item.lineasPrestamo.map((l) => (
               <Fila key={l.id}>
-                <Celda etiqueta="Prestado a">{l.prestamo.persona}</Celda>
+                <Celda principal etiqueta="Prestado a">{l.prestamo.persona}</Celda>
                 <Celda etiqueta="Cantidad" derecha mono>
                   {l.cantidad} {item.unidad}
                 </Celda>

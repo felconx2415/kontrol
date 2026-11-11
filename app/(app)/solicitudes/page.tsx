@@ -88,11 +88,14 @@ export default async function ListaSolicitudes({
       </div>
 
       <Tarjeta>
-        <form className="flex flex-wrap items-end gap-3">
+        {/* En el teléfono, rejilla de dos columnas: la búsqueda a todo el ancho
+            y el resto de a pares. Apilados uno bajo otro, los filtros
+            empujaban la primera solicitud fuera de la pantalla. */}
+        <form className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
           <Campo
             etiqueta="Buscar por folio o solicitante"
             htmlFor="q"
-            className="min-w-0 flex-1"
+            className="col-span-2 min-w-0 sm:flex-1"
           >
             <Entrada
               id="q"
@@ -127,7 +130,13 @@ export default async function ListaSolicitudes({
             </label>
           )}
 
-          <Boton type="submit" variante="secundario" className="mb-0.5">
+          <Boton
+            type="submit"
+            variante="secundario"
+            className={`mb-0.5 w-full sm:w-auto ${
+              usuario.rol !== "SOLICITANTE" ? "col-span-2" : ""
+            }`}
+          >
             Filtrar
           </Boton>
         </form>

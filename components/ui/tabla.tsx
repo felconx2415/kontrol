@@ -67,6 +67,7 @@ export function Celda({
   derecha = false,
   mono = false,
   completa = false,
+  principal = false,
 }: {
   children: ReactNode;
   /** Nombre del campo, mostrado como etiqueta cuando la tabla se apila en móvil. */
@@ -76,11 +77,15 @@ export function Celda({
   mono?: boolean;
   /** Ocupa todo el ancho sin etiqueta al apilarse (p. ej. una fila de acciones). */
   completa?: boolean;
+  /** Título de la tarjeta al apilarse en móvil: a todo el ancho, sin etiqueta. */
+  principal?: boolean;
 }) {
   return (
     <td
       data-label={etiqueta}
       className={`px-4 py-2.5 ${completa ? "celda-completa" : ""} ${
+        principal ? "celda-principal" : ""
+      } ${
         tenue ? "text-tinta-suave" : ""
       } ${derecha ? "text-right" : ""} ${mono ? "font-mono tabular-nums" : ""}`}
     >

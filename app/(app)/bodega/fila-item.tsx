@@ -52,7 +52,7 @@ export default function FilaItemBodega({ item }: { item: ItemFila }) {
         <td data-label="Código" className="px-4 py-2.5 font-mono tabular-nums text-tinta-suave">
           {item.codigo}
         </td>
-        <td data-label="Nombre" className="px-4 py-2.5">
+        <td data-label="Nombre" className="celda-principal px-4 py-2.5">
           <Link
             href={`/bodega/${item.id}`}
             className="foco-anillo rounded font-medium text-tinta underline-offset-2 hover:underline"

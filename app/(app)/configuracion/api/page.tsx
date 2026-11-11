@@ -77,7 +77,7 @@ export default async function PaginaApi() {
         >
           {tokens.map((t) => (
             <Fila key={t.id} atenuada={t.revocadoEn !== null}>
-              <Celda etiqueta="Nombre">
+              <Celda principal etiqueta="Nombre">
                 <span className="font-medium">{t.nombre}</span>
                 <span className="block text-xs text-tinta-tenue">
                   Creado por {t.creadoPor.nombre} · {formatearFecha(t.creadoEn)}

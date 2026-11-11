@@ -54,7 +54,7 @@ export default function FilaBrigada({
   return (
     <>
       <tr className="transition-colors duration-150 hover:bg-panel-suave">
-        <td data-label="Brigada" className="px-4 py-2.5 font-medium">
+        <td data-label="Brigada" className="celda-principal px-4 py-2.5 font-medium">
           {/* Al equipamiento de la brigada, igual que el nombre de una cuenta
               lleva al suyo. */}
           <Link

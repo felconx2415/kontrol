@@ -7,6 +7,7 @@ import { Tabla } from "@/components/ui/tabla";
 import { Aviso, Vacio } from "@/components/ui/superficie";
 import Buscador from "@/components/ui/buscador";
 import FormularioBrigada from "./formulario-brigada";
+import DesplegableAlta from "@/components/ui/desplegable-alta";
 import FilaBrigada from "./fila-brigada";
 
 export const metadata = { title: "Brigadas · Kontrol" };
@@ -71,7 +72,9 @@ export default async function AdminBrigadas({
       {/* Sin empresa activa no hay dónde crear una brigada, y un formulario que
           solo puede fallar no ayuda: se dice qué falta y dónde. */}
       {hayEmpresas ? (
-        <FormularioBrigada supervisores={supervisores} empresas={empresas} />
+        <DesplegableAlta texto="Nueva brigada" abierto={brigadas.length === 0}>
+          <FormularioBrigada supervisores={supervisores} empresas={empresas} />
+        </DesplegableAlta>
       ) : (
         <Aviso tono="espera">
           Antes de crear brigadas necesitas al menos una empresa activa. Crea

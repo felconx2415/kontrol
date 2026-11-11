@@ -76,7 +76,7 @@ export default function FilaUsuario({
       >
         {/* La casilla va sin `data-label`: al apilarse en móvil no necesita
             rótulo, se entiende por su posición junto al nombre. */}
-        <td className="w-10 py-2.5 pl-4">
+        <td className="celda-casilla w-10 py-2.5 pl-4">
           <input
             type="checkbox"
             checked={marcada}
@@ -85,7 +85,7 @@ export default function FilaUsuario({
             className="foco-anillo size-5 cursor-pointer rounded border-borde-fuerte accent-marca-600"
           />
         </td>
-        <td data-label="Nombre" className="px-4 py-2.5">
+        <td data-label="Nombre" className="celda-principal px-4 py-2.5">
           <Link
             href={`/historial/${usuario.id}`}
             className="foco-anillo inline-flex min-h-6 items-center rounded underline underline-offset-2"

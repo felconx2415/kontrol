@@ -202,6 +202,12 @@ body {
    una tarjeta con pares etiqueta·valor. Sin esto, en un teléfono las columnas
    de la derecha (estado, acciones) quedan fuera de pantalla tras un scroll
    horizontal que nadie descubre. El nombre de cada campo sale de `data-label`.
+
+   La tarjeta es una rejilla de dos columnas con la etiqueta encima del valor,
+   no una línea por campo: con ocho columnas eso eran ocho renglones por fila y
+   diez filas pasaban de dos mil píxeles. La celda `celda-principal` —el nombre
+   de lo que se lista— encabeza la tarjeta a todo el ancho y sin etiqueta, para
+   que cada tarjeta se reconozca por su título y no por leer pares sueltos.
 --------------------------------------------------------------------------- */
 @media (max-width: 639.98px) {
   .tabla-apilable {
@@ -216,34 +222,70 @@ body {
     display: block;
   }
   .tabla-apilable tbody tr {
-    display: block;
-    padding: 0.375rem 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1rem;
+    row-gap: 0.625rem;
+    padding: 0.875rem 1rem;
   }
   .tabla-apilable tbody td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.3125rem 1rem;
-    text-align: right;
+    display: block;
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
   }
   .tabla-apilable tbody td::before {
     content: attr(data-label);
-    flex: none;
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
     font-weight: 500;
     color: var(--color-tinta-tenue);
-    text-align: left;
-    white-space: nowrap;
   }
-  /* Celda a todo el ancho, sin etiqueta: paneles expandibles y bloques de
-     acciones que se explican solos. */
+  .tabla-apilable tbody td:not([data-label])::before {
+    content: none;
+  }
+  /* El título de la tarjeta. `grid-row: 1` lo sube aunque en la tabla no sea
+     la primera columna (en bodega va detrás del código). */
+  .tabla-apilable tbody td.celda-principal {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    font-size: 1rem;
+    line-height: 1.375rem;
+    font-weight: 600;
+  }
+  .tabla-apilable tbody td.celda-principal::before {
+    content: none;
+  }
+  /* La casilla de selección se monta a la izquierda del título en vez de
+     gastar un renglón propio. */
+  .tabla-apilable tbody td.celda-casilla {
+    grid-column: 1;
+    grid-row: 1;
+    z-index: 1;
+    width: auto;
+    align-self: center;
+    justify-self: start;
+  }
+  .tabla-apilable tbody tr:has(> td.celda-casilla) > td.celda-principal {
+    padding-left: 2rem;
+  }
+  /* Celda a todo el ancho, sin etiqueta: bloques de acciones que se explican
+     solos. */
   .tabla-apilable tbody td.celda-completa {
-    display: block;
-    padding: 0.5rem 1rem;
-    text-align: left;
+    grid-column: 1 / -1;
   }
   .tabla-apilable tbody td.celda-completa::before {
     content: none;
+  }
+  /* La fila que solo lleva un panel expandible ya trae su propio relleno. */
+  .tabla-apilable tbody tr:has(> td.panel-expandible) {
+    padding: 0;
+  }
+  .tabla-apilable tbody td.panel-expandible {
+    padding: 1rem;
   }
 }
 

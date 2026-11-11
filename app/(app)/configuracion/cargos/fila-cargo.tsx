@@ -38,7 +38,7 @@ export default function FilaCargo({ cargo }: { cargo: CargoFila }) {
           cargo.activo ? "" : "text-tinta-tenue"
         }`}
       >
-        <td data-label="Cargo" className="px-4 py-2.5 font-medium">
+        <td data-label="Cargo" className="celda-principal px-4 py-2.5 font-medium">
           {cargo.nombre}
         </td>
         <td data-label="Personas" className="px-4 py-2.5 tabular-nums text-tinta-suave">

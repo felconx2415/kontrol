@@ -140,17 +140,23 @@ export default function ListaSeleccionable({
                   seleccionable ? "pl-2" : "pl-4"
                 }`}
               >
-                <div className="flex min-w-0 items-baseline gap-3">
-                  <span className="font-mono text-xs tabular-nums text-tinta-tenue">
-                    {s.folioTexto}
+                {/* Bajo sm el detalle pasa a una segunda línea en vez de
+                    esconderse, y suma la fecha que en el teléfono no tiene
+                    columna propia. */}
+                <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                  <span className="flex min-w-0 items-baseline gap-3">
+                    <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                      {s.folioTexto}
+                    </span>
+                    <span className="truncate text-sm font-medium">
+                      {s.solicitanteNombre}
+                    </span>
                   </span>
-                  <span className="truncate text-sm font-medium">
-                    {s.solicitanteNombre}
-                  </span>
-                  <span className="hidden truncate text-xs text-tinta-tenue sm:inline">
+                  <span className="truncate text-xs text-tinta-tenue">
                     {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} · {s.totalItems}{" "}
                     ítem{s.totalItems === 1 ? "" : "s"}
                     {s.brigadaNombre ? ` · ${s.brigadaNombre}` : ""}
+                    <span className="md:hidden"> · {s.creadaEnTexto}</span>
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

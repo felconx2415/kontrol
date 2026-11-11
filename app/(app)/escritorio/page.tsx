@@ -93,11 +93,16 @@ export default async function Escritorio({
         <BotonEnlace href="/solicitudes/nueva">Nueva solicitud</BotonEnlace>
       </div>
 
+      {/* Dos columnas desde el teléfono: una cifra no necesita el ancho
+          completo, y en una sola columna las cuatro tarjetas llenaban la
+          primera pantalla antes de llegar a nada que hacer. */}
       <div
         className={`grid gap-3 ${
-          tarjetas.length >= 4
-            ? "sm:grid-cols-2 lg:grid-cols-4"
-            : "sm:grid-cols-2"
+          tarjetas.length === 1
+            ? "sm:grid-cols-2"
+            : tarjetas.length >= 4
+              ? "grid-cols-2 lg:grid-cols-4"
+              : "grid-cols-2"
         }`}
       >
         {tarjetas.map((k) => (
@@ -105,6 +110,98 @@ export default async function Escritorio({
         ))}
       </div>
 
+      {pendientes.map((grupo) => (
+        <Panel
+          key={grupo.clave}
+          titulo={`${grupo.titulo} · ${grupo.solicitudes.length}`}
+          descripcion={grupo.indicacion}
+        >
+          <ul className="-mx-4 -my-4 divide-y divide-borde">
+            {grupo.solicitudes.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={
+                    grupo.clave === "entregar"
+                      ? `/solicitudes/${s.id}/entrega`
+                      : `/solicitudes/${s.id}`
+                  }
+                  className="foco-anillo group flex min-h-11 items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
+                >
+                  {/* En el teléfono el detalle baja a una segunda línea en vez
+                      de esconderse: tipo, ítems y brigada son lo que distingue
+                      quince pedidos de la misma cuadrilla. */}
+                  <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                    <span className="flex min-w-0 items-baseline gap-3">
+                      <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                        {formatearFolio(s.folio)}
+                      </span>
+                      <span className="truncate text-sm font-medium">
+                        {s.solicitanteNombre}
+                      </span>
+                    </span>
+                    <span className="truncate text-xs text-tinta-tenue">
+                      {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
+                      {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
+                      {s.brigadaNombre ? ` · ${s.brigadaNombre}` : ""}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
+                    {grupo.accion} →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ))}
+
+      {mias && (
+        <Panel titulo="Mis solicitudes en curso" descripcion={mias.indicacion}>
+          {/* A diferencia de las colas de gestión, aquí no hay nada que hacer:
+              lo único que se quiere saber es en qué paso va cada pedido, así
+              que la fila lleva la barra de progreso en vez de un verbo. */}
+          <ul className="-mx-4 -my-4 divide-y divide-borde">
+            {mias.solicitudes.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/solicitudes/${s.id}`}
+                  className="foco-anillo group block px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
+                >
+                  <div className="flex items-baseline justify-between gap-4">
+                    <div className="flex min-w-0 items-baseline gap-3">
+                      <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                        {formatearFolio(s.folio)}
+                      </span>
+                      <span className="truncate text-sm">
+                        {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
+                        {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
+                      Ver →
+                    </span>
+                  </div>
+
+                  <div className="mt-2 max-w-md">
+                    <ProgresoSolicitud estado={s.estado} />
+                  </div>
+
+                  {s.creadaPorNombre && (
+                    <p className="mt-1 text-xs text-tinta-tenue">
+                      Registrada por {s.creadaPorNombre} a tu nombre.
+                    </p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {/* Los gráficos y la tabla de vencimientos van después de las colas: son
+          para planificar, y quien abre el escritorio viene primero a ver qué
+          tiene que hacer hoy. Antes había que bajar por dos gráficos y una
+          tabla de treinta días para llegar a la primera solicitud pendiente. */}
       {!esSolicitante && (
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel
@@ -171,7 +268,7 @@ export default async function Escritorio({
                 <tbody className="divide-y divide-borde">
                   {cambios.map((c) => (
                     <tr key={c.id} className="hover:bg-panel-suave">
-                      <td data-label="Artículo" className="px-4 py-2.5">
+                      <td data-label="Artículo" className="celda-principal px-4 py-2.5">
                         <span className="font-medium">{c.articulo}</span>
                       </td>
                       <td data-label="Asignado a" className="px-4 py-2.5">
@@ -222,88 +319,6 @@ export default async function Escritorio({
         </Panel>
       )}
 
-      {pendientes.map((grupo) => (
-        <Panel
-          key={grupo.clave}
-          titulo={`${grupo.titulo} · ${grupo.solicitudes.length}`}
-          descripcion={grupo.indicacion}
-        >
-          <ul className="-mx-4 -my-4 divide-y divide-borde">
-            {grupo.solicitudes.map((s) => (
-              <li key={s.id}>
-                <Link
-                  href={
-                    grupo.clave === "entregar"
-                      ? `/solicitudes/${s.id}/entrega`
-                      : `/solicitudes/${s.id}`
-                  }
-                  className="foco-anillo group flex min-h-11 items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
-                >
-                  <div className="flex min-w-0 items-baseline gap-3">
-                    <span className="font-mono text-xs tabular-nums text-tinta-tenue">
-                      {formatearFolio(s.folio)}
-                    </span>
-                    <span className="truncate text-sm font-medium">
-                      {s.solicitanteNombre}
-                    </span>
-                    <span className="hidden truncate text-xs text-tinta-tenue sm:inline">
-                      {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
-                      {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
-                      {s.brigadaNombre ? ` · ${s.brigadaNombre}` : ""}
-                    </span>
-                  </div>
-                  <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
-                    {grupo.accion} →
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      ))}
-
-      {mias && (
-        <Panel titulo="Mis solicitudes en curso" descripcion={mias.indicacion}>
-          {/* A diferencia de las colas de gestión, aquí no hay nada que hacer:
-              lo único que se quiere saber es en qué paso va cada pedido, así
-              que la fila lleva la barra de progreso en vez de un verbo. */}
-          <ul className="-mx-4 -my-4 divide-y divide-borde">
-            {mias.solicitudes.map((s) => (
-              <li key={s.id}>
-                <Link
-                  href={`/solicitudes/${s.id}`}
-                  className="foco-anillo group block px-4 py-3 transition-colors duration-150 hover:bg-marca-50"
-                >
-                  <div className="flex items-baseline justify-between gap-4">
-                    <div className="flex min-w-0 items-baseline gap-3">
-                      <span className="font-mono text-xs tabular-nums text-tinta-tenue">
-                        {formatearFolio(s.folio)}
-                      </span>
-                      <span className="truncate text-sm">
-                        {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"} ·{" "}
-                        {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
-                      Ver →
-                    </span>
-                  </div>
-
-                  <div className="mt-2 max-w-md">
-                    <ProgresoSolicitud estado={s.estado} />
-                  </div>
-
-                  {s.creadaPorNombre && (
-                    <p className="mt-1 text-xs text-tinta-tenue">
-                      Registrada por {s.creadaPorNombre} a tu nombre.
-                    </p>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
     </div>
   );
 }

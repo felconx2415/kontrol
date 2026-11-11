@@ -6,6 +6,7 @@ import { Tabla } from "@/components/ui/tabla";
 import { Vacio } from "@/components/ui/superficie";
 import Buscador from "@/components/ui/buscador";
 import FormularioEmpresa from "./formulario-empresa";
+import DesplegableAlta from "@/components/ui/desplegable-alta";
 import FilaEmpresa from "./fila-empresa";
 
 export const metadata = { title: "Empresas · Kontrol" };
@@ -43,7 +44,9 @@ export default async function AdminEmpresas({
         </p>
       </div>
 
-      <FormularioEmpresa />
+      <DesplegableAlta texto="Nueva empresa" abierto={empresas.length === 0}>
+        <FormularioEmpresa />
+      </DesplegableAlta>
 
       <Buscador
         etiqueta="Buscar empresa"

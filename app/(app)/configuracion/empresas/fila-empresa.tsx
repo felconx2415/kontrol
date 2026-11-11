@@ -31,7 +31,7 @@ export default function FilaEmpresa({ empresa }: { empresa: EmpresaFila }) {
           empresa.activa ? "" : "text-tinta-tenue"
         }`}
       >
-        <td data-label="Empresa" className="px-4 py-2.5 font-medium">
+        <td data-label="Empresa" className="celda-principal px-4 py-2.5 font-medium">
           {empresa.nombre}
         </td>
         <td data-label="RUT" className="px-4 py-2.5 tabular-nums text-tinta-suave">

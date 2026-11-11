@@ -7,6 +7,7 @@ import { Vacio } from "@/components/ui/superficie";
 import Buscador from "@/components/ui/buscador";
 import Paginacion from "@/components/ui/paginacion";
 import FormularioArticulo from "./formulario-articulo";
+import DesplegableAlta from "@/components/ui/desplegable-alta";
 import FilaArticulo from "./fila-articulo";
 
 export const metadata = { title: "Catálogo · Kontrol" };
@@ -52,7 +53,9 @@ export default async function AdminArticulos({
         </p>
       </div>
 
-      <FormularioArticulo />
+      <DesplegableAlta texto="Nuevo artículo" abierto={articulos.length === 0}>
+        <FormularioArticulo />
+      </DesplegableAlta>
 
       <Buscador
         etiqueta="Buscar artículo"

@@ -43,7 +43,7 @@ export default function FilaArticulo({ articulo }: { articulo: ArticuloFila }) {
         <td data-label="Código" className="px-4 py-2.5 font-mono tabular-nums text-tinta-suave">
           {articulo.codigo}
         </td>
-        <td data-label="Nombre" className="px-4 py-2.5">
+        <td data-label="Nombre" className="celda-principal px-4 py-2.5">
           {articulo.nombre}
         </td>
         <td data-label="Categoría" className="px-4 py-2.5 text-tinta-suave">
