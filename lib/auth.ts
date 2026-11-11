@@ -74,6 +74,8 @@ export type UsuarioSesion = {
   rol: Rol;
   brigadaId: string | null;
   brigadaNombre: string | null;
+  /** Lo que la identifica cuando no está en ninguna brigada. */
+  cargoNombre: string | null;
   /** Empresa a la que pertenece. Null en el ADMIN del sistema. */
   empresaId: string | null;
   empresaNombre: string | null;
@@ -96,6 +98,7 @@ export async function usuarioActual(): Promise<UsuarioSesion | null> {
     where: { id: sesion.usuarioId },
     include: {
       brigada: { select: { nombre: true } },
+      cargo: { select: { nombre: true } },
       empresa: { select: { nombre: true } },
       empresasGestionadas: {
         where: { activa: true },
@@ -115,6 +118,7 @@ export async function usuarioActual(): Promise<UsuarioSesion | null> {
     rol: usuario.rol,
     brigadaId: usuario.brigadaId,
     brigadaNombre: usuario.brigada?.nombre ?? null,
+    cargoNombre: usuario.cargo?.nombre ?? null,
     empresaId: usuario.empresaId,
     empresaNombre: usuario.empresa?.nombre ?? null,
     empresasGestionadas: usuario.empresasGestionadas,

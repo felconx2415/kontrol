@@ -44,8 +44,11 @@ export default async function LayoutApp({
   const destinosPersona = menuPersonaDe(usuario);
   const gruposCajon = gruposDe(usuario);
 
+  // Quien no está en ninguna brigada se identifica por su cargo: «Gestor ·
+  // Prevencionista de riesgo» dice más que «Gestor» a secas.
+  const grupoPersona = usuario.brigadaNombre ?? usuario.cargoNombre;
   const detallePersona = `${ETIQUETA_ROL[usuario.rol]}${
-    usuario.brigadaNombre ? ` · ${usuario.brigadaNombre}` : ""
+    grupoPersona ? ` · ${grupoPersona}` : ""
   }`;
 
   return (

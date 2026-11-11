@@ -138,9 +138,12 @@ export default async function Historial({
               {persona.brigada.nombre}
             </Link>
           ) : (
-            "Sin brigada"
+            // Sin brigada, el cargo ocupa su lugar en vez de un «Sin brigada»
+            // que no dice nada de la persona.
+            (persona.cargo?.nombre ?? "Sin brigada")
           )}
-          {persona.cargo ? ` · ${persona.cargo.nombre}` : ""} · {vigentes.length}{" "}
+          {persona.brigada && persona.cargo ? ` · ${persona.cargo.nombre}` : ""} ·{" "}
+          {vigentes.length}{" "}
           ítem{vigentes.length === 1 ? "" : "s"} asignado
           {vigentes.length === 1 ? "" : "s"}
         </p>

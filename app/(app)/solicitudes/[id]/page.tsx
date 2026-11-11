@@ -43,7 +43,9 @@ export default async function DetalleSolicitud({
   const solicitud = await db.solicitud.findUnique({
     where: { id },
     include: {
-      solicitante: { select: { id: true, nombre: true, rut: true } },
+      solicitante: {
+        select: { id: true, nombre: true, rut: true, cargo: { select: { nombre: true } } },
+      },
       creadaPor: { select: { nombre: true } },
       aprobador: { select: { nombre: true } },
       gestor: { select: { nombre: true } },
@@ -408,7 +410,7 @@ export default async function DetalleSolicitud({
           </Link>
           <p className="text-sm text-tinta-suave">
             {[
-              solicitud.brigada?.nombre,
+              solicitud.brigada?.nombre ?? solicitud.solicitante.cargo?.nombre,
               solicitud.solicitante.rut ?? "sin RUT registrado",
             ]
               .filter(Boolean)

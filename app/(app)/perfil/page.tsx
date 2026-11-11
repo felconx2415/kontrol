@@ -26,6 +26,7 @@ export default async function MiPerfil() {
       rol: true,
       firmaPngUrl: true,
       brigada: { select: { nombre: true } },
+      cargo: { select: { nombre: true } },
     },
   });
 
@@ -55,8 +56,18 @@ export default async function MiPerfil() {
           <dt className="text-tinta-suave">Rol</dt>
           <dd>{ETIQUETA_ROL[usuario.rol]}</dd>
 
-          <dt className="text-tinta-suave">Brigada</dt>
-          <dd>{usuario.brigada?.nombre ?? "—"}</dd>
+          {/* Sin brigada, el dato que identifica a la persona es su cargo. */}
+          {usuario.brigada || !usuario.cargo ? (
+            <>
+              <dt className="text-tinta-suave">Brigada</dt>
+              <dd>{usuario.brigada?.nombre ?? "—"}</dd>
+            </>
+          ) : (
+            <>
+              <dt className="text-tinta-suave">Cargo</dt>
+              <dd>{usuario.cargo.nombre}</dd>
+            </>
+          )}
         </dl>
         <p className="mt-3 border-t border-borde pt-3 text-xs text-tinta-tenue">
           Estos datos los administra un administrador desde Usuarios. El RUT

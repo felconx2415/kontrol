@@ -31,6 +31,7 @@ export default async function NuevaSolicitud({
           nombre: true,
           rut: true,
           brigada: { select: { nombre: true } },
+          cargo: { select: { nombre: true } },
         },
       })
     : [];
@@ -90,7 +91,9 @@ export default async function NuevaSolicitud({
   const conDetalle = (p: (typeof personas)[number]) => ({
     id: p.id,
     nombre: p.nombre,
-    detalle: [p.brigada?.nombre, p.rut].filter(Boolean).join(" · ") || "Sin brigada",
+    detalle:
+      [p.brigada?.nombre ?? p.cargo?.nombre, p.rut].filter(Boolean).join(" · ") ||
+      "Sin brigada",
   });
 
   return (

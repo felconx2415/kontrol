@@ -62,7 +62,7 @@ export default async function ListaSolicitudes({
       skip: (pagina - 1) * POR_PAGINA,
       take: POR_PAGINA,
       include: {
-        solicitante: { select: { nombre: true } },
+        solicitante: { select: { nombre: true, cargo: { select: { nombre: true } } } },
         brigada: { select: { nombre: true } },
         _count: { select: { items: true } },
       },
@@ -161,7 +161,8 @@ export default async function ListaSolicitudes({
             estado: s.estado,
             tipo: s.tipo,
             solicitanteNombre: s.solicitante.nombre,
-            brigadaNombre: s.brigada?.nombre ?? null,
+            // Sin brigada, el cargo identifica a la persona.
+            brigadaNombre: s.brigada?.nombre ?? s.solicitante.cargo?.nombre ?? null,
             creadaEnTexto: formatearFecha(s.creadaEn),
             totalItems: s._count.items,
           }))}

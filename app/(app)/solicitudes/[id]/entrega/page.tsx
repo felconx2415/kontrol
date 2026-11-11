@@ -25,7 +25,9 @@ export default async function PaginaEntrega({
   const solicitud = await db.solicitud.findUnique({
     where: { id },
     include: {
-      solicitante: { select: { nombre: true, rut: true } },
+      solicitante: {
+        select: { nombre: true, rut: true, cargo: { select: { nombre: true } } },
+      },
       brigada: { select: { nombre: true } },
       items: { include: { articulo: true } },
     },
@@ -64,6 +66,7 @@ export default async function PaginaEntrega({
           nombre: true,
           rut: true,
           brigada: { select: { nombre: true } },
+          cargo: { select: { nombre: true } },
         },
       });
 
@@ -91,7 +94,11 @@ export default async function PaginaEntrega({
         <p className="text-base font-medium">{solicitud.solicitante.nombre}</p>
         <p className="text-sm text-tinta-tenue">
           {solicitud.solicitante.rut ?? "Sin RUT registrado"}
-          {solicitud.brigada ? ` · ${solicitud.brigada.nombre}` : ""}
+          {solicitud.brigada
+            ? ` · ${solicitud.brigada.nombre}`
+            : solicitud.solicitante.cargo
+              ? ` · ${solicitud.solicitante.cargo.nombre}`
+              : ""}
         </p>
       </Tarjeta>
 
@@ -103,7 +110,8 @@ export default async function PaginaEntrega({
           id: p.id,
           nombre: p.nombre,
           detalle:
-            [p.brigada?.nombre, p.rut].filter(Boolean).join(" · ") || "",
+            [p.brigada?.nombre ?? p.cargo?.nombre, p.rut].filter(Boolean).join(" · ") ||
+            "",
         }))}
         items={solicitud.items.map((i) => ({
           id: i.id,

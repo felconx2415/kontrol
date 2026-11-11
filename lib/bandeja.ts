@@ -43,7 +43,7 @@ const SELECCION = {
     tipo: true,
     estado: true,
     creadaEn: true,
-    solicitante: { select: { nombre: true } },
+    solicitante: { select: { nombre: true, cargo: { select: { nombre: true } } } },
     creadaPor: { select: { nombre: true } },
     brigada: { select: { nombre: true } },
     _count: { select: { items: true } },
@@ -56,7 +56,7 @@ type FilaCruda = {
   tipo: "NUEVO" | "REEMPLAZO";
   estado: EstadoSolicitud;
   creadaEn: Date;
-  solicitante: { nombre: string };
+  solicitante: { nombre: string; cargo: { nombre: string } | null };
   creadaPor: { nombre: string } | null;
   brigada: { nombre: string } | null;
   _count: { items: number };
@@ -69,7 +69,8 @@ function mapear(filas: FilaCruda[]): SolicitudBandeja[] {
     tipo: s.tipo,
     estado: s.estado,
     solicitanteNombre: s.solicitante.nombre,
-    brigadaNombre: s.brigada?.nombre ?? null,
+    // Sin brigada, el cargo es lo que distingue a la persona en la lista.
+    brigadaNombre: s.brigada?.nombre ?? s.solicitante.cargo?.nombre ?? null,
     creadaPorNombre: s.creadaPor?.nombre ?? null,
     creadaEn: s.creadaEn,
     totalItems: s._count.items,

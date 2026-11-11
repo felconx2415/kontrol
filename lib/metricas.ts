@@ -187,7 +187,12 @@ export async function proximosCambios(
       entrega: {
         include: {
           receptor: {
-            select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+            select: {
+              id: true,
+              nombre: true,
+              brigada: { select: { nombre: true } },
+              cargo: { select: { nombre: true } },
+            },
           },
         },
       },
@@ -201,7 +206,9 @@ export async function proximosCambios(
     articulo: i.solicitudItem.articulo.nombre,
     personaId: i.entrega.receptor.id,
     persona: i.entrega.receptor.nombre,
-    brigada: i.entrega.receptor.brigada?.nombre ?? null,
+    // Sin brigada, el cargo: es lo que se lee junto al nombre.
+    brigada:
+      i.entrega.receptor.brigada?.nombre ?? i.entrega.receptor.cargo?.nombre ?? null,
     venceEn: i.venceEn!,
     dias: diasRestantes(i.venceEn!),
     reemplazoEnCurso: i.reemplazadoPor !== null,
