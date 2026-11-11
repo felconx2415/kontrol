@@ -1,13 +1,20 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState, useState } from "react";
-import { editarSolicitud, type EstadoFormulario } from "@/actions/solicitudes";
-import { ETIQUETA_MOTIVO } from "@/lib/solicitud-estado";
+import { useActionState, useMemo, useState } from "react";
+import {
+  editarSolicitud,
+  type EstadoFormulario,
+  type ItemAgregado,
+} from "@/actions/solicitudes";
+import { ETIQUETA_MOTIVO, motivosDe } from "@/lib/solicitud-estado";
 import { cantidadConUnidad } from "@/lib/unidades";
+import { normalizar } from "@/lib/busqueda";
 import Boton from "@/components/ui/boton";
-import { Campo, Entrada } from "@/components/ui/campo";
+import { AreaTexto, Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Aviso } from "@/components/ui/superficie";
+import BuscadorArticulo, { type OpcionBuscador } from "@/components/buscador-articulo";
+import type { Motivo } from "@/generated/prisma/enums";
 
 export type ItemEditable = {
   id: string;
@@ -34,6 +41,29 @@ export type ItemEditable = {
 
 type Borrador = { cantidad: number; quitar: boolean };
 
+/** Artículo del catálogo que se puede sumar a un pedido NUEVO. */
+export type ArticuloAgregable = { id: string; nombre: string; codigo: string };
+
+/** Ítem entregado a la persona que se puede sumar a un REEMPLAZO. */
+export type ReemplazableAgregable = {
+  /** Id del EntregaItem que se viene a reemplazar. */
+  id: string;
+  nombre: string;
+  codigo: string;
+  entregadoEnTexto: string;
+};
+
+/** Línea agregada en el borrador, antes de guardar. */
+type Nuevo = {
+  /** Id del artículo (NUEVO) o del ítem entregado (REEMPLAZO). */
+  origenId: string;
+  nombre: string;
+  codigo: string;
+  cantidad: number;
+  motivo: Motivo | "";
+  detalle: string;
+};
+
 /**
  * Lista de ítems que el aprobador puede ajustar antes de aprobar.
  *
@@ -44,13 +74,24 @@ export default function EditorItems({
   solicitudId,
   items,
   puedeEditar,
+  tipo,
+  esDueno,
+  catalogo,
+  reemplazables,
 }: {
   solicitudId: string;
   items: ItemEditable[];
   puedeEditar: boolean;
+  tipo: "NUEVO" | "REEMPLAZO";
+  /** Quien edita es el propio solicitante: cambia el texto, no las reglas. */
+  esDueno: boolean;
+  catalogo: ArticuloAgregable[];
+  reemplazables: ReemplazableAgregable[];
 }) {
   const [editando, setEditando] = useState(false);
   const [borradores, setBorradores] = useState<Record<string, Borrador>>({});
+  const [nuevos, setNuevos] = useState<Nuevo[]>([]);
+  const motivos = motivosDe(tipo);
 
   // Al guardar hay que volver a la vista de lectura: el componente cliente
   // conserva su estado tras revalidar, así que no se cierra solo. Se cierra
@@ -71,6 +112,7 @@ export default function EditorItems({
         items.map((i) => [i.id, { cantidad: i.cantidad, quitar: false }]),
       ),
     );
+    setNuevos([]);
     setEditando(true);
   }
 
@@ -78,7 +120,60 @@ export default function EditorItems({
     setBorradores((prev) => ({ ...prev, [id]: { ...prev[id], ...cambio } }));
   }
 
-  const quedan = items.filter((i) => !borradores[i.id]?.quitar).length;
+  function actualizarNuevo(origenId: string, cambio: Partial<Nuevo>) {
+    setNuevos((prev) =>
+      prev.map((n) => (n.origenId === origenId ? { ...n, ...cambio } : n)),
+    );
+  }
+
+  // Lo que ya está en el pedido no se ofrece: en un pedido nuevo se ajusta su
+  // cantidad, y en un reemplazo cada ítem entregado se reemplaza una sola vez.
+  const opciones: OpcionBuscador[] = useMemo(() => {
+    const elegidos = new Set(nuevos.map((n) => n.origenId));
+    if (tipo === "NUEVO") {
+      const enPedido = new Set(items.map((i) => i.articuloCodigo));
+      return catalogo
+        .filter((a) => !elegidos.has(a.id) && !enPedido.has(a.codigo))
+        .map((a) => ({
+          id: a.id,
+          principal: a.nombre,
+          secundario: a.codigo,
+          buscable: normalizar(`${a.nombre} ${a.codigo}`),
+        }));
+    }
+    return reemplazables
+      .filter((r) => !elegidos.has(r.id))
+      .map((r) => ({
+        id: r.id,
+        principal: r.nombre,
+        secundario: `entregado el ${r.entregadoEnTexto}`,
+        buscable: normalizar(`${r.nombre} ${r.codigo}`),
+      }));
+  }, [tipo, catalogo, reemplazables, items, nuevos]);
+
+  function agregar(origenId: string) {
+    const fuente =
+      tipo === "NUEVO"
+        ? catalogo.find((a) => a.id === origenId)
+        : reemplazables.find((r) => r.id === origenId);
+    if (!fuente) return;
+    setNuevos((prev) => [
+      ...prev,
+      {
+        origenId,
+        nombre: fuente.nombre,
+        codigo: fuente.codigo,
+        cantidad: 1,
+        // Con un solo motivo posible no hay nada que elegir.
+        motivo: motivos.length === 1 ? motivos[0] : "",
+        detalle: "",
+      },
+    ]);
+  }
+
+  const quedan =
+    items.filter((i) => !borradores[i.id]?.quitar).length + nuevos.length;
+  const faltaMotivo = nuevos.some((n) => n.motivo === "");
 
   const payload = JSON.stringify(
     items.map((i) => ({
@@ -88,13 +183,25 @@ export default function EditorItems({
     })),
   );
 
+  const payloadNuevos = JSON.stringify(
+    nuevos.map(
+      (n): ItemAgregado => ({
+        articuloId: tipo === "NUEVO" ? n.origenId : null,
+        entregaAnteriorItemId: tipo === "REEMPLAZO" ? n.origenId : null,
+        cantidad: n.cantidad,
+        motivo: n.motivo,
+        detalleReemplazo: tipo === "REEMPLAZO" ? n.detalle : null,
+      }),
+    ),
+  );
+
   return (
     <section className="rounded-xl border border-borde bg-panel">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-borde px-4 py-3">
         <h2 className="titulo-seccion">Ítems solicitados</h2>
         {puedeEditar && !editando && (
           <Boton type="button" variante="secundario" tamano="sm" onClick={abrirEdicion}>
-            Ajustar pedido
+            {esDueno ? "Editar o agregar ítems" : "Ajustar pedido"}
           </Boton>
         )}
       </header>
@@ -202,6 +309,7 @@ export default function EditorItems({
         <form action={accion}>
           <input type="hidden" name="solicitudId" value={solicitudId} />
           <input type="hidden" name="cambios" value={payload} />
+          <input type="hidden" name="nuevos" value={payloadNuevos} />
 
           <ul className="divide-y divide-borde">
             {items.map((item) => {
@@ -254,13 +362,126 @@ export default function EditorItems({
                 </li>
               );
             })}
+            {nuevos.map((n) => (
+              <li key={n.origenId} className="bg-marca-50/40 px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {n.nombre}{" "}
+                      <span className="rounded bg-marca-100 px-1.5 py-0.5 text-xs font-medium text-marca-700">
+                        Nuevo
+                      </span>
+                    </p>
+                    <p className="text-xs text-tinta-tenue">{n.codigo}</p>
+                  </div>
+                  <Boton
+                    type="button"
+                    variante="peligro"
+                    tamano="sm"
+                    onClick={() =>
+                      setNuevos((prev) => prev.filter((x) => x.origenId !== n.origenId))
+                    }
+                  >
+                    Quitar
+                  </Boton>
+                </div>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Campo etiqueta="Cantidad" htmlFor={`cant-nuevo-${n.origenId}`}>
+                    <Entrada
+                      id={`cant-nuevo-${n.origenId}`}
+                      type="number"
+                      min={1}
+                      value={n.cantidad}
+                      onChange={(e) =>
+                        actualizarNuevo(n.origenId, {
+                          cantidad: Math.max(1, Number(e.target.value) || 1),
+                        })
+                      }
+                    />
+                  </Campo>
+                  <Campo
+                    etiqueta="Motivo"
+                    htmlFor={`motivo-nuevo-${n.origenId}`}
+                    requerido
+                  >
+                    <Seleccion
+                      id={`motivo-nuevo-${n.origenId}`}
+                      value={n.motivo}
+                      onChange={(e) =>
+                        actualizarNuevo(n.origenId, {
+                          motivo: e.target.value as Motivo | "",
+                        })
+                      }
+                    >
+                      <option value="">Elige un motivo…</option>
+                      {motivos.map((m) => (
+                        <option key={m} value={m}>
+                          {ETIQUETA_MOTIVO[m]}
+                        </option>
+                      ))}
+                    </Seleccion>
+                  </Campo>
+                  {tipo === "REEMPLAZO" && (
+                    <Campo
+                      etiqueta="Detalle (opcional)"
+                      htmlFor={`detalle-nuevo-${n.origenId}`}
+                      className="sm:col-span-2"
+                    >
+                      <AreaTexto
+                        id={`detalle-nuevo-${n.origenId}`}
+                        rows={2}
+                        maxLength={500}
+                        value={n.detalle}
+                        onChange={(e) =>
+                          actualizarNuevo(n.origenId, { detalle: e.target.value })
+                        }
+                      />
+                    </Campo>
+                  )}
+                </div>
+              </li>
+            ))}
           </ul>
 
+          {/* Agregar va debajo de lo que ya hay: primero se revisa el pedido y
+              después se completa. */}
+          <div className="border-t border-borde p-4">
+            {opciones.length > 0 ? (
+              <BuscadorArticulo
+                opciones={opciones}
+                etiqueta={
+                  tipo === "NUEVO"
+                    ? "Agregar un artículo del catálogo"
+                    : "Agregar otro ítem a reemplazar"
+                }
+                placeholder={
+                  tipo === "NUEVO"
+                    ? "Busca por nombre o código y toca para agregar…"
+                    : "Busca entre el equipamiento entregado…"
+                }
+                onElegir={agregar}
+              />
+            ) : (
+              <p className="text-sm text-tinta-tenue">
+                {tipo === "NUEVO"
+                  ? "No quedan artículos del catálogo por agregar."
+                  : "No hay más equipamiento entregado que se pueda reemplazar."}
+              </p>
+            )}
+          </div>
+
           <div className="space-y-3 border-t border-borde p-4">
+            {faltaMotivo && (
+              <Aviso tono="espera">
+                Elige el motivo de cada ítem agregado antes de guardar.
+              </Aviso>
+            )}
             {quedan === 0 && (
               <Aviso tono="espera">
-                Debe quedar al menos un ítem. Si no corresponde nada del pedido,
-                usa Rechazar en vez de vaciarlo.
+                {esDueno
+                  ? "Debe quedar al menos un ítem. Si ya no necesitas nada, cancela la solicitud en vez de vaciarla."
+                  : "Debe quedar al menos un ítem. Si no corresponde nada del pedido, usa Rechazar en vez de vaciarlo."}
               </Aviso>
             )}
             {estado.error && <Aviso tono="error">{estado.error}</Aviso>}
@@ -275,7 +496,7 @@ export default function EditorItems({
               </Boton>
               <Boton
                 type="submit"
-                disabled={quedan === 0}
+                disabled={quedan === 0 || faltaMotivo}
                 textoPendiente="Guardando…"
               >
                 Guardar cambios

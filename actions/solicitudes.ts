@@ -508,11 +508,30 @@ export type CambioItem = {
 };
 
 /**
- * Ajuste del pedido por parte de quien aprueba.
+ * Línea que se suma al pedido al ajustarlo. En un pedido NUEVO se elige del
+ * catálogo (`articuloId`); en un REEMPLAZO, del equipamiento que la persona ya
+ * tiene (`entregaAnteriorItemId`), igual que al crearlo: no se puede reemplazar
+ * algo que nunca se entregó.
+ */
+export type ItemAgregado = {
+  articuloId?: string | null;
+  entregaAnteriorItemId?: string | null;
+  cantidad: number;
+  motivo: Motivo | "";
+  detalleReemplazo?: string | null;
+};
+
+/**
+ * Ajuste del pedido mientras espera aprobación: cambiar cantidades, quitar
+ * líneas y agregar las que faltaron.
  *
  * Solo mientras está PENDIENTE: una vez aprobada, el pedido al almacén se hace
  * sobre esas cantidades y cambiarlas después descuadraría lo que llega.
- * No permite agregar artículos: el pedido sigue siendo del solicitante.
+ *
+ * Lo pueden hacer quien aprueba y gestión, y también el propio solicitante:
+ * nadie sabe mejor que él lo que se le olvidó pedir, y hasta que alguien lo
+ * apruebe el pedido sigue siendo suyo. Agregar algo no exige empezar otra
+ * solicitud ni que el aprobador revise dos por separado.
  */
 export async function editarSolicitud(
   _estado: EstadoFormulario,
@@ -520,15 +539,14 @@ export async function editarSolicitud(
 ): Promise<EstadoFormulario> {
   const usuario = await requerirUsuario();
 
-  if (usuario.rol !== "APROBADOR" && !esGestion(usuario.rol)) {
-    return { error: "No tienes permiso para editar solicitudes." };
-  }
-
   const solicitudId = String(formData.get("solicitudId") ?? "");
 
   let cambios: CambioItem[];
+  let nuevos: ItemAgregado[];
   try {
     cambios = JSON.parse(String(formData.get("cambios") ?? "[]"));
+    const crudo = JSON.parse(String(formData.get("nuevos") ?? "[]"));
+    nuevos = Array.isArray(crudo) ? crudo : [];
   } catch {
     return { error: "No se pudieron leer los cambios." };
   }
@@ -539,7 +557,12 @@ export async function editarSolicitud(
   });
 
   if (!solicitud) return { error: "La solicitud no existe." };
-  if (!alcanza(usuario.alcance, solicitud.empresaId)) {
+
+  const esDueno = solicitud.solicitanteId === usuario.id;
+  if (usuario.rol !== "APROBADOR" && !esGestion(usuario.rol) && !esDueno) {
+    return { error: "No tienes permiso para editar esta solicitud." };
+  }
+  if (!esDueno && !alcanza(usuario.alcance, solicitud.empresaId)) {
     return { error: "Esa solicitud no pertenece a una empresa que gestiones." };
   }
   if (solicitud.estado !== "PENDIENTE") {
@@ -549,9 +572,11 @@ export async function editarSolicitud(
   const porId = new Map(solicitud.items.map((i) => [i.id, i]));
   const conservados = cambios.filter((c) => !c.quitar);
 
-  if (conservados.length === 0) {
+  if (conservados.length + nuevos.length === 0) {
     return {
-      error: "Debe quedar al menos un ítem. Si no corresponde nada, rechaza la solicitud.",
+      error: esDueno
+        ? "Debe quedar al menos un ítem. Si ya no necesitas nada, cancela la solicitud."
+        : "Debe quedar al menos un ítem. Si no corresponde nada, rechaza la solicitud.",
     };
   }
 
@@ -562,6 +587,114 @@ export async function editarSolicitud(
     if (!Number.isInteger(c.cantidad) || c.cantidad < 1) {
       return { error: `Cantidad inválida para ${item.articulo.nombre}.` };
     }
+  }
+
+  // ── Líneas nuevas ───────────────────────────────────────────────────────
+  // Se validan con las mismas reglas que al crear la solicitud: el id llega
+  // del cliente, así que de quién es lo que se reemplaza y si el artículo
+  // sigue activo se comprueba aquí y no en el formulario.
+  const motivosValidos = motivosDe(solicitud.tipo);
+  const articulosEnPedido = new Set(
+    solicitud.items
+      .filter((i) => conservados.some((c) => c.itemId === i.id))
+      .map((i) => i.articuloId),
+  );
+
+  const previos =
+    solicitud.tipo === "REEMPLAZO"
+      ? await db.entregaItem.findMany({
+          where: {
+            id: {
+              in: nuevos
+                .map((n) => n.entregaAnteriorItemId)
+                .filter((v): v is string => Boolean(v)),
+            },
+          },
+          select: {
+            id: true,
+            reemplazadoEn: true,
+            entrega: { select: { receptorId: true } },
+            reemplazadoPor: { select: { id: true } },
+            solicitudItem: { select: { articulo: true } },
+          },
+        })
+      : [];
+  const previoPorId = new Map(previos.map((p) => [p.id, p]));
+
+  const catalogo =
+    solicitud.tipo === "NUEVO"
+      ? await db.articulo.findMany({
+          where: {
+            id: { in: nuevos.map((n) => String(n.articuloId ?? "")) },
+            activo: true,
+          },
+        })
+      : [];
+  const articuloPorId = new Map(catalogo.map((a) => [a.id, a]));
+
+  const aCrear: {
+    articuloId: string;
+    nombre: string;
+    cantidad: number;
+    motivo: Motivo;
+    detalleReemplazo: string | null;
+    entregaAnteriorItemId: string | null;
+  }[] = [];
+  const reemplazosUsados = new Set<string>();
+
+  for (const n of nuevos) {
+    let articulo: { id: string; nombre: string } | undefined;
+    let entregaAnteriorItemId: string | null = null;
+
+    if (solicitud.tipo === "NUEVO") {
+      articulo = articuloPorId.get(String(n.articuloId ?? ""));
+      if (!articulo) {
+        return { error: "Uno de los artículos agregados ya no está disponible." };
+      }
+      // Dos líneas del mismo artículo en un pedido nuevo son una sola con más
+      // cantidad, y así se leen en el formato del almacén.
+      if (articulosEnPedido.has(articulo.id)) {
+        return {
+          error: `${articulo.nombre} ya está en el pedido: ajusta su cantidad en vez de agregarlo otra vez.`,
+        };
+      }
+      articulosEnPedido.add(articulo.id);
+    } else {
+      const previo = previoPorId.get(String(n.entregaAnteriorItemId ?? ""));
+      if (!previo) {
+        return { error: "Uno de los ítems a reemplazar ya no existe." };
+      }
+      if (previo.entrega.receptorId !== solicitud.solicitanteId) {
+        return { error: "Uno de los ítems a reemplazar no está asignado a esta persona." };
+      }
+      if (previo.reemplazadoPor || previo.reemplazadoEn || reemplazosUsados.has(previo.id)) {
+        return {
+          error: `${previo.solicitudItem.articulo.nombre} ya tiene un reemplazo en curso.`,
+        };
+      }
+      reemplazosUsados.add(previo.id);
+      articulo = previo.solicitudItem.articulo;
+      entregaAnteriorItemId = previo.id;
+    }
+
+    if (!Number.isInteger(n.cantidad) || n.cantidad < 1) {
+      return { error: `Cantidad inválida para ${articulo.nombre}.` };
+    }
+    if (!n.motivo || !motivosValidos.includes(n.motivo)) {
+      return { error: `Indica un motivo para ${articulo.nombre}.` };
+    }
+
+    aCrear.push({
+      articuloId: articulo.id,
+      nombre: articulo.nombre,
+      cantidad: n.cantidad,
+      motivo: n.motivo,
+      detalleReemplazo:
+        solicitud.tipo === "REEMPLAZO"
+          ? String(n.detalleReemplazo ?? "").trim().slice(0, 500) || null
+          : null,
+      entregaAnteriorItemId,
+    });
   }
 
   // Diferencia legible, para dejar constancia de qué cambió exactamente.
@@ -575,6 +708,9 @@ export async function editarSolicitud(
     if (c.cantidad !== item.cantidad) {
       detalle.push(`${item.articulo.nombre}: cantidad ${item.cantidad} → ${c.cantidad}`);
     }
+  }
+  for (const n of aCrear) {
+    detalle.push(`Agregado: ${n.nombre} (x${n.cantidad})`);
   }
 
   if (detalle.length === 0) return { error: "No hiciste ningún cambio." };
@@ -590,6 +726,19 @@ export async function editarSolicitud(
       await tx.solicitudItem.update({
         where: { id: c.itemId },
         data: { cantidad: c.cantidad },
+      });
+    }
+
+    for (const n of aCrear) {
+      await tx.solicitudItem.create({
+        data: {
+          solicitudId,
+          articuloId: n.articuloId,
+          cantidad: n.cantidad,
+          motivo: n.motivo,
+          detalleReemplazo: n.detalleReemplazo,
+          entregaAnteriorItemId: n.entregaAnteriorItemId,
+        },
       });
     }
 

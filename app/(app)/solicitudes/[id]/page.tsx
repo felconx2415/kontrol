@@ -47,7 +47,7 @@ export default async function DetalleSolicitud({
       creadaPor: { select: { nombre: true } },
       aprobador: { select: { nombre: true } },
       gestor: { select: { nombre: true } },
-      editadaPor: { select: { nombre: true } },
+      editadaPor: { select: { id: true, nombre: true } },
       brigada: { select: { nombre: true } },
       items: {
         include: {
@@ -111,10 +111,44 @@ export default async function DetalleSolicitud({
   const destinoAlRetomar = estadoAlRetomar(solicitud);
 
   // Ajustar el pedido solo tiene sentido antes de aprobarlo: después, el
-  // pedido al almacén ya se hizo sobre esas cantidades.
+  // pedido al almacén ya se hizo sobre esas cantidades. Además de quien
+  // aprueba, el propio solicitante puede completarlo con lo que olvidó.
+  const esDueno = solicitud.solicitante.id === usuario.id;
   const puedeEditarItems =
     solicitud.estado === "PENDIENTE" &&
-    (usuario.rol === "APROBADOR" || esGestion(usuario.rol));
+    (usuario.rol === "APROBADOR" || esGestion(usuario.rol) || esDueno);
+
+  // Lo que se puede sumar al ajustar: en un pedido nuevo, el catálogo; en un
+  // reemplazo, lo que la persona tiene entregado y aún sin reemplazo en curso
+  // (lo que ya está en este pedido cae fuera solo, porque ya tiene uno).
+  const [catalogoParaAgregar, reemplazablesParaAgregar] = puedeEditarItems
+    ? await Promise.all([
+        solicitud.tipo === "NUEVO"
+          ? db.articulo.findMany({
+              where: { activo: true },
+              orderBy: [{ categoria: "asc" }, { nombre: "asc" }],
+              select: { id: true, codigo: true, nombre: true },
+            })
+          : Promise.resolve([]),
+        solicitud.tipo === "REEMPLAZO"
+          ? db.entregaItem.findMany({
+              where: {
+                reemplazadoEn: null,
+                reemplazadoPor: null,
+                entrega: { receptorId: solicitud.solicitante.id },
+              },
+              orderBy: { entrega: { entregadaEn: "desc" } },
+              select: {
+                id: true,
+                entrega: { select: { entregadaEn: true } },
+                solicitudItem: {
+                  select: { articulo: { select: { nombre: true, codigo: true } } },
+                },
+              },
+            })
+          : Promise.resolve([]),
+      ])
+    : [[], []];
 
   // Envío al almacén: solo gestión, desde que la solicitud está aprobada, y solo
   // si tiene ítems del CECO que va a ese almacén.
@@ -392,13 +426,17 @@ export default async function DetalleSolicitud({
 
       {error && <Aviso tono="error">{error}</Aviso>}
 
-      {solicitud.editadaEn && (
-        <Aviso tono="espera">
-          {solicitud.editadaPor?.nombre ?? "Un aprobador"} ajustó este pedido el{" "}
-          {formatearFechaHora(solicitud.editadaEn)}. Las cantidades que ves son
-          las definitivas.
-        </Aviso>
-      )}
+      {/* Si quien ajustó fue el propio solicitante, completó su pedido: no
+          es una corrección de otro que haya que advertir. Queda igual en el
+          seguimiento como «Pedido ajustado». */}
+      {solicitud.editadaEn &&
+        solicitud.editadaPor?.id !== solicitud.solicitante.id && (
+          <Aviso tono="espera">
+            {solicitud.editadaPor?.nombre ?? "Un aprobador"} ajustó este pedido el{" "}
+            {formatearFechaHora(solicitud.editadaEn)}. Las cantidades que ves son
+            las definitivas.
+          </Aviso>
+        )}
 
       {/* Tres bloques en una rejilla y no dos columnas: las acciones tienen que
           ir **primero** en el teléfono —quien abre esto suele venir a entregar,
@@ -457,6 +495,19 @@ export default async function DetalleSolicitud({
           <EditorItems
             solicitudId={solicitud.id}
             puedeEditar={puedeEditarItems}
+            tipo={solicitud.tipo}
+            esDueno={esDueno}
+            catalogo={catalogoParaAgregar.map((a) => ({
+              id: a.id,
+              nombre: a.nombre,
+              codigo: a.codigo,
+            }))}
+            reemplazables={reemplazablesParaAgregar.map((r) => ({
+              id: r.id,
+              nombre: r.solicitudItem.articulo.nombre,
+              codigo: r.solicitudItem.articulo.codigo,
+              entregadoEnTexto: formatearFecha(r.entrega.entregadaEn),
+            }))}
             items={solicitud.items.map((item) => ({
               id: item.id,
               articuloNombre: item.articulo.nombre,
