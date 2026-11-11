@@ -54,7 +54,7 @@ export default async function Reportes({
       orderBy: { creadaEn: "desc" },
       take: 200,
       include: {
-        solicitante: { select: { nombre: true } },
+        solicitante: { select: { nombre: true, cargo: { select: { nombre: true } } } },
         brigada: { select: { nombre: true } },
         _count: { select: { items: true } },
       },
@@ -111,7 +111,12 @@ export default async function Reportes({
             asignadoEn: true,
             notas: true,
             usuario: {
-              select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+              select: {
+                id: true,
+                nombre: true,
+                brigada: { select: { nombre: true } },
+                cargo: { select: { nombre: true } },
+              },
             },
             brigada: { select: { id: true, nombre: true } },
             asignadoPor: { select: { nombre: true } },
@@ -213,11 +218,13 @@ export default async function Reportes({
             "Folio",
             "Solicitante",
             "Brigada",
+            "Cargo",
             "Tipo",
             "Ítems",
             "Creada",
             "Estado",
           ]}
+          anchoMinimo="48rem"
         >
           {solicitudes.map((s) => (
             <Fila key={s.id}>
@@ -231,6 +238,7 @@ export default async function Reportes({
               </Celda>
               <Celda etiqueta="Solicitante">{s.solicitante.nombre}</Celda>
               <Celda etiqueta="Brigada" tenue>{s.brigada?.nombre ?? "—"}</Celda>
+              <Celda etiqueta="Cargo" tenue>{s.solicitante.cargo?.nombre ?? "—"}</Celda>
               <Celda etiqueta="Tipo" tenue>{s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"}</Celda>
               <Celda etiqueta="Ítems" mono>{s._count.items}</Celda>
               <Celda etiqueta="Creada" tenue>{formatearFecha(s.creadaEn)}</Celda>
@@ -322,10 +330,11 @@ export default async function Reportes({
               { texto: "Cantidad", alineado: "der" },
               "Asignado a",
               "Brigada",
+              "Cargo",
               "Asignó",
               "Fecha",
             ]}
-            anchoMinimo="52rem"
+            anchoMinimo="58rem"
           >
             {traslados.map((t) => (
               <Fila key={t.id}>
@@ -350,6 +359,10 @@ export default async function Reportes({
                   {t.asignacion.brigada?.nombre ??
                     t.asignacion.usuario?.brigada?.nombre ??
                     "—"}
+                </Celda>
+                {/* Lo de la brigada no tiene cargo: no es de una persona. */}
+                <Celda etiqueta="Cargo" tenue>
+                  {t.asignacion.usuario?.cargo?.nombre ?? "—"}
                 </Celda>
                 <Celda etiqueta="Asignó" tenue>{t.asignacion.asignadoPor.nombre}</Celda>
                 <Celda etiqueta="Fecha" tenue>{formatearFecha(t.asignacion.asignadoEn)}</Celda>

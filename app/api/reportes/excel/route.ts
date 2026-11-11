@@ -37,7 +37,9 @@ export async function GET(request: Request) {
       where: construirFiltro(filtros, usuario.alcance),
       orderBy: { creadaEn: "desc" },
       include: {
-        solicitante: { select: { nombre: true, rut: true } },
+        solicitante: {
+          select: { nombre: true, rut: true, cargo: { select: { nombre: true } } },
+        },
         brigada: { select: { nombre: true } },
         aprobador: { select: { nombre: true } },
         entrega: { select: { entregadaEn: true } },
@@ -92,7 +94,12 @@ export async function GET(request: Request) {
             asignadoEn: true,
             notas: true,
             usuario: {
-              select: { id: true, nombre: true, brigada: { select: { nombre: true } } },
+              select: {
+                id: true,
+                nombre: true,
+                brigada: { select: { nombre: true } },
+                cargo: { select: { nombre: true } },
+              },
             },
             brigada: { select: { id: true, nombre: true } },
             asignadoPor: { select: { nombre: true } },
@@ -177,6 +184,7 @@ export async function GET(request: Request) {
     { header: "Solicitante", key: "solicitante", width: 24 },
     { header: "RUT", key: "rut", width: 14 },
     { header: "Brigada", key: "brigada", width: 18 },
+    { header: "Cargo", key: "cargo", width: 22 },
     { header: "Artículo", key: "articulo", width: 30 },
     { header: "Código", key: "codigo", width: 12 },
     { header: "Categoría", key: "categoria", width: 16 },
@@ -206,6 +214,7 @@ export async function GET(request: Request) {
         solicitante: s.solicitante.nombre,
         rut: s.solicitante.rut ?? "",
         brigada: s.brigada?.nombre ?? "",
+        cargo: s.solicitante.cargo?.nombre ?? "",
         articulo: item.articulo.nombre,
         codigo: item.articulo.codigo,
         categoria: item.articulo.categoria === "EPP" ? "EPP" : "Equipamiento",
@@ -292,6 +301,7 @@ export async function GET(request: Request) {
     // una persona.
     { header: "Destinatario", key: "destinatario", width: 14 },
     { header: "Brigada", key: "brigada", width: 18 },
+    { header: "Cargo", key: "cargo", width: 22 },
     { header: "Asignó", key: "asigno", width: 22 },
     { header: "Fecha", key: "fecha", width: 14 },
     { header: "Nota", key: "nota", width: 30 },
@@ -307,6 +317,7 @@ export async function GET(request: Request) {
       destinatario: duenoAsignacion(t.asignacion).esBrigada ? "Brigada" : "Persona",
       brigada:
         t.asignacion.brigada?.nombre ?? t.asignacion.usuario?.brigada?.nombre ?? "",
+      cargo: t.asignacion.usuario?.cargo?.nombre ?? "",
       asigno: t.asignacion.asignadoPor.nombre,
       fecha: fechaParaExcel(t.asignacion.asignadoEn),
       nota: t.asignacion.notas ?? "",
