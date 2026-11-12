@@ -185,7 +185,7 @@ export default function InstalarApp() {
             <button
               type="button"
               onClick={instalar}
-              className="foco-anillo inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg bg-marca-600 px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-marca-700"
+              className="foco-anillo inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg bg-tinta px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-tinta/80"
             >
               Instalar
             </button>

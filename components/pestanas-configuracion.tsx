@@ -31,7 +31,7 @@ export default function PestanasConfiguracion({
                 aria-current={activa ? "page" : undefined}
                 className={`foco-anillo inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors duration-150 ${
                   activa
-                    ? "bg-marca-600 text-white"
+                    ? "bg-tinta text-white"
                     : "text-tinta-suave hover:bg-panel-suave hover:text-tinta"
                 }`}
               >

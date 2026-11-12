@@ -199,7 +199,7 @@ export default async function Escritorio({
                           {s.brigadaNombre ? ` · ${s.brigadaNombre}` : ""}
                         </span>
                       </div>
-                      <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
+                      <span className="shrink-0 text-sm font-medium text-marca-700 group-hover:underline">
                         {grupo.accion} →
                       </span>
                     </Link>
@@ -235,7 +235,7 @@ export default async function Escritorio({
                             {s.totalItems} ítem{s.totalItems === 1 ? "" : "s"}
                           </span>
                         </div>
-                        <span className="shrink-0 text-sm font-medium text-marca-600 group-hover:underline">
+                        <span className="shrink-0 text-sm font-medium text-marca-700 group-hover:underline">
                           Ver →
                         </span>
                       </div>

@@ -47,7 +47,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Tiñe la barra de estado del color de la barra de la app. Es lo que hace que
   // instalada no se vea como una web dentro de un marco ajeno.
-  themeColor: "#f4f5f7",
+  themeColor: "#fff7ed",
   // El zoom se deja libre a propósito: esto se lee bajo sol fuerte y con la
   // vista cansada, y bloquearlo es de las cosas que más molestan en terreno.
   initialScale: 1,

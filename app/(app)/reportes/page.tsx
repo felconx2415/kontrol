@@ -206,7 +206,7 @@ export default async function Reportes({
         </div>
         <a
           href={`/api/reportes/excel?${parametros.toString()}`}
-          className="foco-anillo inline-flex min-h-11 items-center rounded-lg bg-marca-600 px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-marca-700"
+          className="foco-anillo inline-flex min-h-11 items-center rounded-lg bg-tinta px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-tinta/80"
         >
           Exportar a Excel
         </a>

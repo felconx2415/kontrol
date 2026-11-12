@@ -150,7 +150,7 @@ export default function CampanaNotificaciones({
                             nunca depende solo del color. */}
                         {!n.leida && (
                           <span
-                            className="mt-1.5 size-2 shrink-0 rounded-full bg-marca-600"
+                            className="mt-1.5 size-2 shrink-0 rounded-full bg-marca-500"
                             aria-hidden="true"
                           />
                         )}

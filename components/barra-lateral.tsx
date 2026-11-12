@@ -77,7 +77,7 @@ export function ListaNavegacion({
                       compacta ? "justify-center px-0" : "px-3"
                     } ${
                       activo
-                        ? "bg-marca-50 text-marca-800 [&_svg]:text-marca-600"
+                        ? "bg-marca-100/70 text-tinta [&_svg]:text-marca-500"
                         : "text-tinta-suave hover:bg-panel-suave hover:text-tinta"
                     }`}
                   >

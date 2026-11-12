@@ -11,7 +11,7 @@ export default function TarjetaKpi({ kpi }: { kpi: Kpi }) {
   return (
     <Link
       href={kpi.href}
-      className={`foco-anillo flex flex-col justify-between rounded-2xl border bg-panel p-3 sm:p-4 transition-colors duration-150 hover:bg-panel-suave ${
+      className={`foco-anillo flex flex-col justify-between rounded-2xl border bg-panel p-3 transition-[border-color,box-shadow] duration-200 hover:border-marca-300 hover:shadow-lg hover:shadow-marca-100/60 sm:p-5 ${
         kpi.alerta ? "border-espera-borde" : "border-borde"
       }`}
     >

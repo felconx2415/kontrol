@@ -13,8 +13,8 @@ import type { MetadataRoute } from "next";
  */
 
 /** Los mismos de `globals.css`, resueltos a sRGB: el manifiesto no lee oklch. */
-const BARRA = "#f4f5f7"; // la barra superior, clara desde 0.13.0
-const LIENZO = "#f3f5f6"; // el fondo de la app
+const BARRA = "#fff7ed"; // la barra superior: el crema de Novara
+const LIENZO = "#fff7ed"; // el fondo de la app
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

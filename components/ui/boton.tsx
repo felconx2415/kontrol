@@ -8,9 +8,10 @@ export type TamanoBoton = "sm" | "md";
 
 const VARIANTES: Record<VarianteBoton, string> = {
   primario:
-    "bg-marca-600 text-white hover:bg-marca-700 active:bg-marca-800 disabled:hover:bg-marca-600",
+    // Negro, como el «Get Started» de Novara: el naranja es acento, no acción.
+    "bg-tinta text-white hover:bg-tinta/80 active:bg-black disabled:hover:bg-tinta",
   secundario:
-    "border border-borde-fuerte bg-panel text-tinta hover:bg-panel-suave active:bg-lienzo",
+    "border border-borde-fuerte bg-panel text-tinta hover:bg-marca-50 active:bg-marca-100",
   peligro:
     "border border-fallo-borde bg-panel text-fallo hover:bg-fallo-fondo active:bg-fallo-fondo",
   fantasma: "text-tinta-suave hover:bg-panel-suave hover:text-tinta",
