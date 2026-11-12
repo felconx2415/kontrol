@@ -126,7 +126,7 @@ export default function FormularioPrestamo({
         </Campo>
       </Tarjeta>
 
-      <section className="rounded-xl border border-borde bg-panel">
+      <section className="rounded-2xl border border-borde bg-panel">
         <header className="border-b border-borde p-4">
           <h2 className="titulo-seccion mb-3">
             Material prestado{" "}

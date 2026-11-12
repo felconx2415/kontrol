@@ -87,7 +87,7 @@ export default function FormularioDevolucion({
       <input type="hidden" name="prestamoId" value={prestamoId} />
       <input type="hidden" name="devoluciones" value={payload} />
 
-      <section className="rounded-xl border border-borde bg-panel">
+      <section className="rounded-2xl border border-borde bg-panel">
         <h2 className="titulo-seccion border-b border-borde px-4 py-3">
           Cómo vuelve cada ítem
         </h2>

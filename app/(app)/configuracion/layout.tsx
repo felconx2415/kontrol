@@ -24,15 +24,20 @@ export default async function LayoutConfiguracion({
   return (
     <div className="space-y-5">
       {/* Con una sola área —el caso del gestor— una pestaña suelta no dice nada
-          y solo ocupa alto. */}
+          y solo ocupa alto. Desde lg tampoco van: la barra lateral ya lista
+          las mismas áreas bajo «Configuración», y repetirlas arriba eran dos
+          menús iguales a la vista. En el teléfono siguen, porque ahí la barra
+          lateral es un cajón cerrado. */}
       {llevaPestanas(usuario) && (
-        <PestanasConfiguracion
-          pestanas={areas.map((a) => ({
-            id: a.id,
-            href: a.href,
-            texto: a.texto,
-          }))}
-        />
+        <div className="lg:hidden">
+          <PestanasConfiguracion
+            pestanas={areas.map((a) => ({
+              id: a.id,
+              href: a.href,
+              texto: a.texto,
+            }))}
+          />
+        </div>
       )}
 
       {children}

@@ -75,7 +75,7 @@ export default function CampanaNotificaciones({
             ? "Notificaciones"
             : `Notificaciones: ${sinLeer} sin leer`
         }
-        className="foco-anillo-claro relative inline-flex size-11 cursor-pointer items-center justify-center rounded-full text-white transition-colors duration-150 hover:bg-white/10"
+        className="foco-anillo relative inline-flex size-11 cursor-pointer items-center justify-center rounded-xl border border-borde bg-panel text-tinta-suave transition-colors duration-150 hover:bg-panel-suave hover:text-tinta"
       >
         <svg
           viewBox="0 0 24 24"
@@ -110,7 +110,7 @@ export default function CampanaNotificaciones({
       {abierta && (
         <div
           role="menu"
-          className="fixed inset-x-3 top-[5.5rem] z-[var(--z-pegajoso)] overflow-hidden rounded-xl border border-borde bg-panel text-tinta shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]"
+          className="fixed inset-x-3 top-[4.5rem] z-[var(--z-pegajoso)] overflow-hidden rounded-xl border border-borde bg-panel text-tinta shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]"
         >
           <div className="flex items-center justify-between border-b border-borde px-4 py-2.5">
             <p className="text-sm font-semibold">Notificaciones</p>

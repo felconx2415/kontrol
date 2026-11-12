@@ -52,3 +52,7 @@ next-env.d.ts
 
 # tooling local
 /.impeccable
+
+# Plantilla Novara: referencia de diseño con licencia de un solo proyecto que
+# prohíbe subir sus fuentes a repositorios. Se usa como guía, no se versiona.
+/novara

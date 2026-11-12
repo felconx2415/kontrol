@@ -59,12 +59,9 @@ async function verEstado(pagina: Page, estado: string, ms = 10000) {
  * de ahí. Lo que importa —y lo que se comprueba— es qué página se ve.
  */
 async function fueRechazado(pagina: Page) {
-  const titulo = await pagina
-    .locator("h1")
-    .first()
-    .innerText()
-    .catch(() => "");
-  return titulo.trim() === "Escritorio";
+  // El título del escritorio es un saludo («Buenos días, Camila») desde 0.13.0:
+  // se reconoce por su marcador, no por el texto.
+  return (await pagina.locator('[data-pagina="escritorio"]').count()) > 0;
 }
 
 /** Espera a que la página quede quieta tras una navegación o acción. */
@@ -127,18 +124,15 @@ try {
     (await admin.locator('nav a[href="/configuracion"]').count()) > 0,
   );
 
-  // La barra carga lo que cada rol usa a diario. Si vuelve a crecer sin
-  // agruparse, esto avisa antes de que se desborde otra vez.
-  const destinos = async (p: Page) =>
-    p.locator("header nav a[href^='/']").count();
+  // Desde 0.13.0 la navegación vive en la barra lateral, agrupada: ahí caben
+  // todos los destinos, y lo que se cuida es que la barra superior quede para
+  // la cuenta (buscar, avisos, perfil) y no vuelva a llenarse de destinos.
+  const enBarraSuperior = async (p: Page) => p.locator("header nav a[href^='/']").count();
   check(
-    "La barra no pasa de cinco destinos en ningún rol",
-    (await destinos(solicitante)) <= 5 &&
-      (await destinos(gestor)) <= 5 &&
-      (await destinos(admin)) <= 5,
-    `solicitante ${await destinos(solicitante)} · gestor ${await destinos(
-      gestor,
-    )} · admin ${await destinos(admin)}`,
+    "La barra superior no lleva destinos de navegación",
+    (await enBarraSuperior(solicitante)) === 0 &&
+      (await enBarraSuperior(gestor)) === 0 &&
+      (await enBarraSuperior(admin)) === 0,
   );
 
   // Las rutas viejas siguen llevando a alguna parte: /admin se renombró y hay

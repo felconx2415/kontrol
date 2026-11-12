@@ -20,6 +20,23 @@ import ColumnasVencimiento from "@/components/graficos/columnas-vencimiento";
 
 export const metadata = { title: "Escritorio · Kontrol" };
 
+/**
+ * «Buenos días, Camila»: la hora es la de Chile, no la del servidor, que en el
+ * contenedor podría estar en UTC. El saludo es lo que hace que el escritorio
+ * se sienta de quien lo abre y no un tablero genérico.
+ */
+function saludo(nombre: string) {
+  const hora = Number(
+    new Intl.DateTimeFormat("es-CL", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: "America/Santiago",
+    }).format(new Date()),
+  );
+  const momento = hora < 12 ? "Buenos días" : hora < 20 ? "Buenas tardes" : "Buenas noches";
+  return `${momento}, ${nombre.trim().split(/\s+/)[0]}`;
+}
+
 function Panel({
   titulo,
   descripcion,
@@ -36,7 +53,7 @@ function Panel({
   return (
     <section
       id={id}
-      className={`rounded-xl border border-borde bg-panel ${className}`}
+      className={`rounded-2xl border border-borde bg-panel ${className}`}
     >
       <header className="border-b border-borde px-4 py-3">
         <h2 className="titulo-seccion">{titulo}</h2>
@@ -75,7 +92,9 @@ export default async function Escritorio({
   const dosZonas = !esSolicitante;
 
   return (
-    <div className="space-y-5">
+    // `data-pagina`: el título es un saludo y cambia con la hora y la persona,
+    // así que las pruebas reconocen el escritorio por esto y no por el texto.
+    <div className="space-y-5" data-pagina="escritorio">
       {error === "sin-permiso" && (
         <Aviso tono="error">No tienes permiso para acceder a esa sección.</Aviso>
       )}
@@ -89,9 +108,11 @@ export default async function Escritorio({
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="titulo-pagina">Escritorio</h1>
+          <h1 className="titulo-pagina">{saludo(usuario.nombre)}</h1>
           <p className="mt-1 text-sm text-tinta-suave">
-            Estado de los pedidos y próximos cambios de EPP por vencimiento.
+            {esSolicitante
+              ? "Así van tus pedidos de EPP y equipamiento."
+              : "Esto es lo que espera tu gestión hoy: pedidos por etapa y cambios de EPP por vencimiento."}
           </p>
         </div>
         <BotonEnlace href="/solicitudes/nueva">Nueva solicitud</BotonEnlace>
@@ -162,7 +183,9 @@ export default async function Escritorio({
                           de esconderse: tipo, ítems y brigada son lo que distingue
                           quince pedidos de la misma cuadrilla. */}
                       <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-3">
-                        <span className="flex min-w-0 items-baseline gap-3">
+                        {/* En una sola fila se recorta primero el detalle y no
+                            el nombre: el nombre es lo que se busca con la vista. */}
+                        <span className="flex min-w-0 items-baseline gap-3 sm:shrink-0">
                           <span className="shrink-0 whitespace-nowrap font-mono text-xs tabular-nums text-tinta-tenue">
                             {formatearFolio(s.folio)}
                           </span>

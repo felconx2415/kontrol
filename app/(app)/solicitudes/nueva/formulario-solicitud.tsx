@@ -180,7 +180,7 @@ function CargaPersona({
   }
 
   return (
-    <section className="rounded-xl border border-borde bg-panel">
+    <section className="rounded-2xl border border-borde bg-panel">
       {conCabecera && (
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-borde px-4 py-3">
           <div className="min-w-0">

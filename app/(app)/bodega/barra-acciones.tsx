@@ -15,7 +15,10 @@ export default function BarraAcciones({
   formularioCatalogo,
   formularioMovimiento,
   puedeAsignar,
+  extra,
 }: {
+  /** Acción secundaria al final de la fila (p. ej. «Exportar PDF»). */
+  extra?: ReactNode;
   formularioItem: ReactNode;
   formularioCatalogo: ReactNode | null;
   formularioMovimiento: ReactNode | null;
@@ -53,6 +56,8 @@ export default function BarraAcciones({
             Asignar equipamiento
           </BotonEnlace>
         )}
+
+        {extra && <div className="ml-auto">{extra}</div>}
       </div>
 
       {abierto === "item" && <div className="panel-expandible">{formularioItem}</div>}

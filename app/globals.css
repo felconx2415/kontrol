@@ -14,6 +14,7 @@
 @theme {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-titulo: var(--font-urbanist), var(--font-geist-sans);
 
   /* Marca — azul petróleo. El 600 es el tono de acción; 7.5:1 sobre blanco. */
   --color-marca-50: oklch(0.972 0.013 240);
@@ -90,23 +91,16 @@ body {
   }
 }
 
-/* Sobre el encabezado oscuro el anillo azul no contrasta: se usa blanco. */
-@utility foco-anillo-claro {
-  &:focus-visible {
-    outline: 2px solid white;
-    outline-offset: 2px;
-  }
-}
-
 /* --- Escala tipográfica ---------------------------------------------------
    Antes casi todo era text-sm/text-xs y nada guiaba la vista. Tres niveles
    con contraste real de peso y tamaño, más un nivel para datos numéricos. */
 
 @utility titulo-pagina {
-  font-size: 1.5rem;
+  font-family: var(--font-titulo);
+  font-size: 1.625rem;
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
@@ -118,7 +112,8 @@ body {
 }
 
 @utility dato-grande {
-  font-size: 1.75rem;
+  font-family: var(--font-titulo);
+  font-size: 1.875rem;
   line-height: 1.1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

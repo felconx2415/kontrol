@@ -10,6 +10,7 @@ import Boton from "@/components/ui/boton";
 import { Campo, Entrada, Seleccion } from "@/components/ui/campo";
 import { Tarjeta, Vacio } from "@/components/ui/superficie";
 import { Celda, Fila, Tabla } from "@/components/ui/tabla";
+import Paginacion from "@/components/ui/paginacion";
 import { Seccion } from "@/components/ui/superficie";
 import {
   construirFiltro,
@@ -33,13 +34,32 @@ const ESTADOS: EstadoSolicitud[] = [
   "CANCELADA",
 ];
 
+const POR_PAGINA = 25;
+
+/** Estados que siguen en curso: ni entregados ni detenidos. */
+const EN_CURSO: EstadoSolicitud[] = [
+  "PENDIENTE",
+  "APROBADA",
+  "RESERVA_SOLICITADA",
+  "EN_GESTION",
+  "RECIBIDA",
+];
+
+type Vista = "solicitudes" | "prestamos" | "traslados";
+
 export default async function Reportes({
   searchParams,
 }: {
-  searchParams: Promise<FiltrosReporte>;
+  searchParams: Promise<FiltrosReporte & { vista?: string; page?: string }>;
 }) {
   const usuario = await requerirRol(...ROLES_GESTION);
-  const filtros = await searchParams;
+  // `vista` y `page` son de esta pantalla, no del filtro: no viajan al Excel
+  // ni a las consultas.
+  const { vista: vistaParam, page, ...filtros } = await searchParams;
+  const vista: Vista =
+    vistaParam === "prestamos" || vistaParam === "traslados" ? vistaParam : "solicitudes";
+  const pagina = Math.max(1, Number(page) || 1);
+  const whereSolicitudes = construirFiltro(filtros, usuario.alcance);
 
   // El rango de fechas se aplica también a la bodega (préstamos por prestadoEn,
   // traslados por asignadoEn). Los filtros de estado/categoría son propios de
@@ -47,12 +67,19 @@ export default async function Reportes({
   const rango = construirRangoFechas(filtros);
   const deMiEmpresa = filtroEmpresa(usuario.alcance);
 
-  const [brigadas, solicitudes, prestamos, traslados] = await Promise.all([
+  const [brigadas, porEstado, solicitudes, prestamos, traslados] = await Promise.all([
     db.brigada.findMany({ where: deMiEmpresa, orderBy: { nombre: "asc" } }),
+    // El resumen cuenta todo el período, no solo la página que se ve.
+    db.solicitud.groupBy({
+      by: ["estado"],
+      where: whereSolicitudes,
+      _count: { _all: true },
+    }),
     db.solicitud.findMany({
-      where: construirFiltro(filtros, usuario.alcance),
+      where: whereSolicitudes,
       orderBy: { creadaEn: "desc" },
-      take: 200,
+      skip: (pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
       include: {
         solicitante: { select: { nombre: true, cargo: { select: { nombre: true } } } },
         brigada: { select: { nombre: true } },
@@ -128,9 +155,44 @@ export default async function Reportes({
 
   const prestamosActivos = prestamos.filter((l) => l.devueltoEn === null).length;
 
+  const cuenta = (estados: EstadoSolicitud[]) =>
+    porEstado
+      .filter((g) => estados.includes(g.estado))
+      .reduce((total, g) => total + g._count._all, 0);
+  const totalSolicitudes = porEstado.reduce((t, g) => t + g._count._all, 0);
+  const totalPaginas = Math.ceil(totalSolicitudes / POR_PAGINA);
+
   const parametros = new URLSearchParams(
     Object.entries(filtros).filter(([, v]) => Boolean(v)) as [string, string][],
   );
+
+  // Cambiar de pestaña o de página conserva los filtros.
+  const hrefVista = (v: Vista, p?: number) => {
+    const sp = new URLSearchParams(parametros);
+    if (v !== "solicitudes") sp.set("vista", v);
+    if (p && p > 1) sp.set("page", String(p));
+    const q = sp.toString();
+    return `/reportes${q ? `?${q}` : ""}`;
+  };
+
+  const resumen: { texto: string; valor: number; nota?: string }[] = [
+    { texto: "Solicitudes", valor: totalSolicitudes, nota: "en el período" },
+    { texto: "En curso", valor: cuenta(EN_CURSO), nota: "aún sin entregar" },
+    { texto: "Entregadas", valor: cuenta(["ENTREGADA"]) },
+    { texto: "Rechazadas o canceladas", valor: cuenta(["RECHAZADA", "CANCELADA"]) },
+    {
+      texto: "Préstamos activos",
+      valor: prestamosActivos,
+      nota: `de ${prestamos.length} en el período`,
+    },
+    { texto: "Traslados", valor: traslados.length, nota: "equipamiento asignado" },
+  ];
+
+  const pestanas: { id: Vista; texto: string; cuenta: number }[] = [
+    { id: "solicitudes", texto: "Solicitudes", cuenta: totalSolicitudes },
+    { id: "prestamos", texto: "Préstamos", cuenta: prestamos.length },
+    { id: "traslados", texto: "Traslados", cuenta: traslados.length },
+  ];
 
   return (
     <div className="space-y-5">
@@ -138,8 +200,8 @@ export default async function Reportes({
         <div>
           <h1 className="titulo-pagina">Reportes</h1>
           <p className="text-sm text-tinta-suave">
-            {solicitudes.length} solicitud{solicitudes.length === 1 ? "" : "es"}{" "}
-            {solicitudes.length === 200 ? "(máximo mostrado)" : ""}
+            Solicitudes, préstamos y traslados del período filtrado. El Excel
+            lleva las tres hojas completas.
           </p>
         </div>
         <a
@@ -151,7 +213,10 @@ export default async function Reportes({
       </div>
 
       <Tarjeta>
-        <form className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {/* Una sola fila desde xl, con los botones al final: en dos filas el
+            «Aplicar» quedaba bajo el primer campo, lejos de los demás. */}
+        <form className="grid grid-cols-2 gap-3 lg:grid-cols-5 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto] xl:items-end">
+          {vista !== "solicitudes" && <input type="hidden" name="vista" value={vista} />}
           <Campo etiqueta="Desde" htmlFor="desde">
             <Entrada id="desde" type="date" name="desde" defaultValue={filtros.desde ?? ""} />
           </Campo>
@@ -198,7 +263,7 @@ export default async function Reportes({
             </Seleccion>
           </Campo>
 
-          <div className="col-span-2 flex gap-2 lg:col-span-5">
+          <div className="col-span-2 flex gap-2 lg:col-span-5 xl:col-span-1">
             <Boton type="submit">Aplicar filtros</Boton>
             <Link
               href="/reportes"
@@ -210,7 +275,43 @@ export default async function Reportes({
         </form>
       </Tarjeta>
 
-      {solicitudes.length === 0 ? (
+      {/* Lo primero que se busca en un reporte es el total: antes había que
+          contar filas, y préstamos y traslados quedaban debajo de doscientas
+          solicitudes. */}
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {resumen.map((r) => (
+          <div key={r.texto} className="rounded-2xl border border-borde bg-panel p-3 sm:p-4">
+            <dt className="text-sm text-tinta-suave">{r.texto}</dt>
+            <dd className="dato-grande mt-1 text-tinta">{r.valor}</dd>
+            {r.nota && <dd className="mt-0.5 text-xs text-tinta-tenue">{r.nota}</dd>}
+          </div>
+        ))}
+      </dl>
+
+      <nav aria-label="Secciones del reporte" className="flex gap-1 overflow-x-auto border-b border-borde">
+        {pestanas.map((t) => {
+          const activa = t.id === vista;
+          return (
+            <Link
+              key={t.id}
+              href={hrefVista(t.id)}
+              aria-current={activa ? "page" : undefined}
+              className={`foco-anillo -mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors duration-150 ${
+                activa
+                  ? "border-marca-600 text-tinta"
+                  : "border-transparent text-tinta-suave hover:text-tinta"
+              }`}
+            >
+              {t.texto}
+              <span className="rounded-full bg-lienzo px-2 py-0.5 text-xs tabular-nums text-tinta-suave">
+                {t.cuenta}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {vista === "solicitudes" && (solicitudes.length === 0 ? (
         <Vacio mensaje="No hay solicitudes en el rango seleccionado." />
       ) : (
         <Tabla
@@ -248,18 +349,17 @@ export default async function Reportes({
             </Fila>
           ))}
         </Tabla>
+      ))}
+
+      {vista === "solicitudes" && (
+        <Paginacion
+          paginaActual={pagina}
+          totalPaginas={totalPaginas}
+          href={(p) => hrefVista("solicitudes", p)}
+        />
       )}
 
-      <div className="pt-2">
-        <h2 className="titulo-pagina text-lg">Bodega local</h2>
-        <p className="text-sm text-tinta-suave">
-          Material fuera de la bodega en el período: {prestamosActivos} préstamo
-          {prestamosActivos === 1 ? "" : "s"} activo
-          {prestamosActivos === 1 ? "" : "s"} · {traslados.length} traslado
-          {traslados.length === 1 ? "" : "s"}.
-        </p>
-      </div>
-
+      {vista === "prestamos" && (
       <Seccion titulo={`Préstamos (${prestamos.length})`} plano>
         {prestamos.length === 0 ? (
           <div className="p-4">
@@ -317,6 +417,9 @@ export default async function Reportes({
         )}
       </Seccion>
 
+      )}
+
+      {vista === "traslados" && (
       <Seccion titulo={`Traslados / equipamiento asignado (${traslados.length})`} plano>
         {traslados.length === 0 ? (
           <div className="p-4">
@@ -371,6 +474,7 @@ export default async function Reportes({
           </Tabla>
         )}
       </Seccion>
+      )}
     </div>
   );
 }

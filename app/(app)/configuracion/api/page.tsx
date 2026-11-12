@@ -49,7 +49,7 @@ export default async function PaginaApi() {
 
       <FormularioToken empresas={empresas} />
 
-      <section className="rounded-xl border border-borde bg-panel p-4">
+      <section className="rounded-2xl border border-borde bg-panel p-4">
         <h2 className="titulo-seccion">Cómo se usa</h2>
         <pre className="mt-2 overflow-x-auto rounded-lg bg-lienzo p-3 font-mono text-xs text-tinta-suave">
 {`curl -H "Authorization: Bearer kt_…" \\

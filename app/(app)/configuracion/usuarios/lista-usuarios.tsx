@@ -143,7 +143,7 @@ export default function ListaUsuarios({
         <div
           role="group"
           aria-label="Acciones sobre las cuentas seleccionadas"
-          className="sticky top-[4.5rem] z-[var(--z-pegajoso)] space-y-3 rounded-xl border border-marca-200 bg-marca-50 p-3 shadow-sm"
+          className="sticky top-[4.5rem] z-[var(--z-pegajoso)] space-y-3 rounded-2xl border border-marca-200 bg-marca-50 p-3 shadow-sm"
         >
           <p className="text-sm font-medium">
             {elegidas.length} cuenta{elegidas.length === 1 ? "" : "s"} seleccionada
@@ -245,7 +245,7 @@ export default function ListaUsuarios({
 
       {error && <Aviso tono="error">{error}</Aviso>}
 
-      <div className="overflow-x-auto rounded-xl border border-borde bg-panel">
+      <div className="overflow-x-auto rounded-2xl border border-borde bg-panel">
         <table
           className="tabla-apilable w-full text-sm"
           style={{ minWidth: "64rem" }}

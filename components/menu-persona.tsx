@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cerrarSesion } from "@/actions/sesion";
+import { Icono, type IconoNav } from "./nav-principal";
 
-export type DestinoPersona = { id: string; href: string; texto: string };
+export type DestinoPersona = { id: string; href: string; texto: string; icono: IconoNav };
 
 /** Primera letra del nombre y del apellido: «Juan Pérez» → «JP». */
 function iniciales(nombre: string): string {
@@ -16,25 +17,27 @@ function iniciales(nombre: string): string {
 }
 
 /**
- * Lo de cada uno, colgando del nombre en la barra.
+ * La cuenta, arriba a la derecha: quién soy, mis cosas y los ajustes.
  *
- * Existe porque la barra creció a diez destinos mezclando tres cosas distintas:
- * el trabajo del día, lo que es mío y lo que se configura una vez al mes. Lo
- * personal se recoge aquí para quien no lo usa a diario —gestión, que casi no
- * tiene EPP a su nombre—; para el personal de terreno sigue arriba, donde
- * corresponde.
+ * Desde que la navegación vive en la barra lateral, esto ya no reparte
+ * destinos de trabajo: es «mi cuenta», el sitio donde cualquiera busca su
+ * perfil, su firma o cómo salir. La cabecera dice con qué cuenta se está
+ * trabajando —rol, cargo o brigada, empresa—, que en un equipo compartido de
+ * bodega no es obvio.
  *
- * «Salir» vive dentro y ya no como botón suelto: es la acción menos frecuente
- * de todas y estaba ocupando el sitio más caro de la pantalla.
+ * «Salir» va al final y separado: es la acción menos frecuente de todas.
  */
 export default function MenuPersona({
   nombre,
   detalle,
+  empresa,
   destinos,
 }: {
   nombre: string;
-  /** Rol y empresa, en una línea. */
+  /** Rol y brigada o cargo, en una línea. */
   detalle: string;
+  /** Empresa de la cuenta, o cuántas atiende un gestor. */
+  empresa?: string | null;
   destinos: DestinoPersona[];
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -75,14 +78,17 @@ export default function MenuPersona({
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
         aria-haspopup="menu"
-        className="foco-anillo-claro flex min-h-11 min-w-0 cursor-pointer items-center gap-2 rounded-full px-2 text-left transition-colors duration-150 hover:bg-white/10"
+        className="foco-anillo flex min-h-11 min-w-0 cursor-pointer items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 text-left transition-colors duration-150 hover:bg-panel-suave"
       >
         {/* En pantallas angostas el nombre no cabe junto a los destinos, y un
             botón que fuera solo una flecha no se entendería: quedan las
             iniciales, que además dan el objetivo táctil de 44px. */}
+        {/* Las iniciales van siempre, como el avatar de cualquier panel: son
+            el ancla visual de «mi cuenta». En pantallas angostas el nombre no
+            cabe y quedan solas, con el objetivo táctil de 44px. */}
         <span
           aria-hidden="true"
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-semibold sm:hidden"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-marca-100 text-xs font-semibold text-marca-800"
         >
           {iniciales(nombre)}
         </span>
@@ -93,7 +99,7 @@ export default function MenuPersona({
           <span className="block truncate text-sm font-medium leading-tight">
             {nombre}
           </span>
-          <span className="block truncate text-xs leading-tight text-marca-200">
+          <span className="block truncate text-xs leading-tight text-tinta-tenue">
             {detalle}
           </span>
         </span>
@@ -104,7 +110,7 @@ export default function MenuPersona({
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`size-4 shrink-0 transition-transform duration-200 ${
+          className={`size-4 shrink-0 text-tinta-tenue transition-transform duration-200 ${
             abierto ? "rotate-180" : ""
           }`}
           aria-hidden="true"
@@ -116,23 +122,31 @@ export default function MenuPersona({
       {abierto && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-[var(--z-pegajoso)] mt-2 w-64 overflow-hidden rounded-xl border border-borde bg-panel text-tinta shadow-xl"
+          className="absolute right-0 top-full z-[var(--z-pegajoso)] mt-2 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-borde bg-panel text-tinta shadow-xl"
         >
-          {/* En pantallas angostas el botón no muestra el nombre (no cabe junto
-              a los destinos), así que la cabecera del menú lo repone. */}
-          <div className="border-b border-borde px-4 py-2.5 sm:hidden">
-            <p className="truncate text-sm font-semibold">{nombre}</p>
-            <p className="truncate text-xs text-tinta-tenue">{detalle}</p>
+          <div className="flex items-center gap-3 border-b border-borde px-4 py-3.5">
+            <span
+              aria-hidden="true"
+              className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-marca-100 text-sm font-semibold text-marca-800"
+            >
+              {iniciales(nombre)}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{nombre}</p>
+              <p className="truncate text-xs text-tinta-suave">{detalle}</p>
+              {empresa && <p className="truncate text-xs text-tinta-tenue">{empresa}</p>}
+            </div>
           </div>
 
           {destinos.length > 0 && (
-            <ul className="divide-y divide-borde">
+            <ul className="p-1.5">
               {destinos.map((d) => (
                 <li key={d.id}>
                   <Link
                     href={d.href}
-                    className="foco-anillo block px-4 py-3 text-sm transition-colors duration-150 hover:bg-marca-50"
+                    className="foco-anillo flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-tinta-suave transition-colors duration-150 hover:bg-panel-suave hover:text-tinta"
                   >
+                    <Icono nombre={d.icono} />
                     {d.texto}
                   </Link>
                 </li>
@@ -140,11 +154,25 @@ export default function MenuPersona({
             </ul>
           )}
 
-          <form action={cerrarSesion} className="border-t border-borde">
+          <form action={cerrarSesion} className="border-t border-borde p-1.5">
             <button
               type="submit"
-              className="foco-anillo block w-full cursor-pointer px-4 py-3 text-left text-sm font-medium transition-colors duration-150 hover:bg-panel-suave"
+              className="foco-anillo flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-tinta-suave transition-colors duration-150 hover:bg-fallo-fondo hover:text-fallo"
             >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-[18px] shrink-0"
+                aria-hidden="true"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
               Salir
             </button>
           </form>

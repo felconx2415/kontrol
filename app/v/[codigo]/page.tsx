@@ -34,7 +34,7 @@ export default async function VerificarDocumento({
       </Link>
 
       {documento ? (
-        <section className="rounded-xl border border-exito-borde bg-exito-fondo p-5">
+        <section className="rounded-2xl border border-exito-borde bg-exito-fondo p-5">
           <div className="flex items-center gap-2">
             <svg
               viewBox="0 0 20 20"
@@ -80,7 +80,7 @@ export default async function VerificarDocumento({
           </p>
         </section>
       ) : (
-        <section className="rounded-xl border border-fallo-borde bg-fallo-fondo p-5">
+        <section className="rounded-2xl border border-fallo-borde bg-fallo-fondo p-5">
           <h1 className="text-base font-semibold text-fallo">
             No encontramos este documento
           </h1>

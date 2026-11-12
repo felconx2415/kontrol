@@ -113,7 +113,7 @@ export default async function DetalleItem({
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {datos.map((d) => (
-          <div key={d.t} className="rounded-xl border border-borde bg-panel p-4">
+          <div key={d.t} className="rounded-2xl border border-borde bg-panel p-4">
             <dt className="text-xs text-tinta-tenue">{d.t}</dt>
             <dd className={`mt-0.5 font-medium text-tinta ${d.mono ? "font-mono" : ""}`}>
               {d.v}
@@ -122,7 +122,19 @@ export default async function DetalleItem({
         ))}
       </dl>
 
+      {/* Desde 1700px, préstamos y movimientos lado a lado: cada tabla dejaba
+          media pantalla vacía y había que bajar para ver la segunda. El corte
+          no es 2xl porque las dos tablas piden 48 y 52rem de mínimo y a 1536px
+          no caben juntas sin scroll. Sin préstamos, el historial ocupa todo. */}
+      <div
+        className={`grid gap-6 min-[1700px]:items-start ${
+          item.lineasPrestamo.length > 0
+            ? "min-[1700px]:grid-cols-[minmax(48rem,48fr)_minmax(52rem,52fr)]"
+            : ""
+        }`}
+      >
       {item.lineasPrestamo.length > 0 && (
+        <div>
         <Seccion titulo={`Préstamos (${item.lineasPrestamo.length})`} plano>
           <Tabla
             encabezados={[
@@ -190,8 +202,10 @@ export default async function DetalleItem({
             ))}
           </Tabla>
         </Seccion>
+        </div>
       )}
 
+      <div className="space-y-4">
       <Seccion titulo={`Historial de movimientos (${item.movimientos.length})`} plano>
         {item.movimientos.length === 0 ? (
           <div className="p-4">
@@ -246,6 +260,8 @@ export default async function DetalleItem({
         totalPaginas={totalPaginasMov}
         href={(p) => `/bodega/${id}?page=${p}`}
       />
+      </div>
+      </div>
     </div>
   );
 }

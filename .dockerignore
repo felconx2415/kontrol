@@ -25,3 +25,6 @@ Dockerfile
 docker-compose.yml
 .dockerignore
 DEPLOY.md
+
+# Plantilla de diseño de referencia: no es parte de la app.
+novara

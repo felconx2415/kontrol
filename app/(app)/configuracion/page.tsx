@@ -50,7 +50,7 @@ export default async function PaginaConfiguracion() {
             <li key={area.id}>
               <Link
                 href={area.href}
-                className="foco-anillo group flex h-full items-start gap-3 rounded-xl border border-borde bg-panel p-4 transition-colors duration-150 hover:border-marca-200 hover:bg-marca-50"
+                className="foco-anillo group flex h-full items-start gap-3 rounded-2xl border border-borde bg-panel p-4 transition-colors duration-150 hover:border-marca-200 hover:bg-marca-50"
               >
                 <span className="mt-0.5 shrink-0 text-marca-600">
                   <Icono nombre={area.icono} />

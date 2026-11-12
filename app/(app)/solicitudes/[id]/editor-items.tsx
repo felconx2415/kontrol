@@ -196,7 +196,7 @@ export default function EditorItems({
   );
 
   return (
-    <section className="rounded-xl border border-borde bg-panel">
+    <section className="rounded-2xl border border-borde bg-panel">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-borde px-4 py-3">
         <h2 className="titulo-seccion">Ítems solicitados</h2>
         {puedeEditar && !editando && (

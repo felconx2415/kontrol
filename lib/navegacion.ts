@@ -1,13 +1,12 @@
 import type { Rol } from "@/generated/prisma/enums";
 import type { IconoNav } from "@/components/nav-principal";
-import { esGestion } from "@/lib/solicitud-estado";
 
 /**
  * Dónde vive cada cosa en Kontrol.
  *
- * La navegación se reparte en tres superficies —la barra, el menú del nombre y
- * el cajón del teléfono— y antes se armaba a mano en el layout, con la lista
- * plana viajando tal cual a las tres. Con diez destinos eso se desincroniza
+ * La navegación se reparte en tres superficies —la barra lateral, el menú de la
+ * cuenta y el cajón del teléfono— y antes se armaba a mano en el layout, con la
+ * lista plana viajando tal cual a todas. Con diez destinos eso se desincroniza
  * solo: basta agregar uno y olvidarse de una superficie.
  *
  * Aquí se declara una vez y cada superficie deriva lo suyo. Es el mismo trato
@@ -85,56 +84,6 @@ export function destinosDeGrupo(usuario: UsuarioNav, grupo: GrupoNav): Destino[]
 }
 
 /**
- * Los destinos de la barra superior.
- *
- * Lleva **lo que ese rol usa a diario**, y por eso lo personal se coloca según
- * el rol en vez de tener un sitio fijo: en terreno «Mi equipamiento» es la razón
- * de ser de la app y esconderlo tras un menú sería un retroceso, mientras que a
- * gestión —que casi no tiene EPP a su nombre— solo le ocupa sitio. Quien no es
- * gestión no tiene Bodega ni Reportes, así que le sobra espacio de sobra.
- *
- * La configuración entra como **una** entrada, no como cuatro. Ver
- * `entradaConfiguracion`.
- */
-export function barraDe(usuario: UsuarioNav): Destino[] {
-  const trabajo = destinosDeGrupo(usuario, "trabajo");
-
-  const personales = esGestion(usuario.rol)
-    ? []
-    : destinosDeGrupo(usuario, "personal").filter(
-        // La campana ya cubre las notificaciones y el perfil no es de estos
-        // roles: a la barra solo suben los dos destinos de uso diario.
-        (d) => d.id === "equipamiento" || d.id === "documentos",
-      );
-
-  const configuracion = entradaConfiguracion(usuario);
-
-  return [...trabajo, ...personales, ...(configuracion ? [configuracion] : [])];
-}
-
-/**
- * Los destinos del menú que cuelga del nombre: lo de cada uno.
- *
- * Para quien lleva sus destinos personales en la barra, el menú queda con lo
- * que no cabe ahí (el perfil) o vacío, y en ese caso el layout no lo pinta.
- */
-export function menuPersonaDe(usuario: UsuarioNav): Destino[] {
-  const personales = destinosDeGrupo(usuario, "personal");
-
-  // Las notificaciones tienen su propia campana al lado: repetirlas aquí sería
-  // dos puertas juntas a la misma pieza.
-  const sinCampana = personales.filter((d) => d.id !== "notificaciones");
-
-  if (!esGestion(usuario.rol)) {
-    // Equipamiento y documentos ya están en su barra.
-    return sinCampana.filter(
-      (d) => d.id !== "equipamiento" && d.id !== "documentos",
-    );
-  }
-  return sinCampana;
-}
-
-/**
  * La entrada de configuración de la barra, adaptada a lo que alcanza el rol.
  *
  * Con una sola área lleva su propio nombre y entra directo —un gestor sigue
@@ -194,4 +143,56 @@ export const DESCRIPCION_AREA: Record<string, string> = {
  */
 export function llevaPestanas(usuario: UsuarioNav): boolean {
   return destinosDeGrupo(usuario, "configuracion").length > 1;
+}
+
+// ── Panel con barra lateral (0.13.0) ─────────────────────────────────────
+
+/** Un grupo de la barra lateral, listo para pintarse. */
+export type GrupoLateral = {
+  grupo: GrupoNav;
+  titulo: string;
+  /** Si el rótulo del grupo lleva a un índice (Configuración del admin). */
+  hrefTitulo: string | null;
+  destinos: Destino[];
+};
+
+/**
+ * Lo que va en la barra lateral izquierda.
+ *
+ * A diferencia de la píldora de antes —que no admitía más de cinco destinos en
+ * una línea y obligaba a repartirlos entre la barra, el menú del nombre y una
+ * entrada única de configuración—, la barra lateral tiene alto de sobra: cada
+ * rol ve todos sus destinos, agrupados por naturaleza. Quedan fuera solo los
+ * que tienen sitio propio arriba a la derecha: las notificaciones (la campana)
+ * y el perfil (el menú de la persona).
+ *
+ * El rótulo «Configuración» enlaza al índice cuando hay más de un área: es la
+ * misma regla de `entradaConfiguracion`, ahora como encabezado del grupo.
+ */
+export function lateralDe(usuario: UsuarioNav): GrupoLateral[] {
+  const fuera = new Set(["notificaciones", "perfil"]);
+  return gruposDe(usuario)
+    .map((g) => ({
+      grupo: g.grupo,
+      titulo: g.titulo,
+      hrefTitulo: g.grupo === "configuracion" && llevaPestanas(usuario) ? "/configuracion" : null,
+      destinos: g.destinos.filter((d) => !fuera.has(d.id)),
+    }))
+    .filter((g) => g.destinos.length > 0);
+}
+
+/**
+ * El menú de la persona, arriba a la derecha: datos de la cuenta y ajustes.
+ *
+ * Lleva lo que es de uno —perfil y firma, equipamiento, documentos— más el
+ * acceso a la configuración para quien la tiene. Repite a propósito algunos
+ * destinos de la barra lateral: es el sitio donde la gente busca «mi cuenta»,
+ * y en el teléfono es el único menú a mano sin abrir el cajón.
+ */
+export function ajustesDe(usuario: UsuarioNav): Destino[] {
+  const personales = destinosDeGrupo(usuario, "personal").filter(
+    (d) => d.id !== "notificaciones",
+  );
+  const configuracion = entradaConfiguracion(usuario);
+  return [...personales, ...(configuracion ? [configuracion] : [])];
 }

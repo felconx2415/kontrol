@@ -17,7 +17,7 @@ export function Tarjeta({
 }) {
   return (
     <div
-      className={`rounded-xl border border-borde bg-panel ${plano ? "" : "p-4"} ${className}`}
+      className={`rounded-2xl border border-borde bg-panel ${plano ? "" : "p-4"} ${className}`}
     >
       {children}
     </div>
@@ -39,7 +39,7 @@ export function Seccion({
   className?: string;
 }) {
   return (
-    <section className={`rounded-xl border border-borde bg-panel ${className}`}>
+    <section className={`rounded-2xl border border-borde bg-panel ${className}`}>
       <header className="flex items-center justify-between gap-3 border-b border-borde px-4 py-3">
         <h2 className="text-sm font-semibold text-tinta">{titulo}</h2>
         {acciones}
@@ -87,7 +87,7 @@ export function Vacio({
   accion?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-borde-fuerte bg-panel p-10 text-center">
+    <div className="rounded-2xl border border-dashed border-borde-fuerte bg-panel p-10 text-center">
       <p className="text-sm text-tinta-suave">{mensaje}</p>
       {accion && <div className="mt-3">{accion}</div>}
     </div>

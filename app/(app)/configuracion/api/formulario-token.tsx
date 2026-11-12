@@ -39,7 +39,7 @@ export default function FormularioToken({
     <div className="space-y-3">
       <form
         action={accion}
-        className="grid gap-3 rounded-xl border border-borde bg-panel p-4 sm:grid-cols-2"
+        className="grid gap-3 rounded-2xl border border-borde bg-panel p-4 sm:grid-cols-2"
       >
         <p className="text-sm font-semibold text-tinta sm:col-span-2">
           Nuevo token de consulta
@@ -90,7 +90,7 @@ export default function FormularioToken({
       </form>
 
       {estado.token && (
-        <div className="space-y-3 rounded-xl border border-espera-borde bg-espera-fondo p-4">
+        <div className="space-y-3 rounded-2xl border border-espera-borde bg-espera-fondo p-4">
           <p className="text-sm font-semibold text-espera">
             Cópialo ahora: no vuelve a mostrarse
           </p>

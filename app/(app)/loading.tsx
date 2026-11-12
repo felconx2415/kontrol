@@ -21,7 +21,7 @@ export default function CargandoApp() {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="space-y-3 rounded-xl border border-borde bg-panel p-4"
+            className="space-y-3 rounded-2xl border border-borde bg-panel p-4"
           >
             <div className="h-3.5 w-24 rounded bg-borde/60" />
             <div className="h-8 w-16 rounded bg-borde" />
@@ -30,7 +30,7 @@ export default function CargandoApp() {
       </div>
 
       {/* Panel principal: encabezado y filas, la silueta de una tabla. */}
-      <div className="rounded-xl border border-borde bg-panel">
+      <div className="rounded-2xl border border-borde bg-panel">
         <div className="border-b border-borde px-4 py-3">
           <div className="h-4 w-36 rounded bg-borde" />
         </div>

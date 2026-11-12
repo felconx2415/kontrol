@@ -26,7 +26,7 @@ export default function FormularioBrigada({
   return (
     <form
       action={accion}
-      className="grid gap-3 rounded-xl border border-borde bg-panel p-4 sm:grid-cols-2"
+      className="grid gap-3 rounded-2xl border border-borde bg-panel p-4 sm:grid-cols-2"
     >
       <p className="text-sm font-semibold text-tinta sm:col-span-2">
         Nueva brigada

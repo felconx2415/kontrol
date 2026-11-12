@@ -222,7 +222,7 @@ export default async function PaginaBodega({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
         <div>
           <h1 className="titulo-pagina">Bodega local</h1>
           <p className="text-sm text-tinta-suave">
@@ -230,19 +230,13 @@ export default async function PaginaBodega({
             sácalo, préstalo o asígnalo. Cada movimiento queda registrado.
           </p>
         </div>
-        <a
-          href="/api/bodega/pdf"
-          className="foco-anillo inline-flex min-h-11 items-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
-        >
-          Exportar PDF
-        </a>
       </div>
 
       {/* Respaldo de la entrega, en el momento de la entrega. Sigue el mismo
           patrón que el acta de una solicitud entregada: panel en verde con el
           documento a un clic, en vez de un enlace perdido en la tabla. */}
       {recien && (
-        <section className="no-print rounded-xl border border-exito-borde bg-exito-fondo p-4">
+        <section className="no-print rounded-2xl border border-exito-borde bg-exito-fondo p-4">
           <h2 className="text-sm font-semibold text-exito">
             {recien.estado === "DEVUELTO" ? "Devolución registrada" : "Préstamo registrado"}
           </h2>
@@ -281,7 +275,7 @@ export default async function PaginaBodega({
       )}
 
       {recienAsignado && (
-        <section className="no-print rounded-xl border border-exito-borde bg-exito-fondo p-4">
+        <section className="no-print rounded-2xl border border-exito-borde bg-exito-fondo p-4">
           <h2 className="text-sm font-semibold text-exito">
             Equipamiento entregado
           </h2>
@@ -349,6 +343,17 @@ export default async function PaginaBodega({
           opciones.length > 0 ? <FormularioMovimiento items={opciones} /> : null
         }
         puedeAsignar={opciones.some((i) => i.stock > 0)}
+        // El PDF del inventario es una consulta, no una acción sobre la
+        // bodega: va al final de la fila de botones y no ocupa una fila propia
+        // junto al título.
+        extra={
+            <a
+              href="/api/bodega/pdf"
+              className="foco-anillo inline-flex min-h-9 items-center rounded-lg border border-borde-fuerte bg-panel px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-panel-suave"
+            >
+              Exportar PDF
+            </a>
+        }
       />
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -357,7 +362,7 @@ export default async function PaginaBodega({
           { t: "Unidades en stock", v: totalUnidades },
           { t: "Prestadas", v: totalPrestado },
         ].map((k) => (
-          <div key={k.t} className="rounded-xl border border-borde bg-panel p-3 sm:p-4">
+          <div key={k.t} className="rounded-2xl border border-borde bg-panel p-3 sm:p-4">
             <dt className="text-xs text-tinta-tenue">{k.t}</dt>
             <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-tinta">
               {k.v}
@@ -366,7 +371,7 @@ export default async function PaginaBodega({
         ))}
         <Link
           href="/bodega?tab=inventario&stock=bajo"
-          className={`foco-anillo rounded-xl border p-3 transition-colors duration-150 sm:p-4 ${
+          className={`foco-anillo rounded-2xl border p-3 transition-colors duration-150 sm:p-4 ${
             stockBajo > 0
               ? "border-espera-borde bg-espera-fondo hover:bg-espera-fondo/70"
               : "border-borde bg-panel hover:bg-panel-suave"
@@ -411,7 +416,7 @@ export default async function PaginaBodega({
         <div className="space-y-4">
           {/* Dos columnas en el teléfono, como en solicitudes: búsqueda arriba
               a todo el ancho y los tres filtros más el botón de a pares. */}
-          <form className="grid grid-cols-2 items-end gap-3 rounded-xl border border-borde bg-panel p-4 sm:flex sm:flex-wrap">
+          <form className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-borde bg-panel p-4 sm:flex sm:flex-wrap">
             <input type="hidden" name="tab" value="inventario" />
             <Campo etiqueta="Buscar" htmlFor="q" className="col-span-2 min-w-0 sm:flex-1">
               <Entrada

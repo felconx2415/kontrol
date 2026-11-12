@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Plantilla de diseño de referencia (licencia de un solo proyecto, no se
+    // versiona ni se compila): ver .gitignore.
+    "novara/**",
   ]),
 ]);
 

@@ -42,7 +42,7 @@ export default async function PaginaNotificaciones() {
       {notificaciones.length === 0 ? (
         <Vacio mensaje="Todavía no tienes avisos. Aquí aparecerá lo que pase con tus solicitudes y lo que te toque revisar." />
       ) : (
-        <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde bg-panel">
+        <ul className="divide-y divide-borde overflow-hidden rounded-2xl border border-borde bg-panel">
           {notificaciones.map((n) => {
             const leida = n.leidaEn !== null;
 

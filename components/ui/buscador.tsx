@@ -28,7 +28,7 @@ export default function Buscador({
   return (
     <form
       action={accion}
-      className="flex flex-wrap items-end gap-3 rounded-xl border border-borde bg-panel p-4"
+      className="flex flex-wrap items-end gap-3 rounded-2xl border border-borde bg-panel p-4"
     >
       <Campo etiqueta={etiqueta} htmlFor="q" className="min-w-0 flex-1">
         <Entrada

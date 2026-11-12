@@ -2,13 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { Icono, type EnlaceNav } from "./nav-principal";
-
-/** Un bloque de destinos con su rótulo. Ver lib/navegacion.ts. */
-export type GrupoNavUI = { grupo: string; titulo: string; destinos: EnlaceNav[] };
+import { ListaNavegacion, type GrupoLateralUI } from "./barra-lateral";
 
 /**
  * Menú de navegación para móvil: un botón hamburguesa que abre un cajón lateral
@@ -34,14 +29,12 @@ export default function MenuMovil({
   usuarioNombre,
   usuarioRol,
 }: {
-  grupos: GrupoNavUI[];
+  grupos: GrupoLateralUI[];
   usuarioNombre: string;
   usuarioRol: string;
 }) {
   const [montado, setMontado] = useState(false);
   const [visible, setVisible] = useState(false);
-  const ruta = usePathname();
-
   const abrir = () => setMontado(true);
   const cerrar = () => setVisible(false); // el timeout de abajo lo desmonta
 
@@ -91,7 +84,7 @@ export default function MenuMovil({
         aria-label="Abrir menú"
         aria-haspopup="dialog"
         aria-expanded={montado}
-        className="foco-anillo-claro -ml-1 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-white transition-colors duration-150 hover:bg-white/10 lg:hidden"
+        className="foco-anillo -ml-1 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl text-tinta transition-colors duration-150 hover:bg-panel-suave lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -124,15 +117,16 @@ export default function MenuMovil({
 
             {/* Cajón: alto completo pinado con inset-y-0 (no depende de dvh). */}
             <div
-              className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-marca-950 text-white shadow-2xl transition-transform duration-300 ease-out ${
+              className={`absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-panel text-tinta shadow-2xl transition-transform duration-300 ease-out ${
                 visible ? "translate-x-0" : "-translate-x-full"
               }`}
             >
-              <div className="border-b border-white/10 px-4 py-3">
+              <div className="border-b border-borde px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  {/* El cajón es oscuro: usa el logotipo de palabra blanca. */}
+                  {/* Cajón claro, como la barra lateral: logotipo de palabra
+                      oscura. */}
                   <Image
-                    src="/logo-kontrol.png"
+                    src="/logo-kontrol-oscuro.png"
                     alt="Kontrol"
                     width={600}
                     height={148}
@@ -142,7 +136,7 @@ export default function MenuMovil({
                     type="button"
                     onClick={cerrar}
                     aria-label="Cerrar menú"
-                    className="foco-anillo-claro -mr-2 inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-marca-200 transition-colors duration-150 hover:text-white"
+                    className="foco-anillo -mr-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-tinta-tenue transition-colors duration-150 hover:text-tinta"
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -161,44 +155,15 @@ export default function MenuMovil({
                   <p className="truncate text-sm font-semibold">
                     {usuarioNombre}
                   </p>
-                  <p className="truncate text-xs text-marca-200">
+                  <p className="truncate text-xs text-tinta-tenue">
                     {usuarioRol}
                   </p>
                 </div>
               </div>
 
-              <nav className="flex-1 overflow-y-auto p-2">
-                {grupos.map((g) => (
-                  <section key={g.grupo} className="mb-3 last:mb-0">
-                    <h2 className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-marca-200/70">
-                      {g.titulo}
-                    </h2>
-                    <ul className="flex flex-col gap-1">
-                      {g.destinos.map((e) => {
-                        const activo =
-                          ruta === e.href || ruta.startsWith(`${e.href}/`);
-                        return (
-                          <li key={e.href}>
-                            <Link
-                              href={e.href}
-                              onClick={cerrar}
-                              aria-current={activo ? "page" : undefined}
-                              className={`foco-anillo-claro flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150 ${
-                                activo
-                                  ? "bg-white/10 text-white"
-                                  : "text-marca-200 hover:bg-white/5 hover:text-white"
-                              }`}
-                            >
-                              <Icono nombre={e.icono} />
-                              {e.texto}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                ))}
-              </nav>
+              <div className="flex-1 overflow-y-auto px-3 py-4">
+                <ListaNavegacion grupos={grupos} alElegir={cerrar} />
+              </div>
             </div>
           </div>,
           document.body,

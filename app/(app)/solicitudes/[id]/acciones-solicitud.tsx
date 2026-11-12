@@ -484,7 +484,7 @@ export default function AccionesSolicitud({
     acciones.some((a) => a.hacia === "RESERVA_SOLICITADA");
 
   return (
-    <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
+    <section className="no-print space-y-3 rounded-2xl border border-borde bg-panel p-4">
       <h2 className="titulo-seccion">Acciones</h2>
 
       {puedeEntregar && (

@@ -58,7 +58,7 @@ export default function FormularioEntrega({
     <form action={accion} className="space-y-6">
       <input type="hidden" name="solicitudId" value={solicitudId} />
 
-      <section className="rounded-xl border border-borde bg-panel">
+      <section className="rounded-2xl border border-borde bg-panel">
         <h2 className="titulo-seccion border-b border-borde px-4 py-3">
           {retiroPropio ? "Cantidades que retiras" : "Cantidades a entregar"}
         </h2>

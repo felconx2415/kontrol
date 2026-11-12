@@ -14,7 +14,7 @@ export function Tabla({
   anchoMinimo?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-borde bg-panel">
+    <div className="overflow-x-auto rounded-2xl border border-borde bg-panel">
       <table
         className="tabla-apilable w-full text-sm"
         style={{ minWidth: anchoMinimo }}
@@ -112,7 +112,7 @@ export function ListaPanel({
 }) {
   return (
     <ul
-      className={`divide-y divide-borde overflow-hidden rounded-xl border border-borde bg-panel ${
+      className={`divide-y divide-borde overflow-hidden rounded-2xl border border-borde bg-panel ${
         columnas
           ? "xl:grid xl:grid-cols-2 xl:gap-px xl:divide-y-0 xl:bg-borde xl:[&>li]:bg-panel xl:[&>li:last-child:nth-child(odd)]:col-span-2"
           : ""

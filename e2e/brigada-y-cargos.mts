@@ -98,7 +98,7 @@ try {
   await gestion.goto(`${BASE}/configuracion/cargos`);
   check(
     "El gestor no alcanza los cargos",
-    (await gestion.locator("h1").first().innerText()).trim() === "Escritorio",
+    (await gestion.locator('[data-pagina="escritorio"]').count()) > 0,
   );
 
   // ---------- 2. El cargo en la ficha ----------

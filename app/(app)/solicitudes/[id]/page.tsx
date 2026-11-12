@@ -539,7 +539,7 @@ export default async function DetalleSolicitud({
           />
 
           {solicitud.entrega && (
-            <section className="rounded-xl border border-exito-borde bg-exito-fondo p-4">
+            <section className="rounded-2xl border border-exito-borde bg-exito-fondo p-4">
               <h2 className="text-sm font-semibold text-exito">
                 Entrega registrada
               </h2>
@@ -597,7 +597,7 @@ export default async function DetalleSolicitud({
               Juntas ocupan una sola y cada botón dice de qué planilla se
               trata. */}
           {(puedeEnviarAlmacen || puedeDescargarReservas) && (
-            <section className="no-print space-y-3 rounded-xl border border-borde bg-panel p-4">
+            <section className="no-print space-y-3 rounded-2xl border border-borde bg-panel p-4">
               <h2 className="titulo-seccion">Planillas para el almacén</h2>
 
               {puedeEnviarAlmacen && (

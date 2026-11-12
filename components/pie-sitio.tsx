@@ -13,20 +13,21 @@ import { version } from "@/package.json";
  */
 export default function PieSitio() {
   return (
-    <footer className="no-print mt-auto w-full bg-marca-950 py-4 text-center text-sm text-white/70">
-      {/* Mismo ancho que el contenido: con justify-around a todo el ancho de la
-          pantalla, el pie no se alineaba con nada de lo que tenía encima. */}
+    <footer className="no-print mt-auto w-full border-t border-borde py-4 text-center text-sm text-tinta-suave">
+      {/* Claro y discreto, dentro de la columna de trabajo: con la barra
+          lateral, una franja oscura a lo ancho competía con ella. Mismo ancho
+          que el contenido, para alinearse con lo que tiene encima. */}
       <div className="mx-auto flex max-w-[110rem] flex-col items-center justify-between gap-3 px-4 md:flex-row lg:px-8">
       <p>
         Kontrol{" "}
         {/* Una versión estable («0.7.0») se muestra tal cual. Si vuelve a haber
             una preliminar, semver la escribe con guion («0.8.0-beta») y aquí se
             separa con un espacio: el guion no aporta nada al leerla. */}
-        <span className="font-mono tabular-nums text-white/50">
+        <span className="font-mono tabular-nums text-tinta-tenue">
           v{version.replace("-", " ")}
         </span>
         {" · "}
-        <span className="text-white/50">
+        <span className="text-tinta-tenue">
           © {new Date().getFullYear()} Todos los derechos reservados
         </span>
       </p>
@@ -36,18 +37,18 @@ export default function PieSitio() {
           href="https://felserv.cl"
           target="_blank"
           rel="noopener noreferrer"
-          className="foco-anillo-claro rounded transition-colors duration-150 hover:text-white"
+          className="foco-anillo rounded transition-colors duration-150 hover:text-tinta"
         >
           Potenciado por <span className="font-medium">felserv</span>
         </a>
 
-        <div className="h-8 w-px bg-white/20" />
+        <div className="h-8 w-px bg-borde" />
 
         <a
           href="https://felserv.cl/privacidad.php"
           target="_blank"
           rel="noopener noreferrer"
-          className="foco-anillo-claro rounded transition-colors duration-150 hover:text-white"
+          className="foco-anillo rounded transition-colors duration-150 hover:text-tinta"
         >
           Privacidad
         </a>

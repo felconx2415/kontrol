@@ -3,13 +3,15 @@ import Image from "next/image";
 import { cookies } from "next/headers";
 import { requerirUsuario } from "@/lib/auth";
 import { ETIQUETA_ROL } from "@/lib/solicitud-estado";
-import NavPrincipal from "@/components/nav-principal";
+import BarraLateral from "@/components/barra-lateral";
+import { COOKIE_LATERAL } from "@/lib/preferencias";
+import BuscadorGlobal from "@/components/buscador-global";
 import MenuMovil from "@/components/menu-movil";
 import MenuPersona from "@/components/menu-persona";
 import AvisoFlotante from "@/components/aviso-flotante";
 import CampanaNotificaciones from "@/components/campana-notificaciones";
 import PieSitio from "@/components/pie-sitio";
-import { barraDe, gruposDe, menuPersonaDe } from "@/lib/navegacion";
+import { ajustesDe, lateralDe, type GrupoLateral } from "@/lib/navegacion";
 import { COOKIE_AVISO } from "@/lib/avisos";
 import {
   contarNoLeidas,
@@ -18,16 +20,38 @@ import {
 } from "@/lib/notificaciones";
 import { haceCuanto } from "@/lib/tiempo-relativo";
 
+/** Los grupos sin los campos que no viajan al cliente. */
+function paraCliente(grupos: GrupoLateral[]) {
+  return grupos.map((g) => ({
+    grupo: g.grupo,
+    titulo: g.titulo,
+    hrefTitulo: g.hrefTitulo,
+    destinos: g.destinos.map((d) => ({ href: d.href, texto: d.texto, icono: d.icono })),
+  }));
+}
+
+/**
+ * El panel: barra lateral con la navegación a la izquierda y, a la derecha, la
+ * columna de trabajo con su barra superior (buscar, avisos, mi cuenta).
+ *
+ * Sustituye a la píldora oscura flotante de las versiones anteriores. Aquella
+ * tenía una sola línea para todo, así que la navegación se repartía entre la
+ * píldora, el menú del nombre y un índice de configuración; ahora cada cosa
+ * tiene su sitio: lo que se hace, a la izquierda; lo que es de la cuenta,
+ * arriba a la derecha.
+ */
 export default async function LayoutApp({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const usuario = await requerirUsuario();
+  const tarro = await cookies();
 
   // Mensaje de confirmación dejado por la última Server Action. Va en cookie y
   // no en la URL para no ensuciar el enlace que el usuario puede compartir.
-  const aviso = (await cookies()).get(COOKIE_AVISO)?.value ?? null;
+  const aviso = tarro.get(COOKIE_AVISO)?.value ?? null;
+  const lateralCompacta = tarro.get(COOKIE_LATERAL)?.value === "compacta";
 
   // La campana viene resuelta desde aquí: abrirla no dispara ninguna consulta,
   // que en terreno con señal intermitente es la diferencia entre un menú útil
@@ -37,12 +61,10 @@ export default async function LayoutApp({
     listarNotificaciones(usuario.id, NOTIFICACIONES_EN_CAMPANA),
   ]);
 
-  // Los destinos salen de lib/navegacion.ts, no de una lista armada aquí: son
-  // tres superficies (barra, menú del nombre, cajón) y mantenerlas a mano las
-  // desincroniza sola.
-  const barra = barraDe(usuario);
-  const destinosPersona = menuPersonaDe(usuario);
-  const gruposCajon = gruposDe(usuario);
+  // Los destinos salen de lib/navegacion.ts: la barra lateral y el cajón del
+  // teléfono muestran lo mismo, y el menú de la cuenta lo suyo.
+  const grupos = paraCliente(lateralDe(usuario));
+  const ajustes = ajustesDe(usuario);
 
   // Quien no está en ninguna brigada se identifica por su cargo: «Gestor ·
   // Prevencionista de riesgo» dice más que «Gestor» a secas.
@@ -50,97 +72,97 @@ export default async function LayoutApp({
   const detallePersona = `${ETIQUETA_ROL[usuario.rol]}${
     grupoPersona ? ` · ${grupoPersona}` : ""
   }`;
+  const empresaPersona =
+    usuario.empresasGestionadas.length > 1
+      ? `Atiende ${usuario.empresasGestionadas.length} empresas`
+      : (usuario.empresaNombre ?? (usuario.rol === "ADMIN" ? "Todas las empresas" : null));
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      {/* La barra dejó de ser una franja a sangre con una segunda fila de
-          pestañas: ahora es una sola píldora oscura flotando sobre el lienzo.
-          Todo cabe en una línea, así que el contenido empieza ~44px más
-          arriba. Bajo lg los destinos no entran, y el cajón toma el
-          relevo. La píldora es pegajosa: al hacer scroll queda flotando sobre
-          el contenido, con el hueco de su padding dejando ver el lienzo. */}
-      <header className="no-print sticky top-0 z-[var(--z-pegajoso)] px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4 lg:px-8">
-        <div className="mx-auto flex max-w-[110rem] items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
-          <div className="flex min-w-0 items-center gap-1">
-            <MenuMovil
-              grupos={gruposCajon}
-              usuarioNombre={usuario.nombre}
-              usuarioRol={detallePersona}
-            />
-            <Link
-              href="/escritorio"
-              aria-label="Kontrol · ir al escritorio"
-              className="foco-anillo-claro flex items-center rounded-full py-1 pr-2 lg:pr-4"
-            >
-              {/* Logotipo completo: la palabra viene en blanco y la píldora es
-                  oscura, así que se apoya tal cual sobre ella. */}
-              <Image
-                src="/logo-kontrol.png"
-                alt="Kontrol"
-                width={600}
-                height={148}
-                priority
-                className="h-6 w-auto"
+    <div className="flex min-h-full flex-1">
+      <BarraLateral grupos={grupos} compactaInicial={lateralCompacta} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior: fondo del lienzo con un velo, para que el contenido
+            que pasa por debajo al hacer scroll no se lea a través de ella. */}
+        <header className="no-print sticky top-0 z-[var(--z-pegajoso)] border-b border-borde bg-lienzo/85 backdrop-blur supports-[backdrop-filter]:bg-lienzo/70">
+          <div className="mx-auto flex h-16 max-w-[110rem] items-center gap-3 px-4 lg:px-8">
+            {/* Bajo lg no hay barra lateral: el cajón y el logo toman el
+                relevo. */}
+            <div className="flex min-w-0 items-center gap-1 lg:hidden">
+              <MenuMovil
+                grupos={grupos}
+                usuarioNombre={usuario.nombre}
+                usuarioRol={detallePersona}
               />
-            </Link>
+              <Link
+                href="/escritorio"
+                aria-label="Kontrol · ir al escritorio"
+                className="foco-anillo flex items-center rounded-lg py-1 pr-2"
+              >
+                <Image
+                  src="/logo-kontrol-oscuro.png"
+                  alt="Kontrol"
+                  width={600}
+                  height={148}
+                  priority
+                  className="h-6 w-auto"
+                />
+              </Link>
+            </div>
+
+            <div className="hidden min-w-0 flex-1 md:block">
+              <BuscadorGlobal />
+            </div>
+
+            <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+              <CampanaNotificaciones
+                sinLeer={sinLeer}
+                notificaciones={ultimasNotificaciones.map((n) => ({
+                  id: n.id,
+                  titulo: n.titulo,
+                  cuerpo: n.cuerpo,
+                  url: n.url,
+                  leida: n.leidaEn !== null,
+                  cuando: haceCuanto(n.creadaEn),
+                }))}
+              />
+
+              <MenuPersona
+                nombre={usuario.nombre}
+                detalle={detallePersona}
+                empresa={empresaPersona}
+                destinos={ajustes.map((d) => ({
+                  id: d.id,
+                  href: d.href,
+                  texto: d.texto,
+                  icono: d.icono,
+                }))}
+              />
+            </div>
           </div>
+        </header>
 
-          <NavPrincipal enlaces={barra} />
-
-          {/* `min-w-0` + `truncate`: un nombre largo se recorta en vez de
-              empujar los destinos y solaparse con ellos. */}
-          <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-3">
-            <CampanaNotificaciones
-              sinLeer={sinLeer}
-              notificaciones={ultimasNotificaciones.map((n) => ({
-                id: n.id,
-                titulo: n.titulo,
-                cuerpo: n.cuerpo,
-                url: n.url,
-                leida: n.leidaEn !== null,
-                cuando: haceCuanto(n.creadaEn),
-              }))}
-            />
-
-            {/* El nombre dejó de ser un enlace suelto al perfil: ahora abre el
-                menú con lo de cada uno —equipamiento, documentos, perfil— y con
-                «Salir», que era la acción menos frecuente de todas y ocupaba el
-                sitio más caro de la pantalla. */}
-            <MenuPersona
-              nombre={usuario.nombre}
-              detalle={detallePersona}
-              destinos={destinosPersona.map((d) => ({
-                id: d.id,
-                href: d.href,
-                texto: d.texto,
-              }))}
-            />
-          </div>
+        {/* Al imprimir, las barras se ocultan (`no-print`) y la hoja quedaba
+            sin marca. Este encabezado solo existe en papel. */}
+        <div className="hidden px-4 pt-6 print:block">
+          <Image
+            src="/logo-kontrol-oscuro.png"
+            alt="Kontrol"
+            width={600}
+            height={148}
+            className="h-6 w-auto"
+          />
         </div>
-      </header>
 
-      {/* Al imprimir, la píldora se oculta (`no-print`) y la hoja quedaba sin
-          marca. Este encabezado solo existe en papel, con la variante de
-          palabra oscura. */}
-      <div className="hidden px-4 pt-6 print:block">
-        <Image
-          src="/logo-kontrol-oscuro.png"
-          alt="Kontrol"
-          width={600}
-          height={148}
-          className="h-6 w-auto"
-        />
+        {/* Hasta 1760px: en un monitor ancho la franja central de antes dejaba
+            casi un tercio de la pantalla vacío. Los formularios siguen con su
+            propio ancho angosto, que es como se leen bien. */}
+        <main className="mx-auto w-full max-w-[110rem] flex-1 px-4 py-5 sm:py-6 lg:px-8">
+          {children}
+        </main>
+
+        <PieSitio />
       </div>
-
-      {/* Hasta 1760px y no los 1152 de antes: en un monitor de escritorio la
-          franja central dejaba casi un tercio de la pantalla vacío y obligaba a
-          hacer scroll por listas que cabían a lo ancho. Los formularios siguen
-          con su propio ancho angosto, que es como se leen bien. */}
-      <main className="mx-auto w-full max-w-[110rem] flex-1 px-4 py-4 sm:py-6 lg:px-8">
-        {children}
-      </main>
-
-      <PieSitio />
 
       {aviso && <AvisoFlotante mensaje={aviso} />}
     </div>

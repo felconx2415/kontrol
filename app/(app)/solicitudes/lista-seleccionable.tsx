@@ -121,7 +121,7 @@ export default function ListaSeleccionable({
         </label>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-borde bg-panel">
+      <div className="overflow-hidden rounded-2xl border border-borde bg-panel">
       {/* Encabezado de columnas: solo existe cuando hay columnas. El hueco de
           la izquierda mide lo mismo que la casilla de cada fila. */}
       <div
@@ -231,7 +231,7 @@ export default function ListaSeleccionable({
       {/* La barra se pega al borde inferior: con una lista larga, las acciones
           deben seguir a mano sin volver arriba. */}
       {elegidas.length > 0 && (
-        <div className="no-print sticky bottom-4 z-[var(--z-pegajoso)] rounded-xl border border-borde-fuerte bg-panel p-3 shadow-lg">
+        <div className="no-print sticky bottom-4 z-[var(--z-pegajoso)] rounded-2xl border border-borde-fuerte bg-panel p-3 shadow-lg">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-medium">
               {elegidas.length} seleccionada{elegidas.length === 1 ? "" : "s"}

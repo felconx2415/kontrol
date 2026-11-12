@@ -1,7 +1,3 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 export type IconoNav =
@@ -164,62 +160,5 @@ export function Icono({ nombre }: { nombre: IconoNav }) {
     >
       {TRAZOS[nombre]}
     </svg>
-  );
-}
-
-/**
- * Enlaces del interior de la píldora. En vez de iconos + subrayado, cada
- * destino usa un rótulo que rueda hacia arriba al pasar el cursor: el texto
- * sale por el techo mientras su copia entra desde abajo. Los iconos siguen
- * existiendo, pero solo en el cajón móvil, donde ayudan a barrer una lista
- * vertical; aquí estorbarían al ancho de ocho destinos en una sola línea.
- *
- * El desplazamiento es exactamente 24px (`h-6`) en ambas copias, así que las
- * dos capas comparten rejilla y el relevo no se nota. La copia de abajo va
- * `aria-hidden`: es decorativa y un lector de pantalla no debe leer dos veces
- * el mismo destino.
- */
-export default function NavPrincipal({ enlaces }: { enlaces: EnlaceNav[] }) {
-  const ruta = usePathname();
-
-  return (
-    <nav className="hidden shrink-0 lg:block">
-      <ul className="flex items-center gap-5">
-        {enlaces.map((e) => {
-          const activo = ruta === e.href || ruta.startsWith(`${e.href}/`);
-          return (
-            <li key={e.href}>
-              <Link
-                href={e.href}
-                aria-current={activo ? "page" : undefined}
-                className={`foco-anillo-claro group relative block whitespace-nowrap rounded text-sm font-medium transition-colors duration-150 ${
-                  activo ? "text-white" : "text-marca-200 hover:text-white"
-                }`}
-              >
-                {/* El recorte vive aquí dentro para no cortar el anillo de
-                    foco ni el subrayado de activo, que están en el enlace. */}
-                <span className="relative block h-6 overflow-hidden">
-                  <span className="flex h-6 items-center transition-transform duration-300 group-hover:-translate-y-full">
-                    {e.texto}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 top-full flex h-6 items-center transition-transform duration-300 group-hover:-translate-y-full"
-                  >
-                    {e.texto}
-                  </span>
-                </span>
-                {activo && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 -bottom-1 h-px rounded-full bg-white"
-                  />
-                )}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
   );
 }

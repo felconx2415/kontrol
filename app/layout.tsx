@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Urbanist } from "next/font/google";
 import "./globals.css";
 import InstalarApp from "@/components/instalar-app";
 
@@ -11,6 +11,15 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Títulos y cifras: la tipografía de títulos de Novara, la plantilla en la que
+// se basa el panel. El cuerpo sigue en Geist, que se lee mejor en tamaños
+// chicos y bajo sol fuerte.
+const urbanist = Urbanist({
+  variable: "--font-urbanist",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
 const DESCRIPCION =
@@ -38,7 +47,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Tiñe la barra de estado del color de la barra de la app. Es lo que hace que
   // instalada no se vea como una web dentro de un marco ajeno.
-  themeColor: "#031a29",
+  themeColor: "#f4f5f7",
   // El zoom se deja libre a propósito: esto se lee bajo sol fuerte y con la
   // vista cansada, y bloquearlo es de las cosas que más molestan en terreno.
   initialScale: 1,
@@ -53,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${urbanist.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}
