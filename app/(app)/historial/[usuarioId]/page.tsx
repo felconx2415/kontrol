@@ -269,7 +269,7 @@ export default async function Historial({
                       Acta de entrega
                     </a>
                   )}
-                  <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
+                  <Insignia clases="bg-proceso-fondo text-proceso ring-proceso-borde">
                     Bodega
                   </Insignia>
                 </div>

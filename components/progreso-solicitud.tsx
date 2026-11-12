@@ -62,7 +62,7 @@ export default function ProgresoSolicitud({
               i < paso
                 ? completado
                   ? "bg-exito"
-                  : "bg-marca-600"
+                  : "bg-proceso-barra"
                 : "bg-borde"
             }`}
           />

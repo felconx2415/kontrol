@@ -24,7 +24,7 @@ function esActivo(ruta: string, href: string) {
  * cajón del teléfono: una sola pieza para que las dos no se desincronicen.
  *
  * El activo va en el tono suave de la marca con el icono en el tono de acción
- * —el mismo azul petróleo de los botones—, nunca en verde: el verde es de los
+ * —el mismo naranja de los botones—, nunca en verde: el verde es de los
  * estados (entregado, vigente), no de «dónde estoy».
  */
 export function ListaNavegacion({

@@ -133,7 +133,7 @@ export default async function MisDocumentos() {
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-3">
-                <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
+                <Insignia clases="bg-proceso-fondo text-proceso ring-proceso-borde">
                   {d.etiqueta}
                 </Insignia>
                 {d.origen && (

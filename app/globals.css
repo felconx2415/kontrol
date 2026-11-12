@@ -6,9 +6,11 @@
    Herramienta operativa de uso diario: tema claro único, alto contraste,
    legible tanto en pantalla de oficina como bajo luz fuerte en terreno.
 
-   El primario es azul petróleo y NO verde a propósito: el verde está
-   reservado a la semántica de estado (entregado, EPP vigente). Un primario
-   verde volvería indistinguible "acción disponible" de "proceso completado".
+   El acento es naranja, el de la plantilla Novara en que se basa el panel
+   (0.13.1). Hasta 0.13.0 era azul petróleo y además pintaba los estados «en
+   curso»; esos estados conservan su azul en un token propio (`proceso`), para
+   que «acción disponible» (naranja) no se confunda con un estado del flujo, y
+   el naranja de la marca no se lea como el ámbar de «pendiente».
 --------------------------------------------------------------------------- */
 
 @theme {
@@ -16,18 +18,20 @@
   --font-mono: var(--font-geist-mono);
   --font-titulo: var(--font-urbanist), var(--font-geist-sans);
 
-  /* Marca — azul petróleo. El 600 es el tono de acción; 7.5:1 sobre blanco. */
-  --color-marca-50: oklch(0.972 0.013 240);
-  --color-marca-100: oklch(0.936 0.029 240);
-  --color-marca-200: oklch(0.882 0.052 240);
-  --color-marca-300: oklch(0.796 0.075 240);
-  --color-marca-400: oklch(0.676 0.096 240);
-  --color-marca-500: oklch(0.556 0.105 240);
-  --color-marca-600: oklch(0.450 0.105 240);
-  --color-marca-700: oklch(0.382 0.092 240);
-  --color-marca-800: oklch(0.318 0.074 240);
-  --color-marca-900: oklch(0.262 0.056 240);
-  --color-marca-950: oklch(0.208 0.042 240);
+  /* Marca — naranja. El 600 es el tono de acción: con texto blanco da 5.2:1
+     (AA). El 400 es el naranja vivo de Novara, solo para acentos sobre
+     blanco que no son texto (iconos, barras de gráfico). */
+  --color-marca-50: oklch(0.980 0.016 73);
+  --color-marca-100: oklch(0.954 0.038 75);
+  --color-marca-200: oklch(0.901 0.076 70);
+  --color-marca-300: oklch(0.837 0.128 66);
+  --color-marca-400: oklch(0.750 0.183 55);
+  --color-marca-500: oklch(0.705 0.213 47);
+  --color-marca-600: oklch(0.553 0.195 38);
+  --color-marca-700: oklch(0.470 0.157 37);
+  --color-marca-800: oklch(0.408 0.123 38);
+  --color-marca-900: oklch(0.350 0.100 38);
+  --color-marca-950: oklch(0.266 0.079 36);
 
   /* Superficies. La app vive sobre un lienzo apagado con paneles blancos. */
   --color-lienzo: oklch(0.968 0.003 240);
@@ -42,8 +46,14 @@
   --color-tinta-suave: oklch(0.412 0.012 240);
   --color-tinta-tenue: oklch(0.532 0.011 240);
 
-  /* Estado. Cinco matices, no siete: el avance por el flujo se lee en color
-     de marca y solo los desenlaces tienen color propio. */
+  /* Estado. Cinco matices: lo que avanza por el flujo (aprobada, en gestión,
+     recibida) en azul petróleo, la espera en ámbar y los desenlaces en verde y
+     rojo. El azul es el que antes era la marca: mismos contrastes. */
+  --color-proceso: oklch(0.382 0.092 240);
+  --color-proceso-fondo: oklch(0.972 0.013 240);
+  --color-proceso-borde: oklch(0.882 0.052 240);
+  --color-proceso-barra: oklch(0.450 0.105 240);
+
   --color-espera: oklch(0.470 0.108 75);
   --color-espera-fondo: oklch(0.964 0.032 85);
   --color-espera-borde: oklch(0.882 0.070 82);

@@ -80,8 +80,11 @@ Kontrol vive en el espacio positivo entre cuatro cosas que **no** debe parecer:
    comodidad: el diseño deja rastro claro e inequívoco de quién hizo qué, y las
    acciones irreversibles se confirman.
 5. **Color con significado.** El color de estado (pendiente / aprobado /
-   entregado) es semántico, nunca decorativo. El verde queda reservado a la
-   semántica de estado; el primario azul petróleo es "acción disponible".
+   entregado) es semántico, nunca decorativo. El primario naranja es "acción
+   disponible" (botones, menú activo, enlaces). Los estados tienen su propia
+   paleta y nunca usan el naranja: azul petróleo para lo que avanza por el
+   flujo, ámbar para la espera, verde para lo entregado y rojo para lo
+   rechazado.
 
 ## Accessibility & Inclusion
 

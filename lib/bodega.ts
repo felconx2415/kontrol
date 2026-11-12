@@ -20,7 +20,7 @@ export const COLOR_MOVIMIENTO: Record<TipoMovimiento, string> = {
   ENTRADA: "bg-exito-fondo text-exito ring-exito-borde",
   SALIDA: "bg-fallo-fondo text-fallo ring-fallo-borde",
   PRESTAMO: "bg-espera-fondo text-espera ring-espera-borde",
-  DEVOLUCION: "bg-marca-50 text-marca-700 ring-marca-200",
+  DEVOLUCION: "bg-proceso-fondo text-proceso ring-proceso-borde",
   AJUSTE: "bg-lienzo text-tinta-suave ring-borde",
   ASIGNACION: "bg-fallo-fondo text-fallo ring-fallo-borde",
 };

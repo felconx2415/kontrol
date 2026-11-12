@@ -13,7 +13,7 @@ import type { MetadataRoute } from "next";
  */
 
 /** Los mismos de `globals.css`, resueltos a sRGB: el manifiesto no lee oklch. */
-const MARCA_950 = "#031a29"; // la píldora de la barra
+const BARRA = "#f4f5f7"; // la barra superior, clara desde 0.13.0
 const LIENZO = "#f3f5f6"; // el fondo de la app
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -34,7 +34,7 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     background_color: LIENZO,
     // Tiñe la barra de estado de Android del color de la barra de la app.
-    theme_color: MARCA_950,
+    theme_color: BARRA,
     categories: ["business", "productivity"],
     icons: [
       {

@@ -353,7 +353,7 @@ export default async function Escritorio({
                           </td>
                           <td data-label="Estado" className="px-4 py-2.5">
                             {c.reemplazoEnCurso ? (
-                              <Insignia clases="bg-marca-50 text-marca-700 ring-marca-200">
+                              <Insignia clases="bg-proceso-fondo text-proceso ring-proceso-borde">
                                 Reemplazo en curso
                               </Insignia>
                             ) : c.dias < 0 ? (
