@@ -8,7 +8,7 @@
 services:
   kontrol:
     build: .
-    image: kontrol:0.11.3
+    image: kontrol:0.12.0
     container_name: kontrol
     restart: unless-stopped
     environment:

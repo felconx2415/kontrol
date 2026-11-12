@@ -13,7 +13,10 @@ import { version } from "@/package.json";
  */
 export default function PieSitio() {
   return (
-    <footer className="no-print mt-auto flex w-full flex-col items-center justify-around gap-3 bg-marca-950 px-4 py-4 text-center text-sm text-white/70 md:flex-row">
+    <footer className="no-print mt-auto w-full bg-marca-950 py-4 text-center text-sm text-white/70">
+      {/* Mismo ancho que el contenido: con justify-around a todo el ancho de la
+          pantalla, el pie no se alineaba con nada de lo que tenía encima. */}
+      <div className="mx-auto flex max-w-[110rem] flex-col items-center justify-between gap-3 px-4 md:flex-row lg:px-8">
       <p>
         Kontrol{" "}
         {/* Una versión estable («0.7.0») se muestra tal cual. Si vuelve a haber
@@ -49,6 +52,7 @@ export default function PieSitio() {
           Privacidad
         </a>
       </div>
+    </div>
     </footer>
   );
 }

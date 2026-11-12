@@ -154,7 +154,7 @@ export default async function Historial({
           <h2 className="titulo-seccion mb-2">
             {esMio ? "Mis solicitudes en curso" : "Solicitudes en curso"}
           </h2>
-          <ListaPanel>
+          <ListaPanel columnas>
             {enCurso.map((s) => (
               <li key={s.id}>
                 <Link
@@ -200,7 +200,7 @@ export default async function Historial({
         {vigentes.length === 0 ? (
           <Vacio mensaje="No hay equipamiento asignado todavía." />
         ) : (
-          <ListaPanel>
+          <ListaPanel columnas>
             {vigentes.map((item) => {
               const vencimiento = estadoVencimiento(item.venceEn);
               return (
@@ -242,7 +242,7 @@ export default async function Historial({
       {asignacionesBodega.length > 0 && (
         <section>
           <h2 className="titulo-seccion mb-2">Equipamiento de bodega</h2>
-          <ListaPanel>
+          <ListaPanel columnas>
             {asignacionesBodega.map((a) => (
               <li
                 key={a.id}
@@ -282,7 +282,7 @@ export default async function Historial({
       {historicos.length > 0 && (
         <section>
           <h2 className="titulo-seccion mb-2">Reemplazados</h2>
-          <ListaPanel>
+          <ListaPanel columnas>
             {historicos.map((item) => (
               <li key={item.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">

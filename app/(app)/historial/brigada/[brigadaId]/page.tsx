@@ -91,7 +91,7 @@ export default async function EquipamientoBrigada({
         {asignaciones.length === 0 ? (
           <Vacio mensaje="Esta brigada todavía no tiene equipamiento a su nombre. Se le asigna desde la bodega." />
         ) : (
-          <ListaPanel>
+          <ListaPanel columnas>
             {asignaciones.map((a) => {
               const retiro =
                 a.asignacion.retiradoPor?.nombre ?? a.asignacion.retiradoPorNombre;
@@ -145,7 +145,7 @@ export default async function EquipamientoBrigada({
         {brigada.miembros.length === 0 ? (
           <Vacio mensaje="Esta brigada no tiene integrantes activos." />
         ) : (
-          <ListaPanel>
+          <ListaPanel columnas>
             {brigada.miembros.map((m) => (
               <li key={m.id}>
                 <Link

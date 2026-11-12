@@ -94,10 +94,30 @@ export function Celda({
   );
 }
 
-/** Lista de filas para pantallas donde una tabla sería excesiva. */
-export function ListaPanel({ children }: { children: ReactNode }) {
+/**
+ * Lista de filas para pantallas donde una tabla sería excesiva.
+ *
+ * `columnas` la reparte en dos desde xl: filas de un nombre y una fecha a
+ * 1700px de ancho dejaban todo el centro vacío y obligaban a bajar el doble.
+ * Las líneas entre filas salen del fondo de la lista asomando por un hueco de
+ * 1px (divide-y no sirve en rejilla); la última fila impar ocupa las dos
+ * columnas para no dejar una celda gris.
+ */
+export function ListaPanel({
+  children,
+  columnas = false,
+}: {
+  children: ReactNode;
+  columnas?: boolean;
+}) {
   return (
-    <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde bg-panel">
+    <ul
+      className={`divide-y divide-borde overflow-hidden rounded-xl border border-borde bg-panel ${
+        columnas
+          ? "xl:grid xl:grid-cols-2 xl:gap-px xl:divide-y-0 xl:bg-borde xl:[&>li]:bg-panel xl:[&>li:last-child:nth-child(odd)]:col-span-2"
+          : ""
+      }`}
+    >
       {children}
     </ul>
   );

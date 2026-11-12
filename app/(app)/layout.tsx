@@ -59,8 +59,8 @@ export default async function LayoutApp({
           arriba. Bajo lg los destinos no entran, y el cajón toma el
           relevo. La píldora es pegajosa: al hacer scroll queda flotando sobre
           el contenido, con el hueco de su padding dejando ver el lienzo. */}
-      <header className="no-print sticky top-0 z-[var(--z-pegajoso)] px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
+      <header className="no-print sticky top-0 z-[var(--z-pegajoso)] px-3 pt-3 text-sm text-white sm:px-4 sm:pt-4 lg:px-8">
+        <div className="mx-auto flex max-w-[110rem] items-center gap-4 rounded-full border border-white/15 bg-marca-950 px-3 py-2.5 shadow-lg shadow-marca-950/10 sm:px-5">
           <div className="flex min-w-0 items-center gap-1">
             <MenuMovil
               grupos={gruposCajon}
@@ -132,7 +132,13 @@ export default async function LayoutApp({
         />
       </div>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-4 sm:py-6">{children}</main>
+      {/* Hasta 1760px y no los 1152 de antes: en un monitor de escritorio la
+          franja central dejaba casi un tercio de la pantalla vacío y obligaba a
+          hacer scroll por listas que cabían a lo ancho. Los formularios siguen
+          con su propio ancho angosto, que es como se leen bien. */}
+      <main className="mx-auto w-full max-w-[110rem] flex-1 px-4 py-4 sm:py-6 lg:px-8">
+        {children}
+      </main>
 
       <PieSitio />
 

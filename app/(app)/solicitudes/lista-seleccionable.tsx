@@ -26,6 +26,15 @@ export type FilaSolicitud = {
 };
 
 /**
+ * Columnas de la lista desde lg. Bajo ese ancho cada fila son dos líneas de
+ * texto; en escritorio, una tabla alineada: con la pantalla ancha, leer quince
+ * pedidos de la misma brigada se hace bajando la vista por una columna y no
+ * buscando el dato dentro de cada frase.
+ */
+const COLUMNAS =
+  "lg:grid-cols-[6rem_minmax(0,1.5fr)_7rem_4.5rem_minmax(0,1.2fr)_7rem_11rem]";
+
+/**
  * Listado de solicitudes con selección múltiple.
  *
  * Nace de un cambio de escala: desde que un gestor puede cargar el equipamiento
@@ -112,7 +121,29 @@ export default function ListaSeleccionable({
         </label>
       )}
 
-      <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde bg-panel">
+      <div className="overflow-hidden rounded-xl border border-borde bg-panel">
+      {/* Encabezado de columnas: solo existe cuando hay columnas. El hueco de
+          la izquierda mide lo mismo que la casilla de cada fila. */}
+      <div
+        aria-hidden="true"
+        className="hidden border-b border-borde text-xs font-medium text-tinta-tenue lg:flex"
+      >
+        {seleccionable && <span className="w-10 shrink-0" />}
+        <div
+          className={`grid flex-1 items-center gap-4 py-2.5 pr-4 ${COLUMNAS} ${
+            seleccionable ? "pl-2" : "pl-4"
+          }`}
+        >
+          <span>Folio</span>
+          <span>Solicitante</span>
+          <span>Tipo</span>
+          <span className="text-right">Ítems</span>
+          <span>Brigada o cargo</span>
+          <span>Creada</span>
+          <span>Estado</span>
+        </div>
+      </div>
+      <ul className="divide-y divide-borde">
         {solicitudes.map((s) => {
           const marcada = presentes.includes(s.id);
           return (
@@ -123,7 +154,7 @@ export default function ListaSeleccionable({
               }`}
             >
               {seleccionable && (
-                <label className="flex min-h-11 shrink-0 cursor-pointer items-center pl-4 pr-1">
+                <label className="flex min-h-11 w-10 shrink-0 cursor-pointer items-center pl-4 pr-1">
                   <input
                     type="checkbox"
                     checked={marcada}
@@ -136,16 +167,16 @@ export default function ListaSeleccionable({
 
               <Link
                 href={`/solicitudes/${s.id}`}
-                className={`foco-anillo flex min-h-11 min-w-0 flex-1 items-center justify-between gap-4 py-3 pr-4 transition-colors duration-150 hover:bg-marca-50 ${
+                className={`foco-anillo flex min-h-11 min-w-0 flex-1 items-center justify-between gap-4 py-3 pr-4 transition-colors duration-150 hover:bg-marca-50 lg:grid ${COLUMNAS} ${
                   seleccionable ? "pl-2" : "pl-4"
                 }`}
               >
                 {/* Bajo sm el detalle pasa a una segunda línea en vez de
                     esconderse, y suma la fecha que en el teléfono no tiene
                     columna propia. */}
-                <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-3 lg:hidden">
                   <span className="flex min-w-0 items-baseline gap-3">
-                    <span className="font-mono text-xs tabular-nums text-tinta-tenue">
+                    <span className="shrink-0 whitespace-nowrap font-mono text-xs tabular-nums text-tinta-tenue">
                       {s.folioTexto}
                     </span>
                     <span className="truncate text-sm font-medium">
@@ -159,17 +190,41 @@ export default function ListaSeleccionable({
                     <span className="md:hidden"> · {s.creadaEnTexto}</span>
                   </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3 lg:hidden">
                   <span className="hidden text-xs text-tinta-tenue md:inline">
                     {s.creadaEnTexto}
                   </span>
                   <EstadoBadge estado={s.estado} />
                 </div>
+
+                {/* Las mismas cifras, una por columna, desde lg. */}
+                <span className="hidden font-mono text-xs tabular-nums text-tinta-tenue lg:block">
+                  {s.folioTexto}
+                </span>
+                <span className="hidden truncate text-sm font-medium lg:block">
+                  {s.solicitanteNombre}
+                </span>
+                <span className="hidden text-sm text-tinta-suave lg:block">
+                  {s.tipo === "REEMPLAZO" ? "Reemplazo" : "Nuevo"}
+                </span>
+                <span className="hidden text-right text-sm tabular-nums text-tinta-suave lg:block">
+                  {s.totalItems}
+                </span>
+                <span className="hidden truncate text-sm text-tinta-suave lg:block">
+                  {s.brigadaNombre ?? "—"}
+                </span>
+                <span className="hidden text-sm tabular-nums text-tinta-suave lg:block">
+                  {s.creadaEnTexto}
+                </span>
+                <span className="hidden lg:block">
+                  <EstadoBadge estado={s.estado} />
+                </span>
               </Link>
             </li>
           );
         })}
       </ul>
+      </div>
 
       {error && <Aviso tono="error">{error}</Aviso>}
 
